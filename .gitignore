@@ -3,3 +3,10 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# Test databases and files
+test*.db
+example*.db
+*.sql
+test_*.js
+generate_*.js
