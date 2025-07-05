@@ -1,8 +1,8 @@
 {
   "name": "sqlite-viewer",
   "displayName": "SQLite Viewer",
-  "description": "A production-ready VS Code extension for viewing SQLite databases with SQLCipher support",
-  "version": "0.0.1",
+  "description": "A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination",
+  "version": "0.2.0",
   "publisher": "your-publisher-name",
   "author": {
     "name": "Your Name",

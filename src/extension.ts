@@ -52,11 +52,16 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		// Open the database file with our custom editor
-		const doc = await vscode.workspace.openTextDocument(databasePath);
-		await vscode.window.showTextDocument(doc, {
-			preview: false,
-			viewColumn: vscode.ViewColumn.One
-		});
+		try {
+			const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(databasePath));
+			await vscode.window.showTextDocument(doc, {
+				preview: false,
+				viewColumn: vscode.ViewColumn.One
+			});
+		} catch (error) {
+			// If opening as text document fails, try to open with custom editor directly
+			await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(databasePath), 'sqlite-viewer.databaseEditor');
+		}
 	});
 
 	const connectWithKeyCommand = vscode.commands.registerCommand('sqlite-viewer.connectWithKey', async () => {

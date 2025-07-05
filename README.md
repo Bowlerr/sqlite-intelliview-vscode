@@ -1,16 +1,19 @@
 # SQLite Viewer
 
-A production-ready VS Code extension for viewing SQLite databases with SQLCipher support.
+A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination.
 
 ## Features
 
 - 📁 **Custom Editor for SQLite Files**: Automatically opens .db, .sqlite, and .sqlite3 files
-- 🔍 **Database Explorer**: Tree view showing tables, columns, and data types
-- ⚡ **Query Editor**: Execute custom SQL queries with syntax highlighting
-- 📊 **Data Visualization**: View table data in a clean, sortable grid
-- 🔐 **SQLCipher Support**: Connect to encrypted databases with keys (coming soon)
+- 🔍 **Database Explorer**: Tree view showing tables and their types with smart selection
+- ⚡ **Query Editor**: Execute custom SQL queries with helpful examples and shortcuts
+- 📊 **Data Visualization**: View table data in a clean, sortable grid with statistics
+- 📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
+- 🔐 **SQLCipher Support**: Connect to encrypted databases with password protection
 - 🎨 **VS Code Theme Integration**: Matches your current VS Code theme perfectly
-- 📤 **Export Functionality**: Export table data (coming soon)
+- ⌨️ **Keyboard Shortcuts**: Ctrl/Cmd+Enter to execute, Ctrl/Cmd+K to clear queries
+- 🔄 **Real-time Feedback**: Connection status indicators and query execution feedback
+- 📋 **Smart Schema Display**: Automatic table info display when selecting tables
 
 ## Installation
 
@@ -35,22 +38,39 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 ### Features Overview
 
 #### Database Explorer
+
 - View all tables and views in your database
-- Expand tables to see column information
-- Primary keys and data types are clearly indicated
-- Click on any table to view its data
+- Click on any table to view its data and schema
+- Tables are highlighted when selected
+
+#### Table Pagination
+
+- **Page Size Selection**: Choose from 50, 100, 200, 500, or 1000 records per page
+- **Navigation Controls**: First, Previous, Next, Last buttons for easy navigation
+- **Direct Navigation**: Enter a specific page number and jump directly to it
+- **Total Count Display**: See total rows and current page range
+- **Responsive Design**: Pagination controls adapt to smaller screens
+- **Performance Optimized**: Only loads the current page from the database
 
 #### Query Editor
+
 - Write and execute custom SQL queries
 - Pre-filled with useful starter queries
 - Results are displayed in a clean table format
-- Query history and error handling
+- Query history automatically saved
 
 #### Data Viewer
-- Browse table data with pagination
-- Sort and filter capabilities
+
+- Browse table data with automatic loading
+- View table schema information
 - Row and column count statistics
-- Export functionality (coming soon)
+- Clean, responsive table display
+
+### Keyboard Shortcuts
+
+- **Ctrl/Cmd + Enter**: Execute the current query
+- **Ctrl/Cmd + K**: Clear the query editor
+- **Escape**: Close any open notifications
 
 ### SQLCipher Support
 
