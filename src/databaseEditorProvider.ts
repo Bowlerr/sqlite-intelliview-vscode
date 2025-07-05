@@ -3,25 +3,47 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DatabaseService } from './databaseService';
 
-export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
+export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
+    
+    private static readonly viewType = 'sqlite-viewer.databaseEditor';
+    private activeConnections: Map<string, DatabaseService> = new Map();
     
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
         const providerRegistration = vscode.window.registerCustomEditorProvider(
             DatabaseEditorProvider.viewType, 
-            provider
+            provider,
+            {
+                // This tells VS Code we can handle binary files
+                supportsMultipleEditorsPerDocument: false,
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                }
+            }
         );
         return providerRegistration;
     }
-
-    private static readonly viewType = 'sqlite-viewer.databaseEditor';
 
     constructor(
         private readonly context: vscode.ExtensionContext
     ) { }
 
-    public async resolveCustomTextEditor(
-        document: vscode.TextDocument,
+    public async openCustomDocument(
+        uri: vscode.Uri,
+        openContext: vscode.CustomDocumentOpenContext,
+        _token: vscode.CancellationToken
+    ): Promise<vscode.CustomDocument> {
+        return {
+            uri,
+            dispose: () => {
+                // Clean up resources for this document
+                this.closeConnection(uri.fsPath);
+            }
+        };
+    }
+
+    public async resolveCustomEditor(
+        document: vscode.CustomDocument,
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
@@ -46,15 +68,23 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel.webview.onDidReceiveMessage(e => {
             switch (e.type) {
                 case 'requestDatabaseInfo':
-                    this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath);
+                    this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath, e.key);
                     return;
                 case 'executeQuery':
                     this.handleQueryExecution(webviewPanel, document.uri.fsPath, e.query, e.key);
                     return;
-                case 'requestTableData':
-                    this.handleTableDataRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key);
+                case 'getTableSchema':
+                    this.handleTableSchemaRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key);
+                    return;
+                case 'getTableData':
+                    this.handleTableDataRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key, e.page, e.pageSize);
                     return;
             }
+        });
+
+        // Handle webview disposal
+        webviewPanel.onDidDispose(() => {
+            this.closeConnection(document.uri.fsPath);
         });
     }
 
@@ -85,24 +115,35 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1>SQLite Database Viewer</h1>
-                        <div class="database-path">${uri.fsPath}</div>
+                        <div class="header-left">
+                            <div class="title-row">
+                                <h1>SQLite Database Viewer</h1>
+                                <div class="header-controls">
+                                    <div class="connection-status-container">
+                                        <div id="connection-status" class="connection-status disconnected">Disconnected</div>
+                                    </div>
+                                    <button id="connection-help-btn" class="help-button" title="Connection Help">🔑</button>
+                                    <button id="main-help-btn" class="help-button" title="Keyboard Shortcuts">?</button>
+                                </div>
+                            </div>
+                            <div class="database-path">${uri.fsPath}</div>
+                        </div>
                     </div>
                     
                     <div class="main-content">
                         <div class="sidebar">
-                            <div class="section">
+                            <div class="section connection-section visible" id="connection-section">
                                 <h3>Database Connection</h3>
                                 <div class="connection-controls">
-                                    <input type="password" id="encryption-key" placeholder="SQLCipher Key (optional)" />
-                                    <button id="connect-btn" class="primary-button">Connect</button>
+                                    <input type="password" id="encryption-key" placeholder="SQLCipher Key" />
+                                    <button id="connect-btn" class="primary-button">Connect with Key</button>
                                 </div>
                             </div>
                             
                             <div class="section">
                                 <h3>Tables</h3>
                                 <div id="tables-list" class="tables-list">
-                                    <div class="loading">Click Connect to load database</div>
+                                    <div class="loading">Connecting to database...</div>
                                 </div>
                             </div>
                         </div>
@@ -115,36 +156,62 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
                             </div>
                             
                             <div class="tab-content">
-                                <div id="schema-tab" class="tab-panel active">
-                                    <div id="schema-content">Select a table to view its schema</div>
+                                <div id="schema-panel" class="tab-panel active">
+                                    <div id="schema-content">
+                                        <div class="empty-state">
+                                            <div class="empty-state-icon">📋</div>
+                                            <div class="empty-state-title">Select a table to view its schema</div>
+                                            <div class="empty-state-description">Choose a table from the sidebar to explore its structure, columns, and data types.</div>
+                                        </div>
+                                    </div>
                                 </div>
                                 
-                                <div id="query-tab" class="tab-panel">
+                                <div id="query-panel" class="tab-panel">
                                     <div class="query-editor">
-                                        <textarea id="sql-query" placeholder="Enter your SQL query here...">SELECT * FROM sqlite_master WHERE type='table';</textarea>
-                                        <button id="execute-query" class="primary-button">Execute Query</button>
+                                        <div class="query-controls">
+                                            <textarea id="sql-query" placeholder="Enter your SQL query here...&#10;&#10;Examples:&#10;• SELECT * FROM sqlite_master WHERE type='table';&#10;• SELECT * FROM [table_name] LIMIT 10;&#10;• PRAGMA table_info([table_name]);&#10;• SELECT COUNT(*) FROM [table_name];&#10;&#10;💡 Tips:&#10;• Use Ctrl+Enter (Cmd+Enter) to execute&#10;• Use Ctrl+F (Cmd+F) to search in table results&#10;• Click column headers to sort data&#10;• Use 📌 to pin important columns&#10;• Click on table names in sidebar to view schema"></textarea>
+                                            <div class="query-actions">
+                                                <button id="execute-query" class="primary-button">Execute Query</button>
+                                                <button id="clear-query" class="secondary-button">Clear</button>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div id="query-results"></div>
                                 </div>
                                 
-                                <div id="data-tab" class="tab-panel">
-                                    <div id="data-content">Select a table to view its data</div>
+                                <div id="data-panel" class="tab-panel">
+                                    <div id="data-content">
+                                        <div class="empty-state">
+                                            <div class="empty-state-icon">📊</div>
+                                            <div class="empty-state-title">Select a table to view its data</div>
+                                            <div class="empty-state-description">Choose a table from the sidebar to browse its records and content.</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+                
+                <!-- Load modular JavaScript files in dependency order -->
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'state.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'dom.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'notifications.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'utils.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'resizing.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'table.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'events.js'))}"></script>
+                
+                <!-- Main application script - loads last and uses functions from modules above -->
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
     }
 
-    private async handleDatabaseInfoRequest(webviewPanel: vscode.WebviewPanel, databasePath: string) {
+    private async handleDatabaseInfoRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, key?: string) {
         try {
-            const dbService = new DatabaseService();
-            await dbService.openDatabase(databasePath);
+            const dbService = await this.getOrCreateConnection(databasePath, key);
             const tables = await dbService.getTables();
-            dbService.closeDatabase();
 
             webviewPanel.webview.postMessage({
                 type: 'databaseInfo',
@@ -152,6 +219,8 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
                 tables: tables
             });
         } catch (error) {
+            // Close the connection if it failed
+            this.closeConnection(databasePath, key);
             webviewPanel.webview.postMessage({
                 type: 'error',
                 message: `Failed to load database: ${error}`
@@ -161,16 +230,18 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
 
     private async handleQueryExecution(webviewPanel: vscode.WebviewPanel, databasePath: string, query: string, key?: string) {
         try {
-            const dbService = new DatabaseService();
-            await dbService.openDatabase(databasePath, key);
+            const dbService = await this.getOrCreateConnection(databasePath, key);
             const result = await dbService.executeQuery(query);
-            dbService.closeDatabase();
 
+            // Check if this is a schema query
+            const isSchemaQuery = query.toLowerCase().includes('pragma table_info');
+            
             webviewPanel.webview.postMessage({
-                type: 'queryResult',
+                type: isSchemaQuery ? 'tableSchema' : 'queryResult',
                 success: true,
                 data: result.values,
-                columns: result.columns
+                columns: result.columns,
+                query: query
             });
         } catch (error) {
             webviewPanel.webview.postMessage({
@@ -180,19 +251,33 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
-    private async handleTableDataRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string) {
+    private async handleTableDataRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string, page?: number, pageSize?: number) {
         try {
-            const dbService = new DatabaseService();
-            await dbService.openDatabase(databasePath, key);
-            const result = await dbService.getTableData(tableName);
-            dbService.closeDatabase();
+            const dbService = await this.getOrCreateConnection(databasePath, key);
+            
+            // Use pagination if provided, otherwise use default behavior
+            let result;
+            let totalRowCount = 0;
+            
+            if (page !== undefined && pageSize !== undefined) {
+                // Get paginated data
+                result = await dbService.getTableDataPaginated(tableName, page, pageSize);
+                // Get total row count for pagination controls
+                totalRowCount = await dbService.getRowCount(tableName);
+            } else {
+                result = await dbService.getTableData(tableName);
+                totalRowCount = result.values.length;
+            }
 
             webviewPanel.webview.postMessage({
                 type: 'tableData',
                 success: true,
                 tableName: tableName,
                 data: result.values,
-                columns: result.columns
+                columns: result.columns,
+                page: page,
+                pageSize: pageSize,
+                totalRows: totalRowCount
             });
         } catch (error) {
             webviewPanel.webview.postMessage({
@@ -200,6 +285,120 @@ export class DatabaseEditorProvider implements vscode.CustomTextEditorProvider {
                 message: `Failed to load table data: ${error}`
             });
         }
+    }
+
+    private async handleTableSchemaRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string) {
+        try {
+            console.log(`Handling schema request for table: ${tableName}, key provided: ${key ? '[PROVIDED]' : '[EMPTY]'}`);
+            const dbService = await this.getOrCreateConnection(databasePath, key);
+            const result = await dbService.getTableSchema(tableName);
+
+            console.log(`Schema result for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
+            webviewPanel.webview.postMessage({
+                type: 'tableSchema',
+                success: true,
+                tableName: tableName,
+                data: result.values,
+                columns: result.columns
+            });
+        } catch (error) {
+            console.error(`Schema request failed for ${tableName}:`, error);
+            webviewPanel.webview.postMessage({
+                type: 'error',
+                message: `Failed to load table schema: ${error}`
+            });
+        }
+    }
+
+    // Connection management methods
+    private async getOrCreateConnection(databasePath: string, key?: string): Promise<DatabaseService> {
+        // Normalize the key to handle undefined, null, and empty string consistently
+        const normalizedKey = key || '';
+        const connectionKey = `${databasePath}:${normalizedKey}`;
+        
+        console.log(`Getting connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
+        this.debugLogConnections();
+        
+        if (this.activeConnections.has(connectionKey)) {
+            console.log('Reusing existing connection');
+            return this.activeConnections.get(connectionKey)!;
+        }
+        
+        // If no exact match, try to find an existing connection for this database path
+        // This handles cases where the key might be passed inconsistently
+        for (const [existingKey, connection] of this.activeConnections) {
+            if (existingKey.startsWith(`${databasePath}:`)) {
+                console.log(`Found existing connection for database path: ${databasePath}`);
+                return connection;
+            }
+        }
+        
+        console.log('Creating new connection');
+        const dbService = new DatabaseService();
+        await dbService.openDatabase(databasePath, normalizedKey || undefined);
+        this.activeConnections.set(connectionKey, dbService);
+        
+        return dbService;
+    }
+    
+    private async ensureConnection(databasePath: string, key?: string): Promise<DatabaseService> {
+        const normalizedKey = key || '';
+        const connectionKey = `${databasePath}:${normalizedKey}`;
+        let connection = this.activeConnections.get(connectionKey);
+        
+        if (!connection) {
+            // Create new connection
+            connection = new DatabaseService();
+            await connection.openDatabase(databasePath, normalizedKey || undefined);
+            this.activeConnections.set(connectionKey, connection);
+        }
+        
+        return connection;
+    }
+
+    private closeConnection(databasePath: string, key?: string): void {
+        if (key !== undefined) {
+            // Close specific connection with key
+            const normalizedKey = key || '';
+            const connectionKey = `${databasePath}:${normalizedKey}`;
+            const connection = this.activeConnections.get(connectionKey);
+            
+            if (connection) {
+                console.log(`Closing connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
+                connection.closeDatabase();
+                this.activeConnections.delete(connectionKey);
+            }
+        } else {
+            // Close all connections for this database path
+            const keysToDelete = [];
+            for (const [connectionKey, connection] of this.activeConnections) {
+                if (connectionKey.startsWith(`${databasePath}:`)) {
+                    console.log(`Closing connection for database path: ${databasePath}`);
+                    connection.closeDatabase();
+                    keysToDelete.push(connectionKey);
+                }
+            }
+            keysToDelete.forEach(key => this.activeConnections.delete(key));
+        }
+    }
+    
+    private closeAllConnections(): void {
+        for (const [key, connection] of this.activeConnections) {
+            connection.closeDatabase();
+        }
+        this.activeConnections.clear();
+    }
+
+    private debugLogConnections(): void {
+        console.log(`Active connections (${this.activeConnections.size}):`);
+        for (const [key, connection] of this.activeConnections) {
+            console.log(`  - ${key}`);
+        }
+    }
+
+    // Add a global cleanup method for extension deactivation
+    public dispose(): void {
+        this.closeAllConnections();
     }
 }
 

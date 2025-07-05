@@ -1,344 +1,401 @@
 // @ts-check
 
-// Script run within the webview itself.
+/**
+ * Main entry point for SQLite Viewer webview
+ * Uses functions from modular files loaded before this script
+ */
+
 (function () {
-    // Get access to the VS Code API from within the webview context
+  console.log("SQLite Viewer: Starting main initialization...");
+
+  try {
+    // @ts-ignore - acquireVsCodeApi is provided by VS Code webview runtime
     const vscode = acquireVsCodeApi();
 
-    // Reference to the current state
-    let currentState = {
-        databasePath: '',
-        encryptionKey: '',
-        selectedTable: null,
-        activeTab: 'schema'
-    };
+    // Make vscode available globally for other modules
+    /** @type {any} */ (window).vscode = vscode;
 
-    // DOM elements
-    const connectBtn = document.getElementById('connect-btn');
-    const encryptionKeyInput = document.getElementById('encryption-key');
-    const tablesListElement = document.getElementById('tables-list');
-    const executeQueryBtn = document.getElementById('execute-query');
-    const sqlQueryTextarea = document.getElementById('sql-query');
-    
-    // Tab elements
-    const tabs = document.querySelectorAll('.tab');
-    const tabPanels = document.querySelectorAll('.tab-panel');
-    const schemaContent = document.getElementById('schema-content');
-    const queryResults = document.getElementById('query-results');
-    const dataContent = document.getElementById('data-content');
+    // ============================================================================
+    // MAIN APPLICATION LOGIC
+    // ============================================================================
 
-    // Initialize event listeners
-    function init() {
-        // Connect button
-        connectBtn?.addEventListener('click', handleConnect);
+    /**
+     * Initialize the SQLite Viewer application
+     */
+    function initializeApp() {
+      console.log("Initializing SQLite Viewer application...");
 
-        // Execute query button
-        executeQueryBtn?.addEventListener('click', handleExecuteQuery);
-
-        // Tab switching
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-        });
-
-        // Handle messages from the extension
-        window.addEventListener('message', event => {
-            const message = event.data;
-            switch (message.type) {
-                case 'update':
-                    handleUpdate(message);
-                    break;
-                case 'databaseInfo':
-                    handleDatabaseInfo(message);
-                    break;
-                case 'queryResult':
-                    handleQueryResult(message);
-                    break;
-                case 'tableData':
-                    handleTableData(message);
-                    break;
-                case 'error':
-                    showError(message.message);
-                    break;
-            }
-        });
-
-        // Request initial database info
-        requestDatabaseInfo();
-    }
-
-    function handleUpdate(message) {
-        currentState.databasePath = message.databasePath;
-        vscode.setState(currentState);
-    }
-
-    function handleConnect() {
-        if (!connectBtn) return;
-        
-        connectBtn.textContent = 'Connecting...';
-        connectBtn.disabled = true;
-        
-        currentState.encryptionKey = encryptionKeyInput?.value || '';
-        vscode.setState(currentState);
-        
-        requestDatabaseInfo();
-    }
-
-    function requestDatabaseInfo() {
-        vscode.postMessage({
-            type: 'requestDatabaseInfo',
-            key: currentState.encryptionKey
-        });
-    }
-
-    function handleDatabaseInfo(message) {
-        if (connectBtn) {
-            connectBtn.textContent = 'Connect';
-            connectBtn.disabled = false;
+      try {
+        // Initialize modules (functions from loaded JS files)
+        if (typeof initializeState === "function") {
+          initializeState();
         }
 
-        if (message.success) {
-            displayTables(message.tables);
-        } else {
-            showError('Failed to connect to database');
-        }
-    }
-
-    function displayTables(tables) {
-        if (!tablesListElement) return;
-
-        if (tables.length === 0) {
-            tablesListElement.innerHTML = '<div class="info">No tables found in database</div>';
-            return;
+        if (typeof initializeDOMElements === "function") {
+          initializeDOMElements();
         }
 
-        const tablesList = tables.map(table => 
-            `<div class="table-item" data-table="${table.name}" onclick="selectTable('${table.name}')">
-                ${table.name} (${table.type})
-            </div>`
-        ).join('');
+        if (typeof initializeEventListeners === "function") {
+          initializeEventListeners();
+        }
 
-        tablesListElement.innerHTML = tablesList;
+        if (typeof addHelpButton === "function") {
+          addHelpButton();
+        }
+
+        // Show connection section initially - will be hidden after successful connection
+        if (typeof showConnectionSection !== "undefined") {
+          showConnectionSection();
+        }
+
+        // Initialize query editor visibility enforcement
+        if (typeof initializeQueryEditorVisibility === "function") {
+          initializeQueryEditorVisibility();
+        }
+
+        // Set up message handling from extension (delegated to events.js)
+        // The events.js module will handle window.addEventListener("message", handleExtensionMessage)
+
+        console.log("SQLite Viewer initialized successfully");
+
+        // Load initial data
+        loadInitialData();
+      } catch (error) {
+        console.error("Error during initialization:", error);
+        if (typeof showError === "function") {
+          showError("Failed to initialize: " + error.message);
+        }
+      }
     }
 
+    /**
+     * Select a table and load its data
+     * @param {string} tableName - Name of the table to select
+     */
     function selectTable(tableName) {
-        // Remove previous selection
-        document.querySelectorAll('.table-item').forEach(item => {
-            item.classList.remove('selected');
-        });
+      console.log(`Selecting table: ${tableName}`);
 
-        // Add selection to clicked item
-        const selectedItem = document.querySelector(`[data-table="${tableName}"]`);
-        if (selectedItem) {
-            selectedItem.classList.add('selected');
+      if (typeof updateState === "function") {
+        updateState({ selectedTable: tableName });
+      }
+
+      // Highlight selected table
+      const tableElements = document.querySelectorAll(".table-item");
+      tableElements.forEach((el) => {
+        el.classList.remove("selected");
+        if (el.textContent && el.textContent.includes(tableName)) {
+          el.classList.add("selected");
         }
+      });
 
-        currentState.selectedTable = tableName;
-        vscode.setState(currentState);
+      // Request table schema and data
+      requestTableSchema(tableName);
+      requestTableData(tableName);
 
-        // Load table schema and data
-        loadTableSchema(tableName);
-        loadTableData(tableName);
+      // Switch to schema tab to show the table info
+      if (typeof switchTab === "function") {
+        switchTab("schema");
+      }
     }
 
-    function loadTableSchema(tableName) {
-        // Request table schema
-        vscode.postMessage({
-            type: 'executeQuery',
-            query: `PRAGMA table_info("${tableName}")`,
-            key: currentState.encryptionKey
-        });
+    /**
+     * Request table schema from extension
+     * @param {string} tableName - Table name
+     */
+    function requestTableSchema(tableName) {
+      const state =
+        typeof getCurrentState === "function" ? getCurrentState() : {};
+      console.log(
+        "Requesting table schema with encryption key:",
+        state.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
+      );
+      vscode.postMessage({
+        type: "getTableSchema",
+        tableName: tableName,
+        key: state.encryptionKey,
+      });
     }
 
-    function loadTableData(tableName) {
-        // Request table data
-        vscode.postMessage({
-            type: 'requestTableData',
-            tableName: tableName,
-            key: currentState.encryptionKey
-        });
+    /**
+     * Request table data from extension
+     * @param {string} tableName - Table name
+     */
+    function requestTableData(tableName) {
+      const state =
+        typeof getCurrentState === "function" ? getCurrentState() : {};
+      console.log(
+        "Requesting table data with encryption key:",
+        state.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
+      );
+      vscode.postMessage({
+        type: "getTableData",
+        tableName: tableName,
+        key: state.encryptionKey,
+      });
     }
 
-    function handleExecuteQuery() {
-        if (!sqlQueryTextarea) return;
-
-        const query = sqlQueryTextarea.value.trim();
-        if (!query) {
-            showError('Please enter a SQL query');
-            return;
-        }
-
-        if (executeQueryBtn) {
-            executeQueryBtn.textContent = 'Executing...';
-            executeQueryBtn.disabled = true;
-        }
-
-        vscode.postMessage({
-            type: 'executeQuery',
-            query: query,
-            key: currentState.encryptionKey
-        });
+    /**
+     * Request database info from extension
+     */
+    function requestDatabaseInfo() {
+      const state =
+        typeof getCurrentState === "function" ? getCurrentState() : {};
+      vscode.postMessage({
+        type: "requestDatabaseInfo",
+        key: state.encryptionKey,
+      });
     }
 
-    function handleQueryResult(message) {
-        if (executeQueryBtn) {
-            executeQueryBtn.textContent = 'Execute Query';
-            executeQueryBtn.disabled = false;
-        }
+    /**
+     * Display query result
+     * @param {object} result - Query result object
+     */
+    function displayQueryResult(result) {
+      const queryResults = document.getElementById("query-results");
+      if (!queryResults) {
+        return;
+      }
 
-        if (message.success) {
-            displayQueryResults(message.data, message.columns);
-            
-            // If this was a table info query, show it in schema tab
-            if (message.columns.includes('name') && message.columns.includes('type')) {
-                displayTableSchema(message.data, message.columns);
-            }
-        } else {
-            showError('Query execution failed');
-        }
-    }
-
-    function handleTableData(message) {
-        if (message.success) {
-            displayTableData(message.data, message.columns, message.tableName);
-        } else {
-            showError(`Failed to load data for table: ${message.tableName}`);
-        }
-    }
-
-    function displayQueryResults(data, columns) {
-        if (!queryResults) return;
-
-        if (!data || data.length === 0) {
-            queryResults.innerHTML = '<div class="info">Query returned no results</div>';
-            return;
-        }
-
-        const table = createDataTable(data, columns);
+      if (result.error) {
         queryResults.innerHTML = `
-            <div class="table-stats">
-                <div class="stat">
-                    <div class="stat-label">Rows</div>
-                    <div class="stat-value">${data.length}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Columns</div>
-                    <div class="stat-value">${columns.length}</div>
-                </div>
+          <div class="error-message">
+            <h3>Query Error</h3>
+            <p>${result.error}</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (!result.data || result.data.length === 0) {
+        queryResults.innerHTML = `
+          <div class="no-results">
+            <h3>No Results</h3>
+            <p>Query executed successfully but returned no data.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Create table with advanced features using table.js functions
+      const columns = result.columns || Object.keys(result.data[0] || {});
+      let table = "";
+
+      if (typeof createDataTable === "function") {
+        table = createDataTable(result.data, columns, "query-result");
+      } else {
+        // Fallback basic table
+        table = createBasicTable(result.data, columns);
+      }
+
+      queryResults.innerHTML = `
+        <div class="query-result-info">
+          <div class="result-stats">
+            <div class="stat-item">
+              <div class="stat-label">Rows</div>
+              <div class="stat-value">${result.data.length}</div>
             </div>
-            <div class="table-container">${table}</div>
-        `;
+            <div class="stat-item">
+              <div class="stat-label">Columns</div>
+              <div class="stat-value">${columns.length}</div>
+            </div>
+          </div>
+        </div>
+        <div class="table-container">
+          ${table}
+        </div>
+      `;
+
+      // Initialize table features if available
+      const tableWrapper = queryResults.querySelector(
+        ".enhanced-table-wrapper"
+      );
+      if (tableWrapper && typeof initializeTableEvents === "function") {
+        initializeTableEvents(tableWrapper);
+      }
     }
 
-    function displayTableSchema(data, columns) {
-        if (!schemaContent) return;
+    /**
+     * Display table schema
+     * @param {Array} schema - Table schema array
+     * @param {string} tableName - Table name
+     */
+    function displayTableSchema(schema, tableName) {
+      const schemaContent = document.getElementById("schema-content");
+      if (!schemaContent) {
+        return;
+      }
 
-        const schemaTable = createDataTable(data, columns);
-        schemaContent.innerHTML = `
-            <h4>Table Structure</h4>
-            <div class="table-container">${schemaTable}</div>
-        `;
+      schemaContent.innerHTML = `
+        <div class="schema-table">
+          <table class="schema-info-table">
+            <thead>
+              <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Not Null</th>
+                <th>Default</th>
+                <th>Primary Key</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${schema
+                .map(
+                  (col) => `
+                <tr>
+                  <td class="column-name">${col.name}</td>
+                  <td class="column-type">${col.type}</td>
+                  <td class="column-not-null">${col.notnull ? "Yes" : "No"}</td>
+                  <td class="column-default">${col.dflt_value || "—"}</td>
+                  <td class="column-pk">${col.pk ? "Yes" : "No"}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
     }
 
-    function displayTableData(data, columns, tableName) {
-        if (!dataContent) return;
+    /**
+     * Display table data
+     * @param {Array} data - Table data array
+     * @param {string} tableName - Table name
+     */
+    function displayTableData(data, tableName) {
+      const dataContent = document.getElementById("data-content");
+      if (!dataContent) {
+        return;
+      }
 
-        if (!data || data.length === 0) {
-            dataContent.innerHTML = `<div class="info">Table "${tableName}" is empty</div>`;
-            return;
-        }
-
-        const table = createDataTable(data, columns);
+      if (!data || data.length === 0) {
         dataContent.innerHTML = `
-            <div class="table-stats">
-                <div class="stat">
-                    <div class="stat-label">Table</div>
-                    <div class="stat-value">${tableName}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Rows</div>
-                    <div class="stat-value">${data.length}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Columns</div>
-                    <div class="stat-value">${columns.length}</div>
-                </div>
+          <div class="no-data">
+            <h3>No Data</h3>
+            <p>Table "${tableName}" is empty.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Create table with advanced features using table.js functions
+      const columns = Object.keys(data[0] || {});
+      let table = "";
+
+      if (typeof createDataTable === "function") {
+        table = createDataTable(data, columns, tableName);
+      } else {
+        // Fallback basic table
+        table = createBasicTable(data, columns);
+      }
+
+      dataContent.innerHTML = `
+        <div class="table-info">
+          <div class="table-stats">
+            <div class="stat-item">
+              <div class="stat-label">Rows</div>
+              <div class="stat-value">${data.length}</div>
             </div>
-            <div class="table-container">${table}</div>
-        `;
+            <div class="stat-item">
+              <div class="stat-label">Columns</div>
+              <div class="stat-value">${columns.length}</div>
+            </div>
+          </div>
+        </div>
+        <div class="table-container">
+          ${table}
+        </div>
+      `;
+
+      // Initialize table features if available
+      const tableWrapper = dataContent.querySelector(".enhanced-table-wrapper");
+      if (tableWrapper && typeof initializeTableEvents === "function") {
+        initializeTableEvents(tableWrapper);
+      }
     }
 
-    function createDataTable(data, columns) {
-        if (!data || !columns) return '';
-
-        const headerRow = columns.map(col => `<th>${escapeHtml(col)}</th>`).join('');
-        const dataRows = data.map(row => 
-            `<tr>${row.map(cell => `<td>${escapeHtml(String(cell))}</td>`).join('')}</tr>`
-        ).join('');
-
-        return `
-            <table class="data-table">
-                <thead>
-                    <tr>${headerRow}</tr>
-                </thead>
-                <tbody>
-                    ${dataRows}
-                </tbody>
-            </table>
-        `;
+    /**
+     * Create a basic table (fallback when table.js functions aren't available)
+     * @param {Array} data - Table data
+     * @param {Array} columns - Column names
+     * @returns {string} HTML table string
+     */
+    function createBasicTable(data, columns) {
+      return `
+        <table class="data-table basic-table">
+          <thead>
+            <tr>
+              ${columns.map((col) => `<th>${col}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${data
+              .map(
+                (row) => `
+              <tr>
+                ${columns
+                  .map((col) => `<td>${formatValue(row[col])}</td>`)
+                  .join("")}
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      `;
     }
 
-    function switchTab(tabName) {
-        currentState.activeTab = tabName;
-        vscode.setState(currentState);
-
-        // Update tab appearance
-        tabs.forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.tab === tabName);
-        });
-
-        // Update panel visibility
-        tabPanels.forEach(panel => {
-            panel.classList.toggle('active', panel.id === `${tabName}-tab`);
-        });
+    /**
+     * Format a value for display (fallback)
+     * @param {any} value - Value to format
+     * @returns {string} Formatted value
+     */
+    function formatValue(value) {
+      if (value === null || value === undefined) {
+        return '<span class="null-value">NULL</span>';
+      }
+      if (typeof formatCellValue === "function") {
+        return formatCellValue(value);
+      }
+      return String(value);
     }
 
-    function showError(message) {
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error';
-        errorDiv.textContent = message;
-        
-        // Show error in the current tab
-        const activePanel = document.querySelector('.tab-panel.active');
-        if (activePanel) {
-            activePanel.insertBefore(errorDiv, activePanel.firstChild);
-            
-            // Remove error after 5 seconds
-            setTimeout(() => {
-                if (errorDiv.parentNode) {
-                    errorDiv.parentNode.removeChild(errorDiv);
-                }
-            }, 5000);
+    /**
+     * Load initial data
+     */
+    function loadInitialData() {
+      // Try initial connection without key first
+      setTimeout(() => {
+        if (typeof tryInitialConnection !== "undefined") {
+          tryInitialConnection();
         }
+      }, 100);
     }
-
-    function escapeHtml(text) {
-        const map = {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        };
-        return text.replace(/[&<>"']/g, m => map[m]);
-    }
-
-    // Make selectTable available globally for onclick handlers
-    window.selectTable = selectTable;
 
     // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initializeApp);
     } else {
-        init();
+      initializeApp();
     }
+
+    // Export functions for debugging/testing
+    if (typeof window !== "undefined") {
+      /** @type {any} */ (window).sqliteViewer = {
+        selectTable,
+        requestDatabaseInfo,
+        vscode,
+      };
+    }
+  } catch (error) {
+    console.error("SQLite Viewer: Fatal error during initialization:", error);
+    // Show error in the UI
+    document.body.innerHTML = `
+      <div style="padding: 20px; color: #f48771; background: #2d1b1b; border-radius: 4px; margin: 20px;">
+        <h3>SQLite Viewer Error</h3>
+        <p>Failed to initialize the extension: ${error.message}</p>
+        <p>Please check the webview console for more details.</p>
+      </div>
+    `;
+  }
 })();

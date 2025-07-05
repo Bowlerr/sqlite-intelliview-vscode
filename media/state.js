@@ -1,0 +1,88 @@
+// @ts-check
+
+/**
+ * State management for the SQLite Viewer
+ */
+
+// Reference to the current state
+let currentState = {
+  databasePath: "",
+  encryptionKey: "",
+  selectedTable: null,
+  activeTab: "schema",
+  isConnected: false,
+  connectionError: null,
+  queryHistory: [],
+  tableCache: new Map(),
+};
+
+/**
+ * Get the current state
+ * @returns {object} Current state object
+ */
+function getCurrentState() {
+  return currentState;
+}
+
+/**
+ * Update the current state
+ * @param {object} newState - New state values to merge
+ */
+function updateState(newState) {
+  currentState = { ...currentState, ...newState };
+
+  // Debug logging for encryption key changes
+  if (newState.encryptionKey !== undefined) {
+    console.log(
+      "Encryption key updated in state:",
+      newState.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
+    );
+  }
+
+  // Save state to VS Code
+  if (typeof vscode !== "undefined") {
+    vscode.setState(currentState);
+  }
+}
+
+/**
+ * Initialize state from VS Code saved state
+ */
+function initializeState() {
+  if (typeof vscode !== "undefined") {
+    const savedState = vscode.getState();
+    if (savedState) {
+      currentState = { ...currentState, ...savedState };
+    }
+  }
+}
+
+/**
+ * Reset state to initial values
+ */
+function resetState() {
+  currentState = {
+    databasePath: "",
+    encryptionKey: "",
+    selectedTable: null,
+    activeTab: "schema",
+    isConnected: false,
+    connectionError: null,
+    queryHistory: [],
+    tableCache: new Map(),
+  };
+
+  if (typeof vscode !== "undefined") {
+    vscode.setState(currentState);
+  }
+}
+
+// Export functions for use in other modules
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    getCurrentState,
+    updateState,
+    initializeState,
+    resetState,
+  };
+}
