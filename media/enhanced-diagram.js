@@ -1,8 +1,8 @@
-// enhanced-diagram.js - D3.js ER Diagram
+// enhanced-diagram.js - D3.js ER Diagram Manager
 
 /**
  * D3.js ER Diagram Manager
- * High-performance, interactive database diagrams using D3.js
+ * Interactive database diagrams using D3.js
  */
 class DiagramManager {
   constructor() {
@@ -146,69 +146,7 @@ class DiagramManager {
     }
   }
 
-  prepareVisData(data) {
-    const nodes = data.tables.map((table) => ({
-      id: table.name,
-      label: this.createTableLabel(table),
-      title: this.createTableTooltip(table),
-    }));
 
-    const edges = [];
-    data.relationships.forEach((rel) => {
-      rel.foreignKeys.forEach((fk) => {
-        edges.push({
-          from: rel.table,
-          to: fk.referencedTable,
-          label: `${fk.column} → ${fk.referencedColumn}`,
-        });
-      });
-    });
-
-    return { nodes, edges };
-  }
-
-  createTableLabel(table) {
-    let label = `${table.name}\n`;
-    table.columns.forEach((col) => {
-      const pk = col.primaryKey ? " 🔑" : "";
-      label += `${col.name}: ${col.type}${pk}\n`;
-    });
-    return label;
-  }
-
-  createTableTooltip(table) {
-    let tooltip = `<b>${table.name}</b><br>`;
-    table.columns.forEach((col) => {
-      const pk = col.primaryKey ? " (PK)" : "";
-      const nn = col.notNull ? " NOT NULL" : "";
-      tooltip += `${col.name}: ${col.type}${pk}${nn}<br>`;
-    });
-    return tooltip;
-  }
-
-  sanitizeTableName(name) {
-    return name.replace(/[^a-zA-Z0-9_]/g, "_");
-  }
-
-  addMermaidInteractivity() {
-    const diagramDiv = document.getElementById("mermaid-diagram");
-    if (!diagramDiv) {
-      return;
-    }
-
-    // Add panzoom if available
-    if (typeof Panzoom !== "undefined") {
-      const svg = diagramDiv.querySelector("svg");
-      if (svg) {
-        const panzoom = Panzoom(svg, {
-          maxScale: 5,
-          minScale: 0.1,
-          startScale: 1,
-        });
-        diagramDiv.addEventListener("wheel", panzoom.zoomWithWheel);
-      }
-    }
-  }
 
   addD3Controls() {
     const container = document.getElementById("diagram-container");
@@ -245,21 +183,7 @@ class DiagramManager {
     container.appendChild(controls);
   }
 
-  addVisControls() {
-    const container = document.getElementById("diagram-container");
-    if (!container || !this.currentDiagram) {
-      return;
-    }
 
-    const controls = document.createElement("div");
-    controls.className = "diagram-controls-overlay";
-    controls.innerHTML = `
-            <button onclick="window.diagramManager.currentDiagram.fit()">Fit View</button>
-            <button onclick="window.diagramManager.currentDiagram.setOptions({physics: {enabled: !window.diagramManager.currentDiagram.physics.enabled}})">Toggle Physics</button>
-        `;
-
-    container.appendChild(controls);
-  }
 
   showError(message) {
     const container = document.getElementById("diagram-container");
@@ -284,24 +208,8 @@ class DiagramManager {
     if (this.currentDiagram && this.currentDiagram.exportAsPNG) {
       this.currentDiagram.exportAsPNG();
     } else {
-      // Fallback export logic
-      this.exportAsPNG();
+      console.warn("Export not available - D3 diagram not initialized");
     }
-  }
-
-  exportAsPNG() {
-    const container = document.getElementById("diagram-container");
-    if (!container) {
-      return;
-    }
-
-    const svg = container.querySelector("svg");
-    if (!svg) {
-      return;
-    }
-
-    // Implementation similar to existing export function
-    // ... (reuse existing export logic)
   }
 }
 
@@ -309,13 +217,13 @@ class DiagramManager {
 let diagramManager = null;
 let isInitialized = false;
 
-function initializeEnhancedDiagram() {
+function initializeDiagram() {
   if (isInitialized) {
-    console.log("Enhanced diagram already initialized, skipping...");
+    console.log("Diagram already initialized, skipping...");
     return;
   }
 
-  console.log("Initializing enhanced diagram functionality...");
+  console.log("Initializing D3.js diagram functionality...");
   diagramManager = new DiagramManager();
   window.diagramManager = diagramManager;
 
@@ -323,15 +231,7 @@ function initializeEnhancedDiagram() {
   setupDiagramEventListeners();
 
   isInitialized = true;
-  console.log("Enhanced diagram initialization complete");
-}
-
-// Legacy function for compatibility with main.js
-function initializeDiagram() {
-  console.log(
-    "Legacy initializeDiagram called, delegating to enhanced version..."
-  );
-  initializeEnhancedDiagram();
+  console.log("D3.js diagram initialization complete");
 }
 
 // Add diagram button event listeners
@@ -438,7 +338,7 @@ function handleERDiagramData(data) {
   }
 }
 
-// Keep existing functions for compatibility
+// Diagram loading and error functions
 function showDiagramLoading() {
   const container = document.getElementById("diagram-container");
   if (container) {
@@ -527,9 +427,8 @@ function showDiagramError(message) {
   }
 }
 
-// Export enhanced functions
+// Export D3 diagram functions
 window.initializeDiagram = initializeDiagram;
-window.initializeEnhancedDiagram = initializeEnhancedDiagram;
 window.requestERDiagram = requestERDiagram;
 window.handleERDiagramData = handleERDiagramData;
 window.showDiagramLoading = showDiagramLoading;

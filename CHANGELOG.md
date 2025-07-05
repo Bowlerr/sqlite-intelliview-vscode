@@ -2,6 +2,27 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.2] - 2025-07-05
+
+### Refactored
+
+- 🧹 **Diagram System Cleanup**: Removed legacy diagram implementations
+  - Removed all Mermaid.js references and unused code
+  - Removed Vis.js network diagram implementation
+  - Removed Panzoom library dependencies
+  - Consolidated to D3.js-only implementation for better performance
+  - Simplified diagram manager initialization and function exports
+  - Reduced codebase size by ~60 lines of unused code
+  - Cleaner API with single diagram system focus
+
+### Technical Improvements
+
+- 📦 **Code Organization**: Streamlined diagram modules
+  - Unified `initializeDiagram()` function (removed legacy wrapper)
+  - Removed unused functions: `prepareVisData()`, `createTableLabel()`, `createTableTooltip()`, `sanitizeTableName()`, `addMermaidInteractivity()`, `addVisControls()`
+  - Updated comments to reflect D3-only implementation
+  - Improved maintainability with single diagram system
+
 ## [0.2.1] - 2025-07-05
 
 ### Added
@@ -15,12 +36,14 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 ### Changed
 
 - 🚨 **Smart Error Handling**: Improved error state management
+
   - Loading animation no longer shows for connection errors or encrypted databases
   - Connection state checking before showing loading spinner
   - Specific error messages for different failure scenarios
   - Professional error state styling with animations and proper positioning
 
 - 🎯 **UI Layout Improvements**: Enhanced empty and error states
+
   - Higher positioning using `justify-content: flex-start` with top padding
   - Larger icons (4em) and text (1.4em titles, 1em descriptions) for better visibility
   - Increased content width and improved spacing throughout
@@ -37,6 +60,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 ### Fixed
 
 - ✅ **Button Functionality**: Resolved "Try Again" button not working
+
   - Proper event listener attachment after HTML insertion
   - Added defensive programming with function existence checks
   - Better debugging and error reporting

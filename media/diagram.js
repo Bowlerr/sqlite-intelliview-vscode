@@ -1,8 +1,8 @@
-// diagram.js - Enhanced ER Diagram functionality using D3.js
+// diagram.js - D3.js ER Diagram implementation
 
 /**
  * D3-based ER Diagram Generator
- * Provides better performance, customization, and interactivity than Mermaid
+ * Provides high-performance, interactive database diagrams
  */
 class D3ERDiagram {
   constructor(containerId, options = {}) {
