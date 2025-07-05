@@ -178,6 +178,12 @@ function handleExtensionMessage(event) {
     case "tableData":
       handleTableData(message);
       break;
+    case "erDiagram":
+      handleERDiagram(message);
+      break;
+    case "erDiagramProgress":
+      handleERDiagramProgress(message);
+      break;
     case "error":
       handleError(message);
       break;
@@ -439,12 +445,91 @@ function handleTableData(message) {
     displayTableData(message.data, message.columns, message.tableName, {
       page: message.page,
       pageSize: message.pageSize,
-      totalRows: message.totalRows
+      totalRows: message.totalRows,
     });
   } else {
     if (typeof showError !== "undefined") {
       showError(`Failed to load data for table: ${message.tableName}`);
     }
+  }
+}
+
+/**
+ * Handle ER diagram message
+ * @param {Object} message - ER diagram message
+ */
+function handleERDiagram(message) {
+  console.log("Received ER diagram message:", message);
+
+  if (message.success) {
+    // Add debug information about the received data
+    if (typeof addDebugMessage !== "undefined") {
+      addDebugMessage("Received ER diagram data from extension");
+      addDebugMessage(
+        `Found ${message.tables ? message.tables.length : 0} tables`
+      );
+      addDebugMessage(
+        `Found ${
+          message.relationships ? message.relationships.length : 0
+        } relationships`
+      );
+    }
+
+    if (typeof updateDiagramProgress !== "undefined") {
+      updateDiagramProgress("Processing database schema information");
+    }
+
+    if (typeof handleERDiagramData !== "undefined") {
+      handleERDiagramData(message);
+    }
+  } else {
+    console.error("ER diagram generation failed:", message);
+
+    if (typeof addDebugMessage !== "undefined") {
+      addDebugMessage("ERROR: ER diagram generation failed");
+      addDebugMessage(`Error details: ${message.error || "Unknown error"}`);
+    }
+
+    // Update connection state if it's a connection error
+    if (
+      message.error &&
+      (message.error.includes("database is locked") ||
+        message.error.includes("file is not a database") ||
+        message.error.includes("file is encrypted") ||
+        message.error.includes("decrypt"))
+    ) {
+      if (typeof updateState !== "undefined") {
+        updateState({
+          isConnected: false,
+          connectionError: message.error,
+        });
+      }
+    }
+
+    // Show error instead of loading
+    if (typeof showDiagramError !== "undefined") {
+      showDiagramError(message.error || "Unknown error");
+    } else if (typeof showError !== "undefined") {
+      showError(
+        "Failed to generate ER diagram: " + (message.error || "Unknown error")
+      );
+    }
+  }
+}
+
+/**
+ * Handle ER diagram progress updates
+ * @param {Object} message - Progress message
+ */
+function handleERDiagramProgress(message) {
+  console.log("Received ER diagram progress:", message);
+
+  if (typeof updateDiagramProgress !== "undefined") {
+    updateDiagramProgress(message.message);
+  }
+
+  if (typeof addDebugMessage !== "undefined") {
+    addDebugMessage(`Progress: ${message.message}`);
   }
 }
 
@@ -772,7 +857,7 @@ function initializeTableEvents(tableWrapper) {
       if (target && target.classList.contains("pagination-btn")) {
         const action = target.dataset.action;
         const page = target.dataset.page;
-        
+
         if (typeof handlePagination !== "undefined") {
           handlePagination(tableWrapper, action, page);
         }
@@ -793,9 +878,11 @@ function initializeTableEvents(tableWrapper) {
   }
 
   // Page input with go button
-  const pageInput = /** @type {HTMLInputElement} */ (tableWrapper.querySelector(".page-input"));
+  const pageInput = /** @type {HTMLInputElement} */ (
+    tableWrapper.querySelector(".page-input")
+  );
   const goButton = tableWrapper.querySelector('[data-action="go"]');
-  
+
   if (pageInput && goButton) {
     const handleGoToPage = () => {
       const pageNumber = parseInt(pageInput.value);
@@ -803,7 +890,7 @@ function initializeTableEvents(tableWrapper) {
         handlePagination(tableWrapper, "goto", pageNumber);
       }
     };
-    
+
     goButton.addEventListener("click", handleGoToPage);
     pageInput.addEventListener("keypress", (e) => {
       const keyEvent = /** @type {KeyboardEvent} */ (e);

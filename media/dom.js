@@ -19,6 +19,10 @@ const domElements = {
   dataContent: null,
   connectionSection: null,
   connectionStatus: null,
+  diagramContent: null,
+  generateDiagramBtn: null,
+  exportDiagramBtn: null,
+  diagramContainer: null,
 };
 
 /**
@@ -38,6 +42,11 @@ function initializeDOMElements() {
   domElements.dataContent = document.getElementById("data-content");
   domElements.connectionSection = document.getElementById("connection-section");
   domElements.connectionStatus = document.getElementById("connection-status");
+  domElements.diagramContent = document.getElementById("diagram-content");
+  domElements.generateDiagramBtn = document.getElementById("generate-diagram");
+  domElements.exportDiagramBtn = document.getElementById("export-diagram");
+  domElements.diagramContainer = document.getElementById("diagram-container");
+  domElements.testConnectionBtn = document.getElementById("test-connection");
 
   // Connection section starts visible by default and will be hidden after successful connection
   console.log("DOM elements initialized");

@@ -43,6 +43,11 @@
           addHelpButton();
         }
 
+        // Initialize diagram functionality
+        if (typeof initializeDiagram === "function") {
+          initializeDiagram();
+        }
+
         // Show connection section initially - will be hidden after successful connection
         if (typeof showConnectionSection !== "undefined") {
           showConnectionSection();

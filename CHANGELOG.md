@@ -2,6 +2,57 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.1] - 2025-07-05
+
+### Added
+
+- 🎨 **Enhanced Loading Animation**: New modern animated dots spinner
+  - Replaced old spinning wheel with smooth wave-like pulse animation
+  - Three dots with staggered timing for professional appearance
+  - Smaller footprint (80px x 16px) for better visual balance
+  - Improved spacing between animation and loading text (2.5rem gap)
+
+### Changed
+
+- 🚨 **Smart Error Handling**: Improved error state management
+  - Loading animation no longer shows for connection errors or encrypted databases
+  - Connection state checking before showing loading spinner
+  - Specific error messages for different failure scenarios
+  - Professional error state styling with animations and proper positioning
+
+- 🎯 **UI Layout Improvements**: Enhanced empty and error states
+  - Higher positioning using `justify-content: flex-start` with top padding
+  - Larger icons (4em) and text (1.4em titles, 1em descriptions) for better visibility
+  - Increased content width and improved spacing throughout
+  - Consistent positioning across all states (empty, loading, error)
+  - Responsive design for different screen sizes
+
+- 🔧 **Code Cleanup**: Removed legacy features and improved maintainability
+  - Removed old multi-engine diagram switching functionality
+  - Simplified error states to show only "Try Again" button
+  - Cleaned up duplicate CSS definitions and orphaned rules
+  - Removed auto-generation of diagrams when switching to ER Diagram tab
+  - Fixed "Try Again" button functionality with proper event handlers
+
+### Fixed
+
+- ✅ **Button Functionality**: Resolved "Try Again" button not working
+  - Proper event listener attachment after HTML insertion
+  - Added defensive programming with function existence checks
+  - Better debugging and error reporting
+
+- 🎨 **CSS Consistency**: Cleaned up styling conflicts
+  - Removed duplicate loading spinner definitions
+  - Unified error and empty state styling
+  - Fixed CSS syntax errors and improved organization
+
+### Technical Improvements
+
+- Enhanced state management for connection errors
+- Improved message handling between frontend and backend
+- Better separation of concerns in diagram generation
+- Responsive design improvements for mobile devices
+
 ## [0.2.0] - 2025-07-05
 
 ### Added

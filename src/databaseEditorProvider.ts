@@ -79,6 +79,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 case 'getTableData':
                     this.handleTableDataRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key, e.page, e.pageSize);
                     return;
+                case 'generateERDiagram':
+                    this.handleERDiagramRequest(webviewPanel, document.uri.fsPath, e.key);
+                    return;
             }
         });
 
@@ -106,7 +109,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${styleResetUri}" rel="stylesheet">
                 <link href="${stylesMainUri}" rel="stylesheet">
@@ -131,9 +134,17 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     </div>
                     
                     <div class="main-content">
-                        <div class="sidebar">
+                        <div class="sidebar" id="sidebar">
+                            <div class="sidebar-header">
+                                <h3 class="sidebar-title">Database</h3>
+                                <div class="sidebar-controls">
+                                    <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle Sidebar">⟨</button>
+                                </div>
+                            </div>
+                            <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
+                            
                             <div class="section connection-section visible" id="connection-section">
-                                <h3>Database Connection</h3>
+                                <h3>Connection</h3>
                                 <div class="connection-controls">
                                     <input type="password" id="encryption-key" placeholder="SQLCipher Key" />
                                     <button id="connect-btn" class="primary-button">Connect with Key</button>
@@ -153,6 +164,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                                 <button class="tab active" data-tab="schema">Schema</button>
                                 <button class="tab" data-tab="query">Query</button>
                                 <button class="tab" data-tab="data">Data</button>
+                                <button class="tab" data-tab="diagram">ER Diagram</button>
                             </div>
                             
                             <div class="tab-content">
@@ -188,18 +200,37 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                                         </div>
                                     </div>
                                 </div>
+                                
+                                <div id="diagram-panel" class="tab-panel">
+                                    <div id="diagram-content">
+                                        <div id="diagram-container">
+                                            <div class="empty-state">
+                                                <div class="empty-state-icon">📈</div>
+                                                <div class="empty-state-title">Generate ER Diagram</div>
+                                                <div class="empty-state-description">Click "Generate ER Diagram" to visualize the database relationships and structure with D3.js interactive diagrams.</div>
+                                                <button id="generate-diagram" class="primary-button" onclick="window.requestERDiagram && window.requestERDiagram()">Generate ER Diagram</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
+                
+                <!-- Load D3.js for enhanced diagrams -->
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', 'd3', 'dist', 'd3.min.js'))}"></script>
                 
                 <!-- Load modular JavaScript files in dependency order -->
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'state.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'dom.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'notifications.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'utils.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'resizable-sidebar.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'resizing.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'table.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'diagram.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'enhanced-diagram.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'events.js'))}"></script>
                 
                 <!-- Main application script - loads last and uses functions from modules above -->
@@ -306,6 +337,152 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             webviewPanel.webview.postMessage({
                 type: 'error',
                 message: `Failed to load table schema: ${error}`
+            });
+        }
+    }
+
+    private async handleERDiagramRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, key?: string) {
+        try {
+            console.log(`=== ER DIAGRAM REQUEST START ===`);
+            console.log(`Database path: ${databasePath}`);
+            console.log(`Key provided: ${key ? 'YES' : 'NO'}`);
+            
+            // Send progress update - step 1
+            webviewPanel.webview.postMessage({
+                type: 'erDiagramProgress',
+                step: 1,
+                message: 'Connecting to database...'
+            });
+            
+            console.log(`Attempting to get database connection...`);
+            const dbService = await this.getOrCreateConnection(databasePath, key);
+            console.log(`Database connection successful`);
+            
+            // Send progress update - step 2
+            webviewPanel.webview.postMessage({
+                type: 'erDiagramProgress',
+                step: 2,
+                message: 'Analyzing database tables...'
+            });
+            
+            console.log(`Getting tables list...`);
+            // Get all tables
+            const tables = await dbService.getTables();
+            console.log(`Found ${tables.length} tables:`, tables.map(t => t.name));
+            
+            // Send progress update with table count
+            webviewPanel.webview.postMessage({
+                type: 'erDiagramProgress',
+                step: 2,
+                message: `Found ${tables.length} tables, analyzing schemas...`
+            });
+            
+            console.log(`Starting schema analysis for ${tables.length} tables...`);
+            
+            // Get schema for each table
+            const tablesWithSchemas = await Promise.all(
+                tables.map(async (table, index) => {
+                    console.log(`Processing table ${index + 1}/${tables.length}: ${table.name}`);
+                    
+                    // Send progress update for each table
+                    webviewPanel.webview.postMessage({
+                        type: 'erDiagramProgress',
+                        step: 2,
+                        message: `Analyzing table ${index + 1}/${tables.length}: ${table.name}`
+                    });
+                    
+                    try {
+                        const schema = await dbService.getTableSchema(table.name);
+                        console.log(`Schema for ${table.name}:`, schema);
+                        
+                        const columns = schema.values.map((row: any) => ({
+                            name: row[1], // column name
+                            type: row[2], // data type
+                            notNull: row[3] === 1, // not null constraint
+                            defaultValue: row[4], // default value
+                            primaryKey: row[5] === 1 // primary key
+                        }));
+                        
+                        console.log(`Table ${table.name} processed: ${columns.length} columns`);
+                        
+                        return {
+                            name: table.name,
+                            columns: columns
+                        };
+                    } catch (error) {
+                        console.error(`Error processing table ${table.name}:`, error);
+                        throw error;
+                    }
+                })
+            );
+
+            console.log(`Schema analysis complete. Starting foreign key detection...`);
+            
+            // Send progress update - step 3
+            webviewPanel.webview.postMessage({
+                type: 'erDiagramProgress',
+                step: 3,
+                message: 'Detecting foreign key relationships...'
+            });
+
+            // Get foreign key relationships
+            const relationships = await Promise.all(
+                tables.map(async (table, index) => {
+                    try {
+                        console.log(`Checking foreign keys for table ${index + 1}/${tables.length}: ${table.name}`);
+                        
+                        const foreignKeys = await dbService.executeQuery(`PRAGMA foreign_key_list(${table.name})`);
+                        console.log(`Foreign keys result for ${table.name}:`, foreignKeys);
+                        
+                        const fkList = foreignKeys.values.map((fk: any) => ({
+                            column: fk[3], // from column
+                            referencedTable: fk[2], // to table
+                            referencedColumn: fk[4] // to column
+                        }));
+                        
+                        if (fkList.length > 0) {
+                            console.log(`Found ${fkList.length} foreign keys in ${table.name}:`, fkList);
+                        }
+                        
+                        return {
+                            table: table.name,
+                            foreignKeys: fkList
+                        };
+                    } catch (error) {
+                        console.warn(`Failed to get foreign keys for ${table.name}:`, error);
+                        return {
+                            table: table.name,
+                            foreignKeys: []
+                        };
+                    }
+                })
+            );
+
+            const filteredRelationships = relationships.filter(rel => rel.foreignKeys.length > 0);
+            console.log(`Found ${filteredRelationships.length} tables with foreign key relationships`);
+            console.log(`Relationships:`, filteredRelationships);
+
+            console.log(`Sending final ER diagram data...`);
+            
+            // Send final success message
+            webviewPanel.webview.postMessage({
+                type: 'erDiagram',
+                success: true,
+                tables: tablesWithSchemas,
+                relationships: filteredRelationships
+            });
+            
+            console.log(`=== ER DIAGRAM REQUEST COMPLETE ===`);
+            
+        } catch (error) {
+            console.error(`=== ER DIAGRAM REQUEST FAILED ===`);
+            console.error(`Error details:`, error);
+            console.error(`Stack trace:`, error instanceof Error ? error.stack : 'No stack trace');
+            
+            webviewPanel.webview.postMessage({
+                type: 'erDiagram',
+                success: false,
+                error: error instanceof Error ? error.message : String(error)
             });
         }
     }
