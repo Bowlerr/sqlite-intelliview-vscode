@@ -583,6 +583,13 @@ function displayTablesList(tables) {
           updateState({ selectedTable: tableName });
         }
 
+        // Update minimized sidebar with selected table
+        if (window.updateSelectedTableSafe) {
+          window.updateSelectedTableSafe(tableName);
+        } else if (window.resizableSidebar) {
+          window.resizableSidebar.updateSelectedTable(tableName);
+        }
+
         // Request table schema by default when clicking on table name
         if (typeof vscode !== "undefined") {
           vscode.postMessage({

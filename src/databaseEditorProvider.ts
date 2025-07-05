@@ -141,6 +141,14 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                                     <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle Sidebar">⟨</button>
                                 </div>
                             </div>
+                            
+                            <!-- Minimized sidebar content -->
+                            <div class="minimized-content">
+                                <div class="selected-table-indicator empty" id="selected-table-indicator">
+                                    No Table
+                                </div>
+                            </div>
+                            
                             <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
                             
                             <div class="section connection-section visible" id="connection-section">

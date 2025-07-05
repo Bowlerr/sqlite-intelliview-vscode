@@ -32,6 +32,7 @@ class ResizableSidebar {
 
     this.setupEventListeners();
     this.loadSavedState();
+    this.initializeMinimizedContent();
   }
 
   setupEventListeners() {
@@ -165,6 +166,35 @@ class ResizableSidebar {
     this.saveState();
   }
 
+  /**
+   * Update the selected table display in minimized sidebar
+   * @param {string} tableName - Name of the selected table
+   */
+  updateSelectedTable(tableName) {
+    const indicator = document.getElementById("selected-table-indicator");
+    if (!indicator) {
+      return;
+    }
+
+    if (tableName) {
+      indicator.textContent = tableName;
+      indicator.classList.remove("empty");
+      indicator.title = `Selected Table: ${tableName}`;
+    } else {
+      indicator.textContent = "No Table";
+      indicator.classList.add("empty");
+      indicator.title = "No table selected";
+    }
+  }
+
+  /**
+   * Get the current minimized state
+   * @returns {boolean} Whether sidebar is minimized
+   */
+  getIsMinimized() {
+    return this.isMinimized;
+  }
+
   dispatchSidebarEvent(eventName) {
     const event = new CustomEvent(eventName, {
       detail: {
@@ -210,6 +240,17 @@ class ResizableSidebar {
     }
   }
 
+  /**
+   * Initialize minimized sidebar content with current state
+   */
+  initializeMinimizedContent() {
+    // Initialize with current state if available
+    if (typeof getCurrentState === "function") {
+      const currentState = getCurrentState();
+      this.updateSelectedTable(currentState.selectedTable);
+    }
+  }
+
   // Public API methods
   getWidth() {
     return this.originalWidth;
@@ -229,12 +270,36 @@ class ResizableSidebar {
 // Initialize resizable sidebar when DOM is ready
 let resizableSidebar;
 
+// Safety function to update selected table even if sidebar isn't ready yet
+function updateSelectedTableSafe(tableName) {
+  if (window.resizableSidebar && window.resizableSidebar.updateSelectedTable) {
+    window.resizableSidebar.updateSelectedTable(tableName);
+  } else {
+    console.log("ResizableSidebar not ready, will update when initialized");
+    // Store the table name for when the sidebar is ready
+    window.pendingTableSelection = tableName;
+  }
+}
+
+// Make the safe function globally available
+window.updateSelectedTableSafe = updateSelectedTableSafe;
+
 function initializeResizableSidebar() {
   if (typeof ResizableSidebar !== "undefined") {
     resizableSidebar = new ResizableSidebar();
 
     // Make it globally accessible
     window.resizableSidebar = resizableSidebar;
+
+    // Check if there was a pending table selection
+    if (window.pendingTableSelection) {
+      console.log(
+        "Applying pending table selection:",
+        window.pendingTableSelection
+      );
+      resizableSidebar.updateSelectedTable(window.pendingTableSelection);
+      window.pendingTableSelection = null;
+    }
 
     console.log("Resizable sidebar initialized");
   }

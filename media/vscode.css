@@ -165,6 +165,16 @@ body {
   transition: width 0.3s ease;
 }
 
+/* Hide minimized content by default */
+.sidebar .minimized-content {
+  display: none;
+}
+
+/* Show minimized content only when sidebar is minimized */
+.sidebar.minimized .minimized-content {
+  display: flex;
+}
+
 /* Minimized sidebar state */
 .sidebar.minimized {
   width: 48px;
@@ -2394,7 +2404,7 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
 .sidebar.minimized .sidebar-header {
   flex-direction: column;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .sidebar.minimized .sidebar-title {
@@ -2403,22 +2413,69 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   opacity: 0.7;
+}
+
+/* Minimized sidebar selected table display */
+.sidebar.minimized .minimized-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px 0;
+  margin-top: 16px;
+  height: calc(100% - 80px);
+}
+
+.sidebar.minimized .selected-table-indicator {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-charts-blue);
+  text-align: center;
+  padding: 16px 4px;
+  border-radius: 6px;
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-charts-blue);
+  max-width: 32px;
+  min-height: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.9;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.sidebar.minimized .selected-table-indicator:hover {
+  opacity: 1;
+  background: var(--vscode-button-hoverBackground);
+  transform: scale(1.05);
+}
+
+.sidebar.minimized .selected-table-indicator.empty {
+  color: var(--vscode-descriptionForeground);
+  border-color: var(--vscode-descriptionForeground);
+  background: transparent;
+  opacity: 0.5;
+  font-size: 9px;
 }
 
 /* Tooltip for minimized sidebar */
 .sidebar.minimized::after {
-  content: "Tables";
+  content: "Selected";
   position: absolute;
-  top: 80px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%) rotate(90deg);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.4;
 }
 
 /* Hide resize handle when minimized */
@@ -2448,6 +2505,10 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   transform: none;
   margin-bottom: 16px;
   opacity: 1;
+}
+
+.sidebar.minimized:hover .minimized-content {
+  display: none;
 }
 
 .sidebar.minimized:hover::after {

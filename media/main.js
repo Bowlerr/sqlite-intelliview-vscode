@@ -84,6 +84,13 @@
         updateState({ selectedTable: tableName });
       }
 
+      // Update minimized sidebar with selected table
+      if (window.updateSelectedTableSafe) {
+        window.updateSelectedTableSafe(tableName);
+      } else if (window.resizableSidebar) {
+        window.resizableSidebar.updateSelectedTable(tableName);
+      }
+
       // Highlight selected table
       const tableElements = document.querySelectorAll(".table-item");
       tableElements.forEach((el) => {

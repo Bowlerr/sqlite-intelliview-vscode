@@ -2,6 +2,33 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.3] - 2025-07-05
+
+### Added
+
+- 🎯 **Minimized Sidebar Enhancements**: Enhanced sidebar functionality with selected table indicator
+  - Added `selected-table-indicator` element to show currently selected table when sidebar is minimized
+  - Implemented `updateSelectedTable()` method in ResizableSidebar class to update indicator
+  - Added `updateSelectedTableSafe()` global function for safe cross-module communication
+  - Visual indicator shows table name vertically in minimized sidebar with hover effects
+  - Empty state styling for when no table is selected
+
+### Changed
+
+- 🔧 **Improved Cross-Module Communication**: Better integration between sidebar and table selection
+  - Updated `selectTable()` function in main.js to communicate with sidebar
+  - Added fallback handling for when sidebar isn't ready yet
+  - Enhanced event handling in events.js for table selection updates
+  - Better state management for selected table across all modules
+
+### Technical Improvements
+
+- 🏗️ **Sidebar Architecture**: Enhanced minimized sidebar content structure
+  - Added `minimized-content` div to HTML template in databaseEditorProvider.ts
+  - Improved CSS styling for minimized sidebar with proper visibility controls
+  - Better tooltip positioning and styling for selected table indicator
+  - Consistent visual feedback and hover states
+
 ## [0.2.2] - 2025-07-05
 
 ### Refactored
