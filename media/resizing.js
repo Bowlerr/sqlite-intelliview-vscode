@@ -199,6 +199,12 @@ function endResize(e) {
   if (currentResizeTarget) {
     currentResizeTarget.classList.remove("resizing");
 
+    // Remove resizing class from table
+    const table = currentResizeTarget.closest(".data-table");
+    if (table) {
+      table.classList.remove("resizing");
+    }
+
     // Show success message
     const resizeType = currentResizeType === "column" ? "Column" : "Row";
     if (typeof showSuccess !== "undefined") {
@@ -355,6 +361,9 @@ function handleCellColumnResizeStart(e) {
       // Add visual feedback
       document.body.style.cursor = "col-resize";
       header.classList.add("resizing");
+
+      // Add class to table to prevent text selection during resize
+      table.classList.add("resizing");
 
       console.log("Started column resize from cell:", columnIndex, startWidth);
     }

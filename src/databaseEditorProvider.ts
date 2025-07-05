@@ -79,6 +79,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 case 'getTableData':
                     this.handleTableDataRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key, e.page, e.pageSize);
                     return;
+                case 'updateCellData':
+                    this.handleCellUpdateRequest(webviewPanel, document.uri.fsPath, e.tableName, e.rowIndex, e.columnName, e.newValue, e.key);
+                    return;
                 case 'generateERDiagram':
                     this.handleERDiagramRequest(webviewPanel, document.uri.fsPath, e.key);
                     return;
@@ -322,6 +325,51 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             webviewPanel.webview.postMessage({
                 type: 'error',
                 message: `Failed to load table data: ${error}`
+            });
+        }
+    }
+
+    private async handleCellUpdateRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, rowIndex: number, columnName: string, newValue: any, key?: string) {
+        console.log(`[handleCellUpdateRequest] Processing cell update request:`, {
+            databasePath,
+            tableName,
+            rowIndex,
+            columnName,
+            newValue,
+            hasKey: !!key
+        });
+
+        try {
+            const dbService = await this.getOrCreateConnection(databasePath, key);
+            
+            // First, get the rowid for the row we want to update
+            console.log(`[handleCellUpdateRequest] Getting rowid for row index ${rowIndex}`);
+            const rowId = await dbService.getCellRowId(tableName, rowIndex);
+            
+            // Update the cell data
+            console.log(`[handleCellUpdateRequest] Updating cell data with rowid ${rowId}`);
+            await dbService.updateCellData(tableName, rowId, columnName, newValue);
+            
+            // Send success response
+            webviewPanel.webview.postMessage({
+                type: 'cellUpdateSuccess',
+                success: true,
+                tableName: tableName,
+                rowIndex: rowIndex,
+                columnName: columnName,
+                newValue: newValue
+            });
+            
+            console.log(`[handleCellUpdateRequest] Cell update completed successfully`);
+        } catch (error) {
+            console.error(`[handleCellUpdateRequest] Cell update failed:`, error);
+            webviewPanel.webview.postMessage({
+                type: 'cellUpdateError',
+                success: false,
+                message: `Failed to update cell: ${error}`,
+                tableName: tableName,
+                rowIndex: rowIndex,
+                columnName: columnName
             });
         }
     }

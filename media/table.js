@@ -8,7 +8,7 @@
 const PAGINATION_CONFIG = {
   defaultPageSize: 100,
   pageSizeOptions: [50, 100, 200, 500, 1000],
-  maxVisiblePages: 5
+  maxVisiblePages: 5,
 };
 
 /**
@@ -23,18 +23,24 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   const tableId = generateTableId
     ? generateTableId(tableName)
     : `table-${tableName || "query"}-${Date.now()}`;
-  
+
   const pageSize = options.pageSize || PAGINATION_CONFIG.defaultPageSize;
   const currentPage = options.currentPage || options.page || 1;
   const totalRows = options.totalRows || data.length; // Use backend total if available
   const totalPages = Math.ceil(totalRows / pageSize);
-  
+
+  // Check if this is a schema table (not editable)
+  const isSchemaTable =
+    tableName === "schema" ||
+    tableName === "query-result" ||
+    tableName === "query";
+
   // When we have totalRows from backend, data is already paginated
   // When we don't have totalRows, we need to paginate the data locally
   let pageData = data;
   let startIndex = 0;
   let endIndex = data.length;
-  
+
   if (options.totalRows) {
     // Backend pagination - data is already for the current page
     startIndex = (currentPage - 1) * pageSize;
@@ -46,7 +52,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     endIndex = Math.min(startIndex + pageSize, totalRows);
     pageData = data.slice(startIndex, endIndex);
   }
-  
+
   return `
     <div class="enhanced-table-wrapper" data-table-id="${tableId}" data-total-rows="${totalRows}" data-page-size="${pageSize}" data-current-page="${currentPage}">
       <div class="table-controls">
@@ -68,12 +74,22 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           </span>
         </div>
         <div class="table-actions">
+          ${
+            !isSchemaTable
+              ? `<span class="table-editable-indicator" title="Double-click cells to edit">✏️ Editable</span>`
+              : `<span class="table-readonly-indicator" title="Schema data is read-only">🔒 Read-only</span>`
+          }
           <div class="page-size-selector">
             <label for="page-size-${tableId}">Show:</label>
             <select id="page-size-${tableId}" class="page-size-select">
-              ${PAGINATION_CONFIG.pageSizeOptions.map(size => 
-                `<option value="${size}" ${size === pageSize ? 'selected' : ''}>${size}</option>`
-              ).join('')}
+              ${PAGINATION_CONFIG.pageSizeOptions
+                .map(
+                  (size) =>
+                    `<option value="${size}" ${
+                      size === pageSize ? "selected" : ""
+                    }>${size}</option>`
+                )
+                .join("")}
             </select>
           </div>
           <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>
@@ -115,13 +131,15 @@ function createDataTable(data, columns, tableName = "", options = {}) {
             </tr>
           </thead>
           <tbody role="rowgroup" class="table-body">
-            ${renderTableRows(pageData, startIndex)}
+            ${renderTableRows(pageData, startIndex, columns, isSchemaTable)}
           </tbody>
         </table>
       </div>
       <div class="table-footer">
         <div class="table-info">
-          <span class="visible-rows">Showing ${startIndex + 1}-${endIndex} of ${totalRows.toLocaleString()} rows</span>
+          <span class="visible-rows">Showing ${
+            startIndex + 1
+          }-${endIndex} of ${totalRows.toLocaleString()} rows</span>
           <span class="selected-info"></span>
         </div>
         <div class="table-pagination">
@@ -136,14 +154,20 @@ function createDataTable(data, columns, tableName = "", options = {}) {
  * Render table rows with proper indexing
  * @param {Array} data - Row data to render
  * @param {number} startIndex - Starting row index for global numbering
+ * @param {Array} columns - Column names for data attributes
+ * @param {boolean} isSchemaTable - Whether this is a schema table (not editable)
  * @returns {string} HTML string for table rows
  */
-function renderTableRows(data, startIndex = 0) {
+function renderTableRows(
+  data,
+  startIndex = 0,
+  columns = [],
+  isSchemaTable = false
+) {
   return data
-    .map(
-      (row, localIndex) => {
-        const globalIndex = startIndex + localIndex;
-        return `
+    .map((row, localIndex) => {
+      const globalIndex = startIndex + localIndex;
+      return `
         <tr data-row-index="${globalIndex}" data-local-index="${localIndex}" class="resizable-row" role="row">
           ${row
             .map(
@@ -152,10 +176,21 @@ function renderTableRows(data, startIndex = 0) {
                 class="data-cell" 
                 role="gridcell"
                 tabindex="0"
+                ${!isSchemaTable ? `data-editable="true"` : ""}
+                ${!isSchemaTable ? `data-row-index="${globalIndex}"` : ""}
+                ${
+                  !isSchemaTable
+                    ? `data-column-name="${
+                        columns ? columns[cellIndex] : `col_${cellIndex}`
+                      }"`
+                    : ""
+                }
                 aria-label="Row ${globalIndex + 1}, Column ${cellIndex + 1}: ${
                 cell !== null ? String(cell).substring(0, 50) : "null"
               }">
-              <div class="cell-content">
+              <div class="cell-content" data-original-value="${
+                cell !== null ? String(cell).replace(/"/g, "&quot;") : ""
+              }">
                 ${
                   cell !== null
                     ? String(cell)
@@ -167,14 +202,22 @@ function renderTableRows(data, startIndex = 0) {
                     : "<em>NULL</em>"
                 }
               </div>
+              ${
+                !isSchemaTable
+                  ? `<div class="cell-editing-controls" style="display: none;">
+                <input type="text" class="cell-input" />
+                <button class="cell-save-btn" title="Save changes">✓</button>
+                <button class="cell-cancel-btn" title="Cancel changes">✗</button>
+              </div>`
+                  : ""
+              }
             </td>
           `
             )
             .join("")}
         </tr>
       `;
-      }
-    )
+    })
     .join("");
 }
 
@@ -186,28 +229,34 @@ function renderTableRows(data, startIndex = 0) {
  * @returns {string} HTML string for pagination controls
  */
 function createPaginationControls(currentPage, totalPages, tableId) {
-  if (totalPages <= 1) return '';
-  
+  if (totalPages <= 1) {
+    return "";
+  }
+
   const maxVisible = PAGINATION_CONFIG.maxVisiblePages;
   let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
   let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-  
+
   // Adjust start if we're near the end
   if (endPage - startPage + 1 < maxVisible) {
     startPage = Math.max(1, endPage - maxVisible + 1);
   }
-  
+
   let paginationHTML = `
     <div class="pagination-controls" data-table-id="${tableId}">
-      <button class="pagination-btn" data-action="first" ${currentPage === 1 ? 'disabled' : ''} title="First page">
+      <button class="pagination-btn" data-action="first" ${
+        currentPage === 1 ? "disabled" : ""
+      } title="First page">
         ⏮️
       </button>
-      <button class="pagination-btn" data-action="prev" ${currentPage === 1 ? 'disabled' : ''} title="Previous page">
+      <button class="pagination-btn" data-action="prev" ${
+        currentPage === 1 ? "disabled" : ""
+      } title="Previous page">
         ⏪
       </button>
       <div class="pagination-pages">
   `;
-  
+
   // Add ellipsis if needed at start
   if (startPage > 1) {
     paginationHTML += `<button class="pagination-btn page-btn" data-page="1">1</button>`;
@@ -215,15 +264,17 @@ function createPaginationControls(currentPage, totalPages, tableId) {
       paginationHTML += `<span class="pagination-ellipsis">...</span>`;
     }
   }
-  
+
   // Add visible page numbers
   for (let i = startPage; i <= endPage; i++) {
     paginationHTML += `
-      <button class="pagination-btn page-btn ${i === currentPage ? 'active' : ''}" 
+      <button class="pagination-btn page-btn ${
+        i === currentPage ? "active" : ""
+      }" 
               data-page="${i}">${i}</button>
     `;
   }
-  
+
   // Add ellipsis if needed at end
   if (endPage < totalPages) {
     if (endPage < totalPages - 1) {
@@ -231,13 +282,17 @@ function createPaginationControls(currentPage, totalPages, tableId) {
     }
     paginationHTML += `<button class="pagination-btn page-btn" data-page="${totalPages}">${totalPages}</button>`;
   }
-  
+
   paginationHTML += `
       </div>
-      <button class="pagination-btn" data-action="next" ${currentPage === totalPages ? 'disabled' : ''} title="Next page">
+      <button class="pagination-btn" data-action="next" ${
+        currentPage === totalPages ? "disabled" : ""
+      } title="Next page">
         ⏩
       </button>
-      <button class="pagination-btn" data-action="last" ${currentPage === totalPages ? 'disabled' : ''} title="Last page">
+      <button class="pagination-btn" data-action="last" ${
+        currentPage === totalPages ? "disabled" : ""
+      } title="Last page">
         ⏭️
       </button>
     </div>
@@ -248,7 +303,7 @@ function createPaginationControls(currentPage, totalPages, tableId) {
       <button class="pagination-btn" data-action="go">Go</button>
     </div>
   `;
-  
+
   return paginationHTML;
 }
 
@@ -606,41 +661,41 @@ function handlePagination(tableWrapper, action, value) {
   if (!tableWrapper) {
     return;
   }
-  
+
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
-  const currentPage = parseInt(wrapper.dataset.currentPage || '1');
-  const totalRows = parseInt(wrapper.dataset.totalRows || '0');
-  const pageSize = parseInt(wrapper.dataset.pageSize || '100');
+  const currentPage = parseInt(wrapper.dataset.currentPage || "1");
+  const totalRows = parseInt(wrapper.dataset.totalRows || "0");
+  const pageSize = parseInt(wrapper.dataset.pageSize || "100");
   const totalPages = Math.ceil(totalRows / pageSize);
-  
+
   let newPage = currentPage;
-  
+
   switch (action) {
-    case 'first':
+    case "first":
       newPage = 1;
       break;
-    case 'prev':
+    case "prev":
       newPage = Math.max(1, currentPage - 1);
       break;
-    case 'next':
+    case "next":
       newPage = Math.min(totalPages, currentPage + 1);
       break;
-    case 'last':
+    case "last":
       newPage = totalPages;
       break;
-    case 'goto':
+    case "goto":
       const targetPage = parseInt(String(value));
       newPage = Math.max(1, Math.min(totalPages, targetPage));
       break;
     default:
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         newPage = parseInt(value);
-      } else if (typeof value === 'number') {
+      } else if (typeof value === "number") {
         newPage = value;
       }
       break;
   }
-  
+
   // Only update if page actually changed
   if (newPage !== currentPage) {
     updateTablePage(tableWrapper, newPage);
@@ -656,18 +711,22 @@ function handlePageSizeChange(tableWrapper, newPageSize) {
   if (!tableWrapper) {
     return;
   }
-  
+
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
-  const currentPage = parseInt(wrapper.dataset.currentPage || '1');
-  const totalRows = parseInt(wrapper.dataset.totalRows || '0');
-  
+  const currentPage = parseInt(wrapper.dataset.currentPage || "1");
+  const totalRows = parseInt(wrapper.dataset.totalRows || "0");
+
   // Calculate what the new current page should be to show similar data
-  const currentStartRow = (currentPage - 1) * parseInt(wrapper.dataset.pageSize || '100');
-  const newCurrentPage = Math.max(1, Math.ceil((currentStartRow + 1) / newPageSize));
-  
+  const currentStartRow =
+    (currentPage - 1) * parseInt(wrapper.dataset.pageSize || "100");
+  const newCurrentPage = Math.max(
+    1,
+    Math.ceil((currentStartRow + 1) / newPageSize)
+  );
+
   // Update page size
   wrapper.dataset.pageSize = newPageSize.toString();
-  
+
   // Update to new page
   updateTablePage(tableWrapper, newCurrentPage);
 }
@@ -681,28 +740,29 @@ function updateTablePage(tableWrapper, pageNumber) {
   if (!tableWrapper) {
     return;
   }
-  
+
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
   const tableId = wrapper.dataset.tableId;
-  const totalRows = parseInt(wrapper.dataset.totalRows || '0');
-  const pageSize = parseInt(wrapper.dataset.pageSize || '100');
+  const totalRows = parseInt(wrapper.dataset.totalRows || "0");
+  const pageSize = parseInt(wrapper.dataset.pageSize || "100");
   const totalPages = Math.ceil(totalRows / pageSize);
-  
+
   // Validate page number
   const validPage = Math.max(1, Math.min(totalPages, pageNumber));
-  
+
   // Update current page
   wrapper.dataset.currentPage = validPage.toString();
-  
+
   // We need to get the full data and re-render the table
   // For now, we'll trigger a data reload from the extension
-  const currentState = typeof getCurrentState !== "undefined" ? getCurrentState() : {};
+  const currentState =
+    typeof getCurrentState !== "undefined" ? getCurrentState() : {};
   if (currentState.selectedTable && typeof vscode !== "undefined") {
     vscode.postMessage({
-      type: 'getTableData',
+      type: "getTableData",
       tableName: currentState.selectedTable,
       page: validPage,
-      pageSize: pageSize
+      pageSize: pageSize,
     });
   }
 }
@@ -718,64 +778,73 @@ function updatePaginationControls(tableWrapper, data, currentPage, pageSize) {
   if (!tableWrapper) {
     return;
   }
-  
+
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
   const totalRows = data.length;
   const totalPages = Math.ceil(totalRows / pageSize);
-  
+
   // Update data attributes
   wrapper.dataset.totalRows = totalRows.toString();
   wrapper.dataset.currentPage = currentPage.toString();
   wrapper.dataset.pageSize = pageSize.toString();
-  
+
   // Update visible rows info
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, totalRows);
-  
-  const visibleRowsSpan = tableWrapper.querySelector('.visible-rows');
+
+  const visibleRowsSpan = tableWrapper.querySelector(".visible-rows");
   if (visibleRowsSpan) {
-    visibleRowsSpan.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalRows.toLocaleString()} rows`;
+    visibleRowsSpan.textContent = `Showing ${
+      startIndex + 1
+    }-${endIndex} of ${totalRows.toLocaleString()} rows`;
   }
-  
+
   // Update records info
-  const recordsValue = tableWrapper.querySelector('.records-info .stat-value');
+  const recordsValue = tableWrapper.querySelector(".records-info .stat-value");
   if (recordsValue) {
     recordsValue.textContent = totalRows.toLocaleString();
   }
-  
+
   // Update pagination controls
-  const paginationContainer = tableWrapper.querySelector('.table-pagination');
+  const paginationContainer = tableWrapper.querySelector(".table-pagination");
   if (paginationContainer && totalPages > 1) {
-    const tableId = wrapper.dataset.tableId || 'unknown';
-    paginationContainer.innerHTML = createPaginationControls(currentPage, totalPages, tableId);
-    
+    const tableId = wrapper.dataset.tableId || "unknown";
+    paginationContainer.innerHTML = createPaginationControls(
+      currentPage,
+      totalPages,
+      tableId
+    );
+
     // Re-initialize pagination events for new controls
     if (typeof initializeTableEvents !== "undefined") {
-      const paginationControls = tableWrapper.querySelector(".pagination-controls");
+      const paginationControls = tableWrapper.querySelector(
+        ".pagination-controls"
+      );
       if (paginationControls) {
         paginationControls.addEventListener("click", (e) => {
           const target = /** @type {HTMLElement} */ (e.target);
           if (target && target.classList.contains("pagination-btn")) {
             const action = target.dataset.action;
             const page = target.dataset.page;
-            
+
             if (action || page) {
-              handlePagination(tableWrapper, action || 'goto', page || '1');
+              handlePagination(tableWrapper, action || "goto", page || "1");
             }
           }
         });
       }
     }
   }
-  
+
   // Update page size selector
-  const pageSizeSelect = tableWrapper.querySelector('.page-size-select');
+  const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
   if (pageSizeSelect) {
-    /** @type {HTMLSelectElement} */ (pageSizeSelect).value = pageSize.toString();
+    /** @type {HTMLSelectElement} */ (pageSizeSelect).value =
+      pageSize.toString();
   }
-  
+
   // Update page input
-  const pageInput = tableWrapper.querySelector('.page-input');
+  const pageInput = tableWrapper.querySelector(".page-input");
   if (pageInput) {
     /** @type {HTMLInputElement} */ (pageInput).value = currentPage.toString();
     /** @type {HTMLInputElement} */ (pageInput).max = totalPages.toString();
@@ -788,11 +857,14 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).filterTable = filterTable;
   /** @type {any} */ (window).sortTableByColumn = sortTableByColumn;
   /** @type {any} */ (window).toggleColumnPin = toggleColumnPin;
-  /** @type {any} */ (window).updatePinnedColumnPositions = updatePinnedColumnPositions;
+  /** @type {any} */ (window).updatePinnedColumnPositions =
+    updatePinnedColumnPositions;
   /** @type {any} */ (window).handlePagination = handlePagination;
   /** @type {any} */ (window).handlePageSizeChange = handlePageSizeChange;
   /** @type {any} */ (window).updateTablePage = updateTablePage;
-  /** @type {any} */ (window).updatePaginationControls = updatePaginationControls;
-  /** @type {any} */ (window).createPaginationControls = createPaginationControls;
+  /** @type {any} */ (window).updatePaginationControls =
+    updatePaginationControls;
+  /** @type {any} */ (window).createPaginationControls =
+    createPaginationControls;
   /** @type {any} */ (window).renderTableRows = renderTableRows;
 }

@@ -187,6 +187,12 @@ function handleExtensionMessage(event) {
     case "error":
       handleError(message);
       break;
+    case "cellUpdateSuccess":
+      handleCellUpdateSuccess(message);
+      break;
+    case "cellUpdateError":
+      handleCellUpdateError(message);
+      break;
     default:
       console.log("Unknown message type:", message.type);
   }
@@ -746,6 +752,21 @@ function initializeTableEvents(tableWrapper) {
     return;
   }
 
+  // Initialize resizing functionality
+  if (typeof initializeResizing === "function") {
+    initializeResizing(tableWrapper);
+  }
+
+  // Initialize table layout if available
+  if (typeof initializeTableLayout === "function") {
+    initializeTableLayout(tableWrapper);
+  }
+
+  // Add resize observer for dynamic adjustments
+  if (typeof addResizeObserver === "function") {
+    addResizeObserver(tableWrapper);
+  }
+
   const searchInput = tableWrapper.querySelector(".search-input");
   const clearBtn = tableWrapper.querySelector(".search-clear");
 
@@ -798,130 +819,311 @@ function initializeTableEvents(tableWrapper) {
   );
   actionBtns.forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      e.stopPropagation(); // Prevent sorting when clicking action buttons
-
+      e.stopPropagation();
       const action = btn.dataset.action;
-      const column = parseInt(btn.dataset.column);
+      const column = btn.dataset.column;
       const table = btn.closest(".data-table");
 
-      switch (action) {
-        case "pin":
-          if (typeof toggleColumnPin !== "undefined") {
-            toggleColumnPin(table, column);
-          }
-          break;
-        case "filter":
-          if (typeof showColumnFilter !== "undefined") {
-            showColumnFilter(table, column);
-          }
-          break;
-      }
-    });
-
-    // Add keyboard support for pin buttons
-    btn.addEventListener("keydown", (e) => {
-      const keyEvent = /** @type {KeyboardEvent} */ (e);
-      if (keyEvent.key === "Enter" || keyEvent.key === " ") {
-        e.preventDefault();
-        e.stopPropagation();
-        /** @type {HTMLButtonElement} */ (btn).click(); // Trigger the click event
+      if (action === "pin" && typeof toggleColumnPin !== "undefined") {
+        toggleColumnPin(table, parseInt(column));
       }
     });
   });
 
-  // Table action buttons
-  const tableActionBtns = tableWrapper.querySelectorAll(".table-action-btn");
-  tableActionBtns.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const action = btn.dataset.action;
+  // Cell editing functionality - only for editable cells
+  const dataCells = tableWrapper.querySelectorAll(
+    ".data-cell[data-editable='true']"
+  );
+  dataCells.forEach((cell) => {
+    cell.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      startCellEditing(cell);
+    });
 
-      switch (action) {
-        case "pin-first":
-          const table = tableWrapper.querySelector(".data-table");
-          if (typeof toggleColumnPin !== "undefined") {
-            toggleColumnPin(table, 0);
-          }
-          break;
-        case "export":
-          if (typeof exportTableData !== "undefined") {
-            exportTableData(tableWrapper);
-          }
-          break;
-        case "refresh":
-          if (typeof refreshTableData !== "undefined") {
-            refreshTableData(tableWrapper);
-          }
-          break;
+    cell.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "F2") {
+        e.preventDefault();
+        startCellEditing(cell);
       }
+    });
+  });
+
+  // Cell editing controls
+  const saveButtons = tableWrapper.querySelectorAll(".cell-save-btn");
+  const cancelButtons = tableWrapper.querySelectorAll(".cell-cancel-btn");
+  const cellInputs = tableWrapper.querySelectorAll(".cell-input");
+
+  saveButtons.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cell = btn.closest(".data-cell");
+      saveCellEdit(cell);
+    });
+  });
+
+  cancelButtons.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cell = btn.closest(".data-cell");
+      cancelCellEdit(cell);
+    });
+  });
+
+  cellInputs.forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const cell = input.closest(".data-cell");
+        saveCellEdit(cell);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        const cell = input.closest(".data-cell");
+        cancelCellEdit(cell);
+      }
+    });
+
+    input.addEventListener("blur", (e) => {
+      // Small delay to allow button clicks to register
+      setTimeout(() => {
+        const cell = input.closest(".data-cell");
+        if (cell && cell.classList.contains("editing")) {
+          saveCellEdit(cell);
+        }
+      }, 150);
     });
   });
 
   // Pagination controls
-  const paginationControls = tableWrapper.querySelector(".pagination-controls");
-  if (paginationControls) {
-    paginationControls.addEventListener("click", (e) => {
-      const target = /** @type {HTMLElement} */ (e.target);
-      if (target && target.classList.contains("pagination-btn")) {
-        const action = target.dataset.action;
-        const page = target.dataset.page;
-
-        if (typeof handlePagination !== "undefined") {
-          handlePagination(tableWrapper, action, page);
-        }
+  const paginationBtns = tableWrapper.querySelectorAll(".pagination-btn");
+  paginationBtns.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const tableWrapper = btn.closest(".enhanced-table-wrapper");
+      const action = btn.dataset.action;
+      if (typeof handlePagination !== "undefined") {
+        handlePagination(tableWrapper, action);
       }
     });
-  }
+  });
 
   // Page size selector
   const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
   if (pageSizeSelect) {
     pageSizeSelect.addEventListener("change", (e) => {
-      const target = /** @type {HTMLSelectElement} */ (e.target);
-      const newPageSize = parseInt(target.value);
+      const tableWrapper = e.target.closest(".enhanced-table-wrapper");
       if (typeof handlePageSizeChange !== "undefined") {
-        handlePageSizeChange(tableWrapper, newPageSize);
+        handlePageSizeChange(tableWrapper, parseInt(e.target.value));
       }
     });
   }
 
-  // Page input with go button
-  const pageInput = /** @type {HTMLInputElement} */ (
-    tableWrapper.querySelector(".page-input")
+  // Export button
+  const exportBtn = tableWrapper.querySelector('[data-action="export"]');
+  if (exportBtn) {
+    exportBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+      if (typeof exportTableData !== "undefined") {
+        exportTableData(tableWrapper);
+      }
+    });
+  }
+}
+
+/**
+ * Start editing a cell
+ * @param {Element} cell - The cell element to edit
+ */
+function startCellEditing(cell) {
+  if (!cell || cell.classList.contains("editing")) {
+    return;
+  }
+
+  // Only allow editing for cells marked as editable
+  if (!cell.hasAttribute("data-editable")) {
+    console.log("Cell is not editable (schema or query result)");
+    return;
+  }
+
+  // Cancel any other editing cells
+  const table = cell.closest(".data-table");
+  const otherEditingCells = table.querySelectorAll(".data-cell.editing");
+  otherEditingCells.forEach((otherCell) => {
+    if (otherCell !== cell) {
+      cancelCellEdit(otherCell);
+    }
+  });
+
+  // Get current value
+  const cellContent = cell.querySelector(".cell-content");
+  const originalValue = cellContent.getAttribute("data-original-value") || "";
+  const isNull =
+    cellContent.querySelector("em") &&
+    cellContent.textContent.trim() === "NULL";
+  const currentValue = isNull ? "" : originalValue;
+
+  // Set up editing state
+  cell.classList.add("editing");
+  const input = cell.querySelector(".cell-input");
+  if (input) {
+    /** @type {HTMLInputElement} */ (input).value = currentValue;
+    // Use setTimeout to ensure the input is visible and focusable
+    setTimeout(() => {
+      /** @type {HTMLInputElement} */ (input).focus();
+      /** @type {HTMLInputElement} */ (input).select();
+    }, 10);
+  } else {
+    console.error("Cell input not found!", cell);
+  }
+}
+
+/**
+ * Save cell edit
+ * @param {Element} cell - The cell element being edited
+ */
+function saveCellEdit(cell) {
+  if (!cell || !cell.classList.contains("editing")) {
+    return;
+  }
+
+  const input = cell.querySelector(".cell-input");
+  if (!input) {
+    return;
+  }
+
+  const newValue = /** @type {HTMLInputElement} */ (input).value;
+  const originalValue =
+    cell.querySelector(".cell-content")?.getAttribute("data-original-value") ||
+    "";
+
+  // Check if value actually changed
+  if (newValue === originalValue) {
+    cancelCellEdit(cell);
+    return;
+  }
+
+  // Get cell metadata
+  const tableName = getCurrentTableName();
+  const rowIndex = parseInt(cell.getAttribute("data-row-index"));
+  const columnName = cell.getAttribute("data-column-name");
+
+  if (!tableName || isNaN(rowIndex) || !columnName) {
+    console.error("Missing cell metadata for update");
+    cancelCellEdit(cell);
+    return;
+  }
+
+  // Show saving state
+  cell.classList.add("saving");
+  cell.classList.remove("error");
+
+  // Send update request to backend
+  if (typeof vscode !== "undefined") {
+    const currentState = getCurrentState ? getCurrentState() : {};
+    vscode.postMessage({
+      type: "updateCellData",
+      tableName: tableName,
+      rowIndex: rowIndex,
+      columnName: columnName,
+      newValue: newValue,
+      key: currentState.encryptionKey,
+    });
+  } else {
+    console.error("vscode API not available");
+    cancelCellEdit(cell);
+  }
+}
+
+/**
+ * Cancel cell edit
+ * @param {Element} cell - The cell element being edited
+ */
+function cancelCellEdit(cell) {
+  if (!cell) {
+    return;
+  }
+
+  cell.classList.remove("editing", "saving", "error");
+  const input = cell.querySelector(".cell-input");
+  if (input) {
+    /** @type {HTMLInputElement} */ (input).value = "";
+  }
+}
+
+/**
+ * Handle successful cell update
+ * @param {Object} message - Success message from backend
+ */
+function handleCellUpdateSuccess(message) {
+  const { tableName, rowIndex, columnName, newValue } = message;
+
+  // Find the cell that was updated
+  const cell = document.querySelector(
+    `.data-cell[data-row-index="${rowIndex}"][data-column-name="${columnName}"]`
   );
-  const goButton = tableWrapper.querySelector('[data-action="go"]');
 
-  if (pageInput && goButton) {
-    const handleGoToPage = () => {
-      const pageNumber = parseInt(pageInput.value);
-      if (typeof handlePagination !== "undefined") {
-        handlePagination(tableWrapper, "goto", pageNumber);
+  if (cell) {
+    // Update the cell content
+    const cellContent = cell.querySelector(".cell-content");
+    if (cellContent) {
+      cellContent.setAttribute("data-original-value", newValue || "");
+
+      if (newValue === null || newValue === "") {
+        cellContent.innerHTML = "<em>NULL</em>";
+      } else {
+        cellContent.textContent = newValue;
       }
-    };
+    }
 
-    goButton.addEventListener("click", handleGoToPage);
-    pageInput.addEventListener("keypress", (e) => {
-      const keyEvent = /** @type {KeyboardEvent} */ (e);
-      if (keyEvent.key === "Enter") {
-        e.preventDefault();
-        handleGoToPage();
-      }
-    });
+    // Remove editing state
+    cell.classList.remove("editing", "saving", "error");
+
+    // Show success feedback
+    cell.style.backgroundColor = "var(--vscode-list-activeSelectionBackground)";
+    setTimeout(() => {
+      cell.style.backgroundColor = "";
+    }, 1000);
   }
 
-  // Initialize resizing
-  if (typeof initializeResizing !== "undefined") {
-    initializeResizing(tableWrapper);
+  if (typeof showSuccess !== "undefined") {
+    showSuccess(`Cell updated successfully`);
+  }
+}
+
+/**
+ * Handle failed cell update
+ * @param {Object} message - Error message from backend
+ */
+function handleCellUpdateError(message) {
+  const { tableName, rowIndex, columnName } = message;
+
+  // Find the cell that failed to update
+  const cell = document.querySelector(
+    `.data-cell[data-row-index="${rowIndex}"][data-column-name="${columnName}"]`
+  );
+
+  if (cell) {
+    cell.classList.remove("saving");
+    cell.classList.add("error");
+
+    // Keep editing mode active so user can retry
+    setTimeout(() => {
+      cell.classList.remove("error");
+    }, 3000);
   }
 
-  // Initialize table layout
-  if (typeof initializeTableLayout !== "undefined") {
-    initializeTableLayout(tableWrapper);
+  if (typeof showError !== "undefined") {
+    showError(`Failed to update cell: ${message.message}`);
   }
+}
 
-  // Add resize observer for dynamic adjustments
-  if (typeof addResizeObserver !== "undefined") {
-    addResizeObserver(tableWrapper);
-  }
+/**
+ * Get the current table name from the selected state
+ * @returns {string|null} Current table name
+ */
+function getCurrentTableName() {
+  const currentState = getCurrentState ? getCurrentState() : {};
+  return currentState.selectedTable || null;
 }
 
 /**
@@ -1047,7 +1249,20 @@ if (typeof module !== "undefined" && module.exports) {
 
 // Make functions available globally for cross-module access
 if (typeof window !== "undefined") {
+  /** @type {any} */ (window).displayTablesList = displayTablesList;
+  /** @type {any} */ (window).displayQueryResults = displayQueryResults;
+  /** @type {any} */ (window).displayTableSchema = displayTableSchema;
+  /** @type {any} */ (window).displayTableData = displayTableData;
+  /** @type {any} */ (window).initializeTableEvents = initializeTableEvents;
+  /** @type {any} */ (window).startCellEditing = startCellEditing;
+  /** @type {any} */ (window).saveCellEdit = saveCellEdit;
+  /** @type {any} */ (window).cancelCellEdit = cancelCellEdit;
+  /** @type {any} */ (window).handleCellUpdateSuccess = handleCellUpdateSuccess;
+  /** @type {any} */ (window).handleCellUpdateError = handleCellUpdateError;
+  /** @type {any} */ (window).getCurrentTableName = getCurrentTableName;
   /** @type {any} */ (window).showConnectionSection = showConnectionSection;
   /** @type {any} */ (window).hideConnectionSection = hideConnectionSection;
   /** @type {any} */ (window).tryInitialConnection = tryInitialConnection;
+  /** @type {any} */ (window).handleExecuteQuery = handleExecuteQuery;
+  /** @type {any} */ (window).handleExtensionMessage = handleExtensionMessage;
 }

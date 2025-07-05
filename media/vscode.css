@@ -910,6 +910,7 @@ input[type="text"]:focus {
   border: 1px solid var(--vscode-panel-border);
   font-family: var(--vscode-editor-font-family);
   font-size: 0.9em;
+  table-layout: fixed; /* Enable fixed table layout for better column resizing */
 }
 
 .data-table th,
@@ -933,6 +934,8 @@ input[type="text"]:focus {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 14px 20px 14px 16px;
+  min-width: 80px; /* Minimum column width */
+  position: relative;
 }
 
 .data-table tr {
@@ -1027,6 +1030,169 @@ input[type="text"]:focus {
 .data-table td:hover::after {
   background: var(--vscode-focusBorder);
   opacity: 0.3;
+}
+
+/* Column resize handles */
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 30;
+  transition: background-color 0.2s ease;
+}
+
+.column-resize-handle:hover {
+  background: var(--vscode-focusBorder);
+  opacity: 0.5;
+}
+
+.column-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 100%;
+  background: var(--vscode-panel-border);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.column-resize-handle:hover::before {
+  opacity: 0.7;
+}
+
+/* Resizing state for columns */
+.resizable-header.resizing {
+  transition: none;
+  user-select: none;
+}
+
+.resizable-table.resizing {
+  user-select: none;
+}
+
+.data-table.resizing {
+  user-select: none;
+}
+
+.data-table.resizing * {
+  user-select: none;
+}
+
+/* Disable cell editing interactions while resizing */
+.data-table.resizing .data-cell {
+  cursor: col-resize !important;
+}
+
+/* Prevent text selection during resize */
+body.resizing {
+  user-select: none;
+}
+
+/* ===== CELL EDITING STYLES ===== */
+.data-table .data-cell {
+  position: relative;
+  cursor: text;
+}
+
+.data-table .data-cell:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* Non-editable cells (schema tables) */
+.data-table .data-cell:not([data-editable]) {
+  cursor: default;
+}
+
+.data-table .data-cell:not([data-editable]):hover {
+  background: var(--vscode-list-hoverBackground);
+  opacity: 0.8;
+}
+
+.data-table .data-cell.editing {
+  background: var(--vscode-editor-background);
+  border: 2px solid var(--vscode-focusBorder);
+  padding: 0;
+}
+
+.data-table .data-cell.editing .cell-content {
+  display: none;
+}
+
+.data-table .data-cell.editing .cell-editing-controls {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  height: 100%;
+  min-height: 28px;
+}
+
+.data-table .data-cell .cell-editing-controls {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--vscode-editor-background);
+  border: none;
+  z-index: 10;
+}
+
+.data-table .data-cell .cell-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  padding: 4px 6px;
+  height: 100%;
+  min-height: 20px;
+}
+
+.data-table .data-cell .cell-input:focus {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 2px;
+}
+
+.data-table .data-cell .cell-save-btn,
+.data-table .data-cell .cell-cancel-btn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.data-table .data-cell .cell-save-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.data-table .data-cell .cell-cancel-btn {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.data-table .data-cell .cell-cancel-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
 }
 
 /* ===== ENHANCED TABLE FEATURES ===== */
@@ -2869,4 +3035,24 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
     font-size: 0.9rem;
     max-width: 350px;
   }
+}
+
+/* Table editable/readonly indicators */
+.table-editable-indicator,
+.table-readonly-indicator {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.table-editable-indicator {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.table-readonly-indicator {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
 }

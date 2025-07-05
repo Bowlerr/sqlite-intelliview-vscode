@@ -32,6 +32,8 @@ export class DatabaseService {
     private db: any = null;
     private SQL: any = null;
     private tempDecryptedPath: string | null = null;
+    private currentDatabasePath: string | null = null;
+    private currentEncryptionKey: string | null = null;
 
     async initialize(): Promise<void> {
         if (!this.SQL) {
@@ -49,6 +51,10 @@ export class DatabaseService {
 
     async openDatabase(databasePath: string, encryptionKey?: string): Promise<void> {
         await this.initialize();
+        
+        // Store the database path and encryption key for later use
+        this.currentDatabasePath = databasePath;
+        this.currentEncryptionKey = encryptionKey || null;
         
         try {
             // Check if file exists
@@ -87,6 +93,8 @@ export class DatabaseService {
             }
             
             this.db = new this.SQL.Database(dataToLoad);
+            this.currentDatabasePath = databasePath;
+            this.currentEncryptionKey = encryptionKey || null;
             
             // Test the database by running a simple query
             try {
@@ -285,6 +293,173 @@ export class DatabaseService {
         return result.values[0][0] as number;
     }
 
+    async updateCellData(tableName: string, rowId: any, columnName: string, newValue: any): Promise<void> {
+        if (!this.db) {
+            throw new Error('Database not opened');
+        }
+
+        console.log(`[updateCellData] Starting cell update:`, {
+            tableName,
+            rowId,
+            columnName,
+            newValue,
+            newValueType: typeof newValue
+        });
+
+        // Sanitize inputs
+        const sanitizedTableName = tableName.replace(/"/g, '""');
+        const sanitizedColumnName = columnName.replace(/"/g, '""');
+        
+        // Build the UPDATE query
+        const updateQuery = `UPDATE "${sanitizedTableName}" SET "${sanitizedColumnName}" = ? WHERE rowid = ?`;
+        
+        try {
+            const stmt = this.db.prepare(updateQuery);
+            
+            // Convert the new value to the appropriate type
+            let processedValue = newValue;
+            if (newValue === '' || newValue === null) {
+                processedValue = null;
+            } else if (typeof newValue === 'string') {
+                // Try to parse as number if it looks like a number
+                const numValue = parseFloat(newValue);
+                if (!isNaN(numValue) && isFinite(numValue) && newValue.trim() === numValue.toString()) {
+                    processedValue = numValue;
+                }
+            }
+            
+            console.log(`[updateCellData] Executing query:`, updateQuery);
+            console.log(`[updateCellData] Parameters:`, [processedValue, rowId]);
+            
+            stmt.run([processedValue, rowId]);
+            stmt.free();
+            
+            console.log(`[updateCellData] Successfully updated ${tableName}.${columnName} = ${processedValue} where rowid = ${rowId}`);
+            
+            // CRITICAL: Save changes back to the database file
+            await this.saveChangesToFile();
+            
+            console.log(`[updateCellData] Cell update completed successfully`);
+            
+        } catch (error) {
+            console.error(`[updateCellData] Failed to update cell:`, error);
+            throw new Error(`Failed to update cell: ${error}`);
+        }
+    }
+
+    /**
+     * Save changes from the in-memory database back to the file
+     */
+    private async saveChangesToFile(): Promise<void> {
+        if (!this.db) {
+            throw new Error('Database not opened');
+        }
+
+        console.log(`[saveChangesToFile] Starting save operation`);
+        console.log(`[saveChangesToFile] Current database path: ${this.currentDatabasePath}`);
+        console.log(`[saveChangesToFile] Temp decrypted path: ${this.tempDecryptedPath}`);
+
+        try {
+            // Export the current database state
+            const data = this.db.export();
+            const buffer = Buffer.from(data);
+            
+            console.log(`[saveChangesToFile] Exported ${buffer.length} bytes`);
+            
+            // Write back to the original file (not the temp decrypted file if using encryption)
+            const targetPath = this.currentDatabasePath;
+            if (!targetPath) {
+                throw new Error('No database path available for saving');
+            }
+
+            // If we're working with an encrypted database, we need to re-encrypt
+            if (this.tempDecryptedPath) {
+                console.log(`[saveChangesToFile] Saving to encrypted database`);
+                // Write to temp file first, then re-encrypt
+                fs.writeFileSync(this.tempDecryptedPath, buffer);
+                await this.reEncryptDatabase(targetPath);
+            } else {
+                console.log(`[saveChangesToFile] Saving to unencrypted database: ${targetPath}`);
+                // Direct write to unencrypted database
+                fs.writeFileSync(targetPath, buffer);
+            }
+            
+            console.log(`[saveChangesToFile] Changes saved to database file successfully`);
+            
+        } catch (error) {
+            console.error(`[saveChangesToFile] Failed to save changes to file:`, error);
+            throw new Error(`Failed to save changes: ${error}`);
+        }
+    }
+
+    /**
+     * Re-encrypt the database file after making changes
+     */
+    private async reEncryptDatabase(originalPath: string): Promise<void> {
+        if (!this.tempDecryptedPath || !this.currentEncryptionKey) {
+            throw new Error('Cannot re-encrypt: missing decrypted file or encryption key');
+        }
+
+        try {
+            // Create a new temporary encrypted file
+            const tempDir = require('os').tmpdir();
+            const tempEncryptedFile = path.join(tempDir, `encrypted_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
+            
+            // Escape the encryption key
+            const escapedKey = this.currentEncryptionKey.replace(/'/g, "''");
+            
+            // Use sqlcipher to encrypt the updated database
+            const encryptCommand = `echo "ATTACH DATABASE '${tempEncryptedFile}' AS encrypted KEY '${escapedKey}'; SELECT sqlcipher_export('encrypted'); DETACH DATABASE encrypted;" | sqlcipher "${this.tempDecryptedPath}"`;
+            
+            console.log('Re-encrypting database with SQLCipher...');
+            await execAsync(encryptCommand);
+            
+            // Verify the encrypted file was created
+            if (!fs.existsSync(tempEncryptedFile)) {
+                throw new Error('Failed to create re-encrypted database file');
+            }
+            
+            // Replace the original file with the new encrypted version
+            fs.copyFileSync(tempEncryptedFile, originalPath);
+            
+            // Clean up temporary encrypted file
+            fs.unlinkSync(tempEncryptedFile);
+            
+            console.log('Database re-encrypted successfully');
+            
+        } catch (error) {
+            console.error('Re-encryption error:', error);
+            throw new Error(`Failed to re-encrypt database: ${error}`);
+        }
+    }
+
+    async getCellRowId(tableName: string, rowIndex: number): Promise<any> {
+        if (!this.db) {
+            throw new Error('Database not opened');
+        }
+
+        const sanitizedTableName = tableName.replace(/"/g, '""');
+        const query = `SELECT rowid FROM "${sanitizedTableName}" LIMIT 1 OFFSET ${rowIndex}`;
+        
+        console.log(`[getCellRowId] Getting rowid for table: ${tableName}, row index: ${rowIndex}`);
+        console.log(`[getCellRowId] Query: ${query}`);
+        
+        try {
+            const result = await this.executeQuery(query);
+            console.log(`[getCellRowId] Query result:`, result);
+            
+            if (result.values.length > 0) {
+                const rowId = result.values[0][0];
+                console.log(`[getCellRowId] Extracted rowid: ${rowId}`);
+                return rowId;
+            }
+            throw new Error('Row not found');
+        } catch (error) {
+            console.error(`[getCellRowId] Failed to get row ID:`, error);
+            throw new Error(`Failed to get row ID: ${error}`);
+        }
+    }
+
     async getTableSchema(tableName: string): Promise<QueryResult> {
         if (!this.db) {
             throw new Error('Database not opened');
@@ -306,6 +481,10 @@ export class DatabaseService {
             this.db.close();
             this.db = null;
         }
+        
+        // Clear stored paths and keys
+        this.currentDatabasePath = null;
+        this.currentEncryptionKey = null;
         
         // Clean up temporary decrypted file
         if (this.tempDecryptedPath && fs.existsSync(this.tempDecryptedPath)) {

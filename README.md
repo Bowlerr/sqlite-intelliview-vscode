@@ -8,6 +8,7 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - 🔍 **Database Explorer**: Tree view showing tables and their types with smart selection
 - ⚡ **Query Editor**: Execute custom SQL queries with helpful examples and shortcuts
 - 📊 **Data Visualization**: View table data in a clean, sortable grid with statistics
+- ✏️ **Cell Editing**: Edit database cells directly in the table view with real-time updates
 - 📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
 - 🔐 **SQLCipher Support**: Connect to encrypted databases with password protection
 - 🎨 **VS Code Theme Integration**: Matches your current VS Code theme perfectly
@@ -62,15 +63,35 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 #### Data Viewer
 
 - Browse table data with automatic loading
+- **Edit Cells**: Double-click any cell in the Data tab to edit its value inline
+- **Cell Editing Controls**: Use Enter to save, Escape to cancel, or click the save/cancel buttons
+- **Real-time Updates**: Changes are immediately saved to the database
+- **Data Type Handling**: Automatic conversion for numbers, strings, and NULL values
+- **Read-only Protection**: Schema and query result tables are protected from editing
 - View table schema information
 - Row and column count statistics
 - Clean, responsive table display
+
+#### Cell Editing
+
+- **Data Tables Only**: Cell editing is only available in the Data tab, not Schema or Query results
+- **Double-click** any cell in a data table to start editing
+- **Keyboard Shortcuts**: Press Enter or F2 to start editing, Enter to save, Escape to cancel
+- **Input Controls**: Type directly in the cell with save (✓) and cancel (✗) buttons
+- **Auto-save**: Changes are automatically saved when you click elsewhere or press Enter
+- **Data Types**: Supports text, numbers, and NULL values with automatic type detection
+- **Error Handling**: Visual feedback for failed updates with retry capability
+- **Real-time Updates**: Changes are immediately reflected in the database
+- **Visual Indicators**: Tables show "✏️ Editable" or "🔒 Read-only" status
 
 ### Keyboard Shortcuts
 
 - **Ctrl/Cmd + Enter**: Execute the current query
 - **Ctrl/Cmd + K**: Clear the query editor
-- **Escape**: Close any open notifications
+- **Double-click**: Edit a data table cell (Data tab only)
+- **Enter or F2**: Start editing a selected cell (Data tab only)
+- **Enter**: Save cell changes
+- **Escape**: Cancel cell editing or close notifications
 
 ### SQLCipher Support
 

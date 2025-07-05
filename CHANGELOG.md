@@ -2,6 +2,56 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.4] - 2025-07-05
+
+### Added
+
+- ✏️ **Cell Editing Functionality**: Complete inline editing system for table data
+  - **Interactive Cell Editing**: Double-click any cell to edit its value directly in the table
+  - **Multiple Input Methods**: Double-click, Enter key, or F2 key to start editing
+  - **Save/Cancel Controls**: Visual save (✓) and cancel (✗) buttons with keyboard shortcuts
+  - **Real-time Database Updates**: Changes are immediately committed to the SQLite database
+  - **Data Type Handling**: Automatic conversion for strings, numbers, and NULL values
+  - **Error Handling**: Visual feedback for failed updates with retry capability
+  - **Keyboard Shortcuts**: Enter to save, Escape to cancel editing
+
+### Technical Implementation
+
+- 🔧 **Backend Database Operations**: New database service methods for cell updates
+
+  - Added `updateCellData()` method to DatabaseService for individual cell updates
+  - Added `getCellRowId()` method to retrieve row identifiers for updates
+  - Implemented message handling for `updateCellData` requests in DatabaseEditorProvider
+  - Added success/error response handling for cell update operations
+
+- 🎨 **Frontend User Interface**: Enhanced table rendering with editing controls
+
+  - Modified table cell rendering to include editing controls and data attributes
+  - Added CSS styles for editing states, input controls, and visual feedback
+  - Implemented cell editing event handlers with proper state management
+  - Added visual indicators for editing, saving, and error states
+
+- 📡 **Message System**: Bi-directional communication for cell updates
+  - Extended webview message handling to support cell update requests
+  - Added `cellUpdateSuccess` and `cellUpdateError` message types
+  - Implemented proper error handling and user feedback for failed updates
+  - Added state management for tracking editing operations
+
+### Enhanced User Experience
+
+- 🎯 **Intuitive Editing**: Familiar spreadsheet-like editing experience
+
+  - Click-to-edit functionality with immediate visual feedback
+  - Automatic focus and text selection when editing starts
+  - Blur-to-save behavior with proper conflict resolution
+  - Visual highlighting of edited cells with success/error states
+
+- 🔄 **Real-time Updates**: Seamless database synchronization
+  - Immediate database commits without page refreshes
+  - Optimistic UI updates with rollback on errors
+  - Proper handling of concurrent edits and data conflicts
+  - Maintains table state and pagination during edits
+
 ## [0.2.3] - 2025-07-05
 
 ### Added
