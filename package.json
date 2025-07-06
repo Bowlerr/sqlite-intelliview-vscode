@@ -45,7 +45,7 @@
     "cell-editing"
   ],
   "engines": {
-    "vscode": "^1.60.0",
+    "vscode": "^1.101.0",
     "node": ">=16.0.0"
   },
   "categories": [
@@ -53,10 +53,6 @@
     "Database"
   ],
   "activationEvents": [
-    "onCommand:sqlite-intelliview-vscode.openDatabase",
-    "onCommand:sqlite-intelliview-vscode.connectWithKey",
-    "onCommand:sqlite-intelliview-vscode.refreshDatabase",
-    "onCommand:sqlite-intelliview-vscode.exportData",
     "onLanguage:sql",
     "onFileSystem:db",
     "onFileSystem:sqlite",
