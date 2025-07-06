@@ -3188,12 +3188,88 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
 .confirm-dialog {
   background: var(--vscode-editor-background);
   border: 1px solid var(--vscode-panel-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  max-width: 400px;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  max-width: 700px;
+  max-height: 85vh;
   width: 90%;
-  padding: 20px;
+  padding: 24px;
   font-family: var(--vscode-font-family);
+  overflow-y: auto;
+}
+
+.confirm-dialog-title {
+  color: var(--vscode-foreground);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 20px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--vscode-widget-border);
+}
+
+.confirm-dialog-table-info {
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 0 0 16px 0;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.confirm-dialog-row-data {
+  background: var(--vscode-textCodeBlock-background);
+  border: 1px solid var(--vscode-textBlockQuote-border);
+  border-radius: 6px;
+  padding: 16px;
+  margin: 16px 0;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 13px;
+  line-height: 1.4;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.confirm-dialog-row-data .json-key {
+  color: var(--vscode-symbolIcon-objectForeground, #4fc1ff);
+  font-weight: 500;
+}
+
+.confirm-dialog-row-data .json-string {
+  color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+}
+
+.confirm-dialog-row-data .json-number {
+  color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+}
+
+.confirm-dialog-row-data .json-null {
+  color: var(--vscode-symbolIcon-nullForeground, #569cd6);
+  font-style: italic;
+}
+
+.confirm-dialog-row-data .json-boolean {
+  color: var(--vscode-symbolIcon-booleanForeground, #569cd6);
+  font-weight: 500;
+}
+
+.confirm-dialog-row-data .json-punctuation {
+  color: var(--vscode-foreground);
+  opacity: 0.8;
+}
+
+.confirm-dialog-warning {
+  color: var(--vscode-inputValidation-warningForeground);
+  background: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  border-radius: 4px;
+  padding: 12px;
+  margin: 16px 0;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .confirm-dialog-message {
@@ -3202,6 +3278,8 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   line-height: 1.4;
   white-space: pre-wrap;
   font-size: 14px;
+  word-break: break-word;
+  font-family: var(--vscode-editor-font-family, monospace);
 }
 
 .confirm-dialog-buttons {

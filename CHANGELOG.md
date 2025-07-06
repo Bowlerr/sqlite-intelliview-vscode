@@ -8,10 +8,13 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 
 - 🗑️ **Delete Row Functionality**: Enhanced context menu with row deletion capability
   - **Delete Row**: Right-click any cell to delete the entire row with confirmation dialog
-  - **Custom Confirmation Dialog**: VS Code-compatible confirmation dialog replaces native confirm()
+  - **Enhanced Confirmation Dialog**: Clean, structured dialog with table name, warning message, and JSON row data
+  - **Syntax Highlighted JSON**: Row data displayed with color-coded JSON syntax highlighting
+  - **Custom Dialog Implementation**: VS Code-compatible confirmation dialog replaces native confirm()
   - **Smart Row Identification**: Automatically identifies rows using primary key or all column values
   - **Real-time Database Updates**: Changes are immediately committed to the SQLite database
   - **Visual Feedback**: Success notifications and error handling for deletion operations
+  - **Table UI Updates**: Deleted rows are immediately removed from table display
   - **Table Statistics Update**: Row counts and pagination automatically updated after deletion
 
 ### Fixed

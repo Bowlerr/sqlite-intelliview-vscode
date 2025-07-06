@@ -598,19 +598,30 @@ function deleteRowWithConfirmation() {
   }
 
   // Get row data for confirmation display
+  const headers = table.querySelectorAll("thead th");
   const cells = rowToDelete.querySelectorAll("td");
-  const rowData = Array.from(cells).map((cell) => getCellDisplayValue(cell));
-  const firstCellValue = rowData[0] || "Unknown";
 
-  // Show confirmation dialog
-  const confirmMessage = `Are you sure you want to delete this row?\n\nTable: ${tableName}\nFirst cell: ${firstCellValue}\n\nThis action cannot be undone.`;
+  // Create JSON representation of the row
+  const rowObject = {};
+  for (let i = 0; i < headers.length && i < cells.length; i++) {
+    const header = /** @type {HTMLTableHeaderCellElement} */ (headers[i]);
+    const cell = /** @type {HTMLTableCellElement} */ (cells[i]);
+    const columnName = getColumnHeaderText(header);
+    const cellValue = getCellDisplayValue(cell);
+    rowObject[columnName] = cellValue === "" ? null : cellValue;
+  }
 
-  // Use custom confirmation dialog since VS Code webviews may restrict native confirm()
-  showCustomConfirmDialog(confirmMessage, () => {
-    console.log("Delete confirmed, executing row deletion...");
-    // Use the stored row reference instead of currentRow
-    executeRowDeletion(tableName, rowToDelete);
-  });
+  // Use enhanced confirmation dialog with structured display
+  showEnhancedConfirmDialog(
+    "Are you sure you want to delete this row?",
+    () => {
+      console.log("Delete confirmed, executing row deletion...");
+      // Use the stored row reference instead of currentRow
+      executeRowDeletion(tableName, rowToDelete);
+    },
+    tableName,
+    rowObject
+  );
 }
 
 /**
@@ -935,6 +946,135 @@ function showCustomConfirmDialog(message, onConfirm) {
   confirmBtn.focus();
 }
 
+/**
+ * Format JSON with syntax highlighting
+ * @param {string} jsonString - The JSON string to format
+ * @returns {string} HTML formatted JSON with syntax highlighting
+ */
+function formatJsonWithSyntaxHighlighting(jsonString) {
+  // Apply syntax highlighting first, then escape HTML
+  let formatted = jsonString
+    // Highlight keys (property names)
+    .replace(/("[\w\s_-]+")(\s*:)/g, '<span class="json-key">$1</span><span class="json-punctuation">$2</span>')
+    // Highlight string values
+    .replace(/:\s*(".*?")/g, ': <span class="json-string">$1</span>')
+    // Highlight numbers
+    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+    // Highlight null values
+    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
+    // Highlight boolean values
+    .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
+    // Highlight punctuation
+    .replace(/([{}[\],])/g, '<span class="json-punctuation">$1</span>');
+
+  return formatted;
+}
+
+/**
+ * Show enhanced confirmation dialog with better formatting
+ * @param {string} message - The confirmation message
+ * @param {Function} onConfirm - Callback for when user confirms
+ * @param {string} [tableName] - Optional table name
+ * @param {Object} [rowData] - Optional row data object
+ */
+function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
+  // Create dialog elements
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-dialog-overlay";
+
+  const dialog = document.createElement("div");
+  dialog.className = "confirm-dialog";
+
+  // Title
+  const titleEl = document.createElement("h3");
+  titleEl.className = "confirm-dialog-title";
+  titleEl.textContent = "Confirm Row Deletion";
+
+  // Table info
+  if (tableName) {
+    const tableInfoEl = document.createElement("div");
+    tableInfoEl.className = "confirm-dialog-table-info";
+    tableInfoEl.textContent = `Table: ${tableName}`;
+    dialog.appendChild(titleEl);
+    dialog.appendChild(tableInfoEl);
+  }
+
+  // Warning message
+  const warningEl = document.createElement("div");
+  warningEl.className = "confirm-dialog-warning";
+  warningEl.textContent =
+    "⚠️ This action cannot be undone. The row will be permanently deleted from the database.";
+
+  // Row data display
+  if (rowData) {
+    const rowDataEl = document.createElement("div");
+    rowDataEl.className = "confirm-dialog-row-data";
+
+    const jsonString = JSON.stringify(rowData, null, 2);
+    const formattedJson = formatJsonWithSyntaxHighlighting(jsonString);
+    rowDataEl.innerHTML = formattedJson;
+
+    dialog.appendChild(warningEl);
+    dialog.appendChild(rowDataEl);
+  } else {
+    // Fallback to simple message
+    const messageEl = document.createElement("div");
+    messageEl.className = "confirm-dialog-message";
+    messageEl.textContent = message;
+    dialog.appendChild(messageEl);
+  }
+
+  // Buttons
+  const buttonsEl = document.createElement("div");
+  buttonsEl.className = "confirm-dialog-buttons";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "confirm-dialog-btn confirm-dialog-btn-cancel";
+  cancelBtn.textContent = "Cancel";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "confirm-dialog-btn confirm-dialog-btn-confirm";
+  confirmBtn.textContent = "Delete Row";
+
+  buttonsEl.appendChild(cancelBtn);
+  buttonsEl.appendChild(confirmBtn);
+  dialog.appendChild(buttonsEl);
+  overlay.appendChild(dialog);
+
+  // Add event listeners
+  const closeDialog = () => {
+    overlay.remove();
+  };
+
+  cancelBtn.addEventListener("click", closeDialog);
+
+  confirmBtn.addEventListener("click", () => {
+    console.log("Delete button clicked in confirmation dialog");
+    closeDialog();
+    console.log("About to call onConfirm callback");
+    onConfirm();
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      closeDialog();
+    }
+  });
+
+  // Handle escape key
+  const handleEscape = (e) => {
+    if (e.key === "Escape") {
+      closeDialog();
+      document.removeEventListener("keydown", handleEscape);
+    }
+  };
+  document.addEventListener("keydown", handleEscape);
+
+  // Add to page and focus
+  document.body.appendChild(overlay);
+  confirmBtn.focus();
+}
+
 // Make functions available globally
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).initializeContextMenu = initializeContextMenu;
@@ -947,6 +1087,8 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).deleteRowWithConfirmation =
     deleteRowWithConfirmation;
   /** @type {any} */ (window).showCustomConfirmDialog = showCustomConfirmDialog;
+  /** @type {any} */ (window).showEnhancedConfirmDialog =
+    showEnhancedConfirmDialog;
   /** @type {any} */ (window).handleDeleteSuccess = handleDeleteSuccess;
   /** @type {any} */ (window).handleDeleteError = handleDeleteError;
 }

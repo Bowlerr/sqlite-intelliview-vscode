@@ -20,11 +20,21 @@ This document describes the new context menu functionality that allows users to 
 
 The delete row feature includes a custom confirmation dialog that:
 
-- Shows the table name and first cell value for context
-- Displays a clear warning that the action cannot be undone
+- Shows a clear title "Confirm Row Deletion"
+- Displays the table name in a highlighted info box
+- Shows a prominent warning message about the permanent nature of the action
+- Presents the complete row data as syntax-highlighted JSON for easy readability
 - Uses VS Code-themed styling with danger colors for the delete button
 - Can be cancelled by clicking Cancel, pressing ESC, or clicking outside the dialog
 - Only proceeds with deletion when the Delete button is explicitly clicked
+- Features color-coded JSON syntax highlighting for better data visualization
+
+**Visual Structure:**
+- **Title**: "Confirm Row Deletion"
+- **Table Info**: Blue-highlighted table name
+- **Warning**: Yellow warning box with ⚠️ icon
+- **Row Data**: Syntax-highlighted JSON in a code block
+- **Actions**: Cancel (gray) and Delete Row (red) buttons
 
 **Note**: The custom confirmation dialog replaces the native `confirm()` function which may not be available in VS Code webviews.
 
@@ -134,6 +144,8 @@ For multiple rows:
 
 ```css
 .confirm-dialog-overlay     /* Modal overlay backdrop */
+/* Modal overlay backdrop */
+/* Modal overlay backdrop */
 /* Modal overlay backdrop */
 .confirm-dialog            /* Dialog container */
 .confirm-dialog-message    /* Dialog message text */
