@@ -17,7 +17,7 @@
     "url": "https://github.com/Bowlerr/sqlite-intelliview-vscode/issues"
   },
   "homepage": "https://github.com/Bowlerr/sqlite-intelliview-vscode#readme",
-  "icon": "./images/icon.png",
+  "icon": "images/icon.png",
   "galleryBanner": {
     "color": "#1e1e1e",
     "theme": "dark"
@@ -50,7 +50,8 @@
   },
   "categories": [
     "Other",
-    "Database"
+    "Data Science",
+    "Visualization"
   ],
   "activationEvents": [
     "onLanguage:sql",
