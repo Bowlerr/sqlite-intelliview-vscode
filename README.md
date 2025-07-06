@@ -1,4 +1,4 @@
-# SQLite Vi- 📋 **Context Menu**: Right-click cells for copy operations (Copy Cell, Copy Row, Copy Row JSON, Copy Column, Copy Table JSON)wer
+# SQLite Viewer
 
 A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination.
 
@@ -9,13 +9,15 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - ⚡ **Query Editor**: Execute custom SQL queries with helpful examples and shortcuts
 - 📊 **Data Visualization**: View table data in a clean, sortable grid with statistics
 - ✏️ **Cell Editing**: Edit database cells directly in the table view with real-time updates
-- � **Context Menu**: Right-click cells for copy operations (Copy Cell, Copy Row, Copy Column)
-- �📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
+- 📋 **Context Menu**: Right-click cells for copy operations and foreign key navigation
+- 🔗 **Foreign Key Navigation**: Click to navigate directly to referenced rows in related tables
+- 📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
 - 🔐 **SQLCipher Support**: Connect to encrypted databases with password protection
 - 🎨 **VS Code Theme Integration**: Matches your current VS Code theme perfectly
 - ⌨️ **Keyboard Shortcuts**: Ctrl/Cmd+Enter to execute, Ctrl/Cmd+K to clear queries
 - 🔄 **Real-time Feedback**: Connection status indicators and query execution feedback
 - 📋 **Smart Schema Display**: Automatic table info display when selecting tables
+- 🔗 **Foreign Key Visualization**: Visual indicators for foreign key relationships with distinctive styling
 
 ## Installation
 
@@ -94,9 +96,19 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Copy Row JSON**: Copies the entire row as a formatted JSON object
 - **Copy Column**: Copies the entire column including header
 - **Copy Table JSON**: Copies the entire table as a JSON array of objects
+- **Go to Referenced Row**: Navigate to the related table row (foreign key cells only)
 - **Smart Positioning**: Menu automatically adjusts to stay within viewport
 - **Theme Integration**: Matches VS Code's current theme
 - **Keyboard Support**: Press Escape to close the menu
+
+#### Foreign Key Navigation
+
+- **Visual Indicators**: Foreign key columns have blue headers with chain icons (🔗)
+- **Right-click Navigation**: Right-click any foreign key cell to see navigation options
+- **Direct Navigation**: Click "Go to Referenced Row" to jump to the related table
+- **Row Highlighting**: Target rows are highlighted with blue animation after navigation
+- **Cross-table Support**: Works across all tables with foreign key relationships
+- **Self-referencing**: Supports self-referencing foreign keys (e.g., parent-child relationships)
 
 ### Keyboard Shortcuts
 
@@ -106,7 +118,7 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Enter or F2**: Start editing a selected cell (Data tab only)
 - **Enter**: Save cell changes
 - **Escape**: Cancel cell editing, close notifications, or close context menu
-- **Right-click**: Open context menu on table cells for copy operations
+- **Right-click**: Open context menu on table cells for copy operations and foreign key navigation
 
 ### SQLCipher Support
 

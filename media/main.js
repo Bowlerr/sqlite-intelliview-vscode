@@ -252,6 +252,7 @@
                 <th>Not Null</th>
                 <th>Default</th>
                 <th>Primary Key</th>
+                <th>Foreign Key</th>
               </tr>
             </thead>
             <tbody>
@@ -264,6 +265,11 @@
                   <td class="column-not-null">${col.notnull ? "Yes" : "No"}</td>
                   <td class="column-default">${col.dflt_value || "—"}</td>
                   <td class="column-pk">${col.pk ? "Yes" : "No"}</td>
+                  <td class="column-fk">${
+                    col.fk
+                      ? `${col.fk.referencedTable}.${col.fk.referencedColumn}`
+                      : "—"
+                  }</td>
                 </tr>
               `
                 )
@@ -328,6 +334,11 @@
       const tableWrapper = dataContent.querySelector(".enhanced-table-wrapper");
       if (tableWrapper && typeof initializeTableEvents === "function") {
         initializeTableEvents(tableWrapper);
+      }
+
+      // Check for pending foreign key highlight
+      if (tableWrapper && typeof highlightForeignKeyTarget === "function") {
+        highlightForeignKeyTarget(tableWrapper);
       }
     }
 

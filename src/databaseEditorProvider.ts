@@ -318,12 +318,16 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 totalRowCount = result.values.length;
             }
 
+            // Get foreign key information for the table
+            const foreignKeys = await dbService.getForeignKeys(tableName);
+
             webviewPanel.webview.postMessage({
                 type: 'tableData',
                 success: true,
                 tableName: tableName,
                 data: result.values,
                 columns: result.columns,
+                foreignKeys: foreignKeys,
                 page: page,
                 pageSize: pageSize,
                 totalRows: totalRowCount
@@ -386,14 +390,20 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             console.log(`Handling schema request for table: ${tableName}, key provided: ${key ? '[PROVIDED]' : '[EMPTY]'}`);
             const dbService = await this.getOrCreateConnection(databasePath, key);
             const result = await dbService.getTableSchema(tableName);
+            
+            // Also get foreign key information for the table
+            const foreignKeys = await dbService.getForeignKeys(tableName);
 
             console.log(`Schema result for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
+            console.log(`Foreign keys for ${tableName}:`, foreignKeys);
+            
             webviewPanel.webview.postMessage({
                 type: 'tableSchema',
                 success: true,
                 tableName: tableName,
                 data: result.values,
-                columns: result.columns
+                columns: result.columns,
+                foreignKeys: foreignKeys
             });
         } catch (error) {
             console.error(`Schema request failed for ${tableName}:`, error);

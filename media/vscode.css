@@ -3335,3 +3335,268 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
 .vscode-high-contrast .confirm-dialog-btn:focus {
   outline: 2px solid var(--vscode-contrastActiveBorder);
 }
+
+/* ===== FOREIGN KEY STYLING ===== */
+
+/* Foreign Key Column Headers */
+.data-table th.fk-column {
+  background: linear-gradient(
+    135deg,
+    var(--vscode-list-headerBackground) 0%,
+    rgba(100, 149, 237, 0.15) 100%
+  );
+  border-left: 3px solid #6495ed;
+  position: relative;
+}
+
+.data-table th.fk-column::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6495ed, #4169e1);
+  z-index: 1;
+}
+
+/* Foreign Key Indicator Icon */
+.fk-indicator {
+  color: #6495ed;
+  font-size: 0.9em;
+  margin-left: 4px;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.data-table th.fk-column:hover .fk-indicator {
+  opacity: 1;
+  color: #4169e1;
+}
+
+/* Foreign Key Cells */
+.data-table td.fk-cell {
+  background: rgba(100, 149, 237, 0.05);
+  border-left: 2px solid rgba(100, 149, 237, 0.3);
+  position: relative;
+}
+
+.data-table td.fk-cell:hover {
+  background: rgba(100, 149, 237, 0.1);
+  border-left-color: #6495ed;
+}
+
+.data-table td.fk-cell::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(100, 149, 237, 0.4),
+    rgba(100, 149, 237, 0.1)
+  );
+  transition: background 0.2s ease;
+}
+
+.data-table td.fk-cell:hover::before {
+  background: linear-gradient(180deg, #6495ed, rgba(100, 149, 237, 0.3));
+}
+
+/* Foreign Key Cell Content Styling */
+.data-table td.fk-cell .cell-content {
+  color: var(--vscode-foreground);
+  font-weight: 500;
+}
+
+.data-table td.fk-cell:hover .cell-content {
+  color: #4169e1;
+}
+
+/* Pinned Foreign Key Columns */
+.data-table th.fk-column.pinned {
+  background: linear-gradient(
+    135deg,
+    var(--vscode-list-headerBackground) 0%,
+    rgba(100, 149, 237, 0.2) 100%
+  );
+  box-shadow: 2px 0 4px rgba(100, 149, 237, 0.2);
+  border-left-color: #4169e1;
+  border-left-width: 3px;
+}
+
+.data-table td.fk-cell.pinned {
+  background: rgba(100, 149, 237, 0.08);
+  box-shadow: 2px 0 4px rgba(100, 149, 237, 0.15);
+  border-left-color: rgba(100, 149, 237, 0.4);
+}
+
+/* Enhanced tooltip for foreign keys */
+.data-table th.fk-column[title]::after,
+.data-table td.fk-cell[title]::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--vscode-editorHoverWidget-background);
+  color: var(--vscode-editorHoverWidget-foreground);
+  border: 1px solid var(--vscode-editorHoverWidget-border);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  white-space: nowrap;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.data-table th.fk-column:hover::after,
+.data-table td.fk-cell:hover::after {
+  opacity: 1;
+}
+
+/* Foreign key visual improvements for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .fk-indicator,
+  .data-table td.fk-cell::before,
+  .data-table th.fk-column[title]::after,
+  .data-table td.fk-cell[title]::after {
+    transition: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .data-table th.fk-column {
+    border-left-color: #0000ff;
+    background: var(--vscode-list-headerBackground);
+  }
+
+  .data-table td.fk-cell {
+    border-left-color: #0000ff;
+    background: rgba(0, 0, 255, 0.1);
+  }
+
+  .fk-indicator {
+    color: #0000ff;
+  }
+}
+
+/* Foreign key target row highlighting */
+.data-table tr.fk-target-row {
+  background-color: rgba(0, 123, 255, 0.15);
+  border: 2px solid #007bff;
+  animation: fk-target-highlight 0.8s ease-in-out;
+  position: relative;
+  z-index: 10;
+}
+
+.data-table tr.fk-target-row td {
+  background-color: rgba(0, 123, 255, 0.15);
+  border-top: 1px solid #007bff;
+  border-bottom: 1px solid #007bff;
+  box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+}
+
+.data-table tr.fk-target-row td:first-child {
+  border-left: 2px solid #007bff;
+}
+
+.data-table tr.fk-target-row td:last-child {
+  border-right: 2px solid #007bff;
+}
+
+/* Enhanced animation for better visibility */
+@keyframes fk-target-highlight {
+  0% {
+    background-color: rgba(0, 123, 255, 0.4);
+    transform: scale(1.03);
+    box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+  }
+  25% {
+    background-color: rgba(0, 123, 255, 0.3);
+    transform: scale(1.02);
+  }
+  50% {
+    background-color: rgba(0, 123, 255, 0.25);
+    transform: scale(1.01);
+  }
+  75% {
+    background-color: rgba(0, 123, 255, 0.2);
+    transform: scale(1.005);
+  }
+  100% {
+    background-color: rgba(0, 123, 255, 0.15);
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+  }
+}
+
+/* Smooth scrolling for table containers */
+.table-container {
+  scroll-behavior: smooth;
+}
+
+.enhanced-table-wrapper {
+  scroll-behavior: smooth;
+}
+
+/* Dark theme adjustments */
+.vscode-dark .data-table tr.fk-target-row {
+  background-color: rgba(0, 123, 255, 0.2);
+  border-color: #0ea5e9;
+}
+
+.vscode-dark .data-table tr.fk-target-row td {
+  background-color: rgba(0, 123, 255, 0.2);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  .data-table tr.fk-target-row {
+    background-color: rgba(0, 123, 255, 0.2);
+    border-color: #0ea5e9;
+  }
+
+  .data-table tr.fk-target-row td {
+    background-color: rgba(0, 123, 255, 0.2);
+    border-color: #0ea5e9;
+    box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .data-table tr.fk-target-row {
+    background-color: rgba(0, 123, 255, 0.3);
+    border-color: #0056b3;
+    border-width: 3px;
+  }
+
+  .data-table tr.fk-target-row td {
+    background-color: rgba(0, 123, 255, 0.3);
+    border-color: #0056b3;
+    box-shadow: 0 0 10px rgba(0, 86, 179, 0.5);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .data-table tr.fk-target-row {
+    animation: none;
+  }
+
+  .table-container,
+  .enhanced-table-wrapper {
+    scroll-behavior: auto;
+  }
+}

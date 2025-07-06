@@ -2,6 +2,34 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [Unreleased] - 2025-07-06
+
+### ✨ New Features
+
+- 🔗 **Foreign Key Visualization**: Enhanced visual indicators for foreign key relationships
+  - Distinctive blue styling for foreign key columns and cells
+  - Link icons (🔗) next to foreign key column names
+  - Enhanced tooltips showing referenced table.column information
+  - Automatic detection using SQLite PRAGMA foreign_key_list
+  - Support for multiple foreign keys per table
+  - Visual consistency across Data and Schema tabs
+  - Accessibility features with high contrast support
+  - Integration with existing table features (sorting, pinning, filtering)
+
+### 🎨 Visual Enhancements
+
+- **Foreign Key Styling**: Blue gradient backgrounds and borders for FK columns
+- **Cell Highlighting**: Subtle background tinting for foreign key cells
+- **Hover Effects**: Enhanced visual feedback when interacting with FK elements
+- **Pinned Column Support**: Foreign key styling maintained when columns are pinned
+
+### 🔧 Technical Improvements
+
+- Enhanced DatabaseService with getForeignKeys() method
+- Updated table schema requests to include foreign key information
+- Improved table rendering to support foreign key metadata
+- Added comprehensive CSS styling for foreign key visual indicators
+
 ## [0.2.7] - 2025-07-06
 
 ### Added

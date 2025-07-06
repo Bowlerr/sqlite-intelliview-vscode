@@ -61,6 +61,11 @@ function createContextMenuElement() {
       <span>Copy Table JSON</span>
     </div>
     <div class="context-menu-separator"></div>
+    <div class="context-menu-item context-menu-item-fk" data-action="navigate-foreign-key" style="display: none;">
+      <span class="icon">🔗</span>
+      <span>Go to Referenced Row</span>
+    </div>
+    <div class="context-menu-separator context-menu-separator-fk" style="display: none;"></div>
     <div class="context-menu-item context-menu-item-danger" data-action="delete-row">
       <span class="icon">🗑️</span>
       <span>Delete Row</span>
@@ -128,6 +133,38 @@ function handleContextMenu(e) {
 function showContextMenu(x, y) {
   if (!contextMenu) {
     return;
+  }
+
+  // Check if current cell is a foreign key cell
+  const isForeignKeyCell =
+    currentCell && currentCell.classList.contains("fk-cell");
+
+  // Show/hide foreign key navigation option
+  const fkMenuItem = contextMenu.querySelector(
+    '[data-action="navigate-foreign-key"]'
+  );
+  const fkSeparator = contextMenu.querySelector(".context-menu-separator-fk");
+
+  if (fkMenuItem && fkSeparator) {
+    if (isForeignKeyCell) {
+      const foreignKeyInfo = getForeignKeyInfoForCell(currentCell);
+      if (foreignKeyInfo) {
+        fkMenuItem.style.display = "block";
+        fkSeparator.style.display = "block";
+
+        // Update the menu item text to show the specific table
+        const span = fkMenuItem.querySelector("span:last-child");
+        if (span) {
+          span.textContent = `Go to ${foreignKeyInfo.referencedTable} (ID: ${foreignKeyInfo.value})`;
+        }
+      } else {
+        fkMenuItem.style.display = "none";
+        fkSeparator.style.display = "none";
+      }
+    } else {
+      fkMenuItem.style.display = "none";
+      fkSeparator.style.display = "none";
+    }
   }
 
   // Position the context menu
@@ -253,6 +290,9 @@ function executeContextMenuAction(action) {
       break;
     case "delete-row":
       deleteRowWithConfirmation();
+      break;
+    case "navigate-foreign-key":
+      navigateToForeignKeyReference();
       break;
     default:
       console.log("Unknown context menu action:", action);
@@ -660,7 +700,7 @@ function executeRowDeletion(tableName, row) {
 
   try {
     if (typeof (/** @type {any} */ (window).getCurrentState) === "function") {
-      currentState = (window)
+      currentState = window
         /** @type {any} */ .getCurrentState();
       encryptionKey = currentState.encryptionKey || "";
     }
@@ -955,7 +995,10 @@ function formatJsonWithSyntaxHighlighting(jsonString) {
   // Apply syntax highlighting first, then escape HTML
   let formatted = jsonString
     // Highlight keys (property names)
-    .replace(/("[\w\s_-]+")(\s*:)/g, '<span class="json-key">$1</span><span class="json-punctuation">$2</span>')
+    .replace(
+      /("[\w\s_-]+")(\s*:)/g,
+      '<span class="json-key">$1</span><span class="json-punctuation">$2</span>'
+    )
     // Highlight string values
     .replace(/:\s*(".*?")/g, ': <span class="json-string">$1</span>')
     // Highlight numbers
@@ -1075,6 +1118,292 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
   confirmBtn.focus();
 }
 
+/**
+ * Get foreign key information for a cell
+ * @param {HTMLElement} cell - The table cell element
+ * @returns {Object|null} Foreign key info with table, column, and value
+ */
+function getForeignKeyInfoForCell(cell) {
+  if (!cell || !cell.classList.contains("fk-cell")) {
+    return null;
+  }
+
+  // Get the cell value
+  const cellValue = getCellDisplayValue(cell);
+  if (!cellValue || cellValue === "NULL" || cellValue === "") {
+    return null;
+  }
+
+  // Get the column name from the cell's data attributes
+  const columnName = cell.dataset.columnName;
+  if (!columnName) {
+    return null;
+  }
+
+  // Get foreign key information from the cell's title attribute
+  const title = cell.getAttribute("title");
+  if (!title || !title.includes("Foreign Key: References ")) {
+    return null;
+  }
+
+  // Parse the title to extract referenced table and column
+  // Format: "Foreign Key: References table_name.column_name"
+  const match = title.match(/Foreign Key: References ([^.]+)\.(.+)/);
+  if (!match) {
+    return null;
+  }
+
+  const referencedTable = match[1];
+  const referencedColumn = match[2];
+
+  return {
+    columnName: columnName,
+    value: cellValue,
+    referencedTable: referencedTable,
+    referencedColumn: referencedColumn,
+  };
+}
+
+/**
+ * Navigate to the referenced row in a foreign key relationship
+ */
+function navigateToForeignKeyReference() {
+  if (!currentCell) {
+    return;
+  }
+
+  const foreignKeyInfo = getForeignKeyInfoForCell(currentCell);
+  if (!foreignKeyInfo) {
+    console.warn("No foreign key information found for cell");
+    return;
+  }
+
+  console.log("Navigating to foreign key reference:", foreignKeyInfo);
+
+  // Send message to extension to navigate to the referenced table
+  if (typeof vscode !== "undefined") {
+    // Store the foreign key reference for highlighting after data loads
+    storeForeignKeyReference(foreignKeyInfo);
+
+    // Update the selected table state to avoid conflicts
+    if (typeof updateState === "function") {
+      updateState({ selectedTable: foreignKeyInfo.referencedTable });
+    }
+
+    // Update the sidebar selection if available
+    if (typeof window !== "undefined" && window.updateSelectedTableSafe) {
+      window.updateSelectedTableSafe(foreignKeyInfo.referencedTable);
+    }
+
+    // Request to switch to the referenced table
+    vscode.postMessage({
+      type: "getTableData",
+      tableName: foreignKeyInfo.referencedTable,
+      key: getCurrentEncryptionKey(),
+    });
+
+    // Switch to data tab to show the table
+    if (typeof switchTab === "function") {
+      switchTab("data");
+    }
+
+    // Show success message
+    if (typeof showSuccess === "function") {
+      showSuccess(`Navigating to ${foreignKeyInfo.referencedTable} table...`);
+    }
+  }
+}
+
+/**
+ * Get current encryption key from state
+ * @returns {string|undefined} Current encryption key
+ */
+function getCurrentEncryptionKey() {
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).getCurrentState) === "function"
+  ) {
+    const state = (window)
+      /** @type {any} */ .getCurrentState();
+    return state.encryptionKey;
+  }
+  return undefined;
+}
+
+/**
+ * Store foreign key reference information for highlighting
+ * @param {Object} foreignKeyInfo - Foreign key information
+ */
+function storeForeignKeyReference(foreignKeyInfo) {
+  if (typeof window !== "undefined") {
+    window.pendingForeignKeyHighlight = foreignKeyInfo;
+  }
+}
+
+/**
+ * Highlight foreign key target row after navigation
+ * @param {Element} tableWrapper - Table wrapper element
+ */
+function highlightForeignKeyTarget(tableWrapper) {
+  if (typeof window === "undefined" || !window.pendingForeignKeyHighlight) {
+    return;
+  }
+
+  const foreignKeyInfo = window.pendingForeignKeyHighlight;
+  const table = tableWrapper.querySelector(".data-table");
+
+  if (!table) {
+    return;
+  }
+
+  // Find the column index for the referenced column
+  const headers = table.querySelectorAll("thead th");
+  let targetColumnIndex = -1;
+
+  for (let i = 0; i < headers.length; i++) {
+    const headerText = getColumnHeaderText
+      ? getColumnHeaderText(headers[i])
+      : headers[i].textContent.trim();
+    if (headerText === foreignKeyInfo.referencedColumn) {
+      targetColumnIndex = i;
+      break;
+    }
+  }
+
+  if (targetColumnIndex === -1) {
+    console.warn(
+      `Referenced column '${foreignKeyInfo.referencedColumn}' not found in table`
+    );
+    return;
+  }
+
+  // Find the row with the matching value
+  const rows = table.querySelectorAll("tbody tr");
+  let targetRow = null;
+
+  for (const row of rows) {
+    const cell = row.cells[targetColumnIndex];
+    if (cell) {
+      const cellValue = getCellDisplayValue
+        ? getCellDisplayValue(cell)
+        : cell.textContent.trim();
+      if (cellValue === foreignKeyInfo.value) {
+        targetRow = row;
+        break;
+      }
+    }
+  }
+
+  if (targetRow) {
+    // Highlight the target row
+    targetRow.classList.add("fk-target-row");
+
+    // Use enhanced scrolling function
+    scrollToTargetRow(targetRow);
+
+    // Add a pulsing animation for better visibility
+    let pulseCount = 0;
+    const pulseInterval = setInterval(() => {
+      if (targetRow.style) {
+        targetRow.style.transform =
+          pulseCount % 2 === 0 ? "scale(1.02)" : "scale(1)";
+      }
+      pulseCount++;
+      if (pulseCount >= 6) {
+        clearInterval(pulseInterval);
+        if (targetRow.style) {
+          targetRow.style.transform = "";
+        }
+      }
+    }, 300);
+
+    // Remove highlight after a few seconds
+    setTimeout(() => {
+      targetRow.classList.remove("fk-target-row");
+    }, 4000);
+
+    if (typeof showSuccess === "function") {
+      showSuccess(
+        `Found row with ${foreignKeyInfo.referencedColumn} = ${foreignKeyInfo.value}`
+      );
+    }
+  } else {
+    if (typeof showError === "function") {
+      showError(
+        `Row with ${foreignKeyInfo.referencedColumn} = ${foreignKeyInfo.value} not found`
+      );
+    }
+  }
+
+  // Clear the pending highlight
+  delete window.pendingForeignKeyHighlight;
+}
+
+/**
+ * Scroll to target row with enhanced visibility
+ * @param {Element} targetRow - The row to scroll to
+ */
+function scrollToTargetRow(targetRow) {
+  if (!targetRow) {
+    return;
+  }
+
+  // Get the table container
+  const tableWrapper = targetRow.closest(".enhanced-table-wrapper");
+  const tableContainer = tableWrapper?.querySelector(".table-container");
+
+  if (tableContainer) {
+    // Calculate the position of the target row relative to the container
+    const rowRect = targetRow.getBoundingClientRect();
+    const containerRect = tableContainer.getBoundingClientRect();
+
+    // Check if we need to scroll
+    const isRowVisible =
+      rowRect.top >= containerRect.top &&
+      rowRect.bottom <= containerRect.bottom;
+
+    if (!isRowVisible) {
+      // Calculate scroll position to center the row
+      const rowOffsetTop = targetRow.offsetTop || 0;
+      const containerScrollTop = tableContainer.scrollTop;
+      const containerHeight = tableContainer.clientHeight;
+
+      // Center the row in the container
+      const targetScrollTop = rowOffsetTop - containerHeight / 2;
+
+      // Smooth scroll to the target position
+      tableContainer.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: "smooth",
+      });
+    }
+  }
+
+  // Also ensure the table wrapper is visible in the main viewport
+  setTimeout(() => {
+    const tableRect = tableWrapper?.getBoundingClientRect();
+    if (
+      tableRect &&
+      (tableRect.top < 0 || tableRect.bottom > window.innerHeight)
+    ) {
+      tableWrapper.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+        inline: "nearest",
+      });
+    }
+
+    // Finally, ensure the row is visible
+    setTimeout(() => {
+      targetRow.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+    }, 200);
+  }, 100);
+}
+
 // Make functions available globally
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).initializeContextMenu = initializeContextMenu;
@@ -1091,4 +1420,7 @@ if (typeof window !== "undefined") {
     showEnhancedConfirmDialog;
   /** @type {any} */ (window).handleDeleteSuccess = handleDeleteSuccess;
   /** @type {any} */ (window).handleDeleteError = handleDeleteError;
+  /** @type {any} */ (window).highlightForeignKeyTarget =
+    highlightForeignKeyTarget;
+  /** @type {any} */ (window).scrollToTargetRow = scrollToTargetRow;
 }

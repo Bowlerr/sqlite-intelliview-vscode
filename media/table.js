@@ -20,13 +20,24 @@ const PAGINATION_CONFIG = {
  * @returns {string} HTML string for the table
  */
 function createDataTable(data, columns, tableName = "", options = {}) {
+  const {
+    page = 1,
+    pageSize = PAGINATION_CONFIG.defaultPageSize,
+    totalRows = data.length,
+    foreignKeys = [], // Add foreign keys to options
+  } = options;
+
+  // Create foreign key lookup map
+  const foreignKeyMap = new Map();
+  foreignKeys.forEach((fk) => {
+    foreignKeyMap.set(fk.column, fk);
+  });
+
   const tableId = generateTableId
     ? generateTableId(tableName)
     : `table-${tableName || "query"}-${Date.now()}`;
 
-  const pageSize = options.pageSize || PAGINATION_CONFIG.defaultPageSize;
   const currentPage = options.currentPage || options.page || 1;
-  const totalRows = options.totalRows || data.length; // Use backend total if available
   const totalPages = Math.ceil(totalRows / pageSize);
 
   // Check if this is a schema table (not editable)
@@ -100,17 +111,31 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           <thead>
             <tr role="row">
               ${columns
-                .map(
-                  (col, index) => `
-                <th class="sortable-header resizable-header" 
+                .map((col, index) => {
+                  const fkInfo = foreignKeyMap.get(col);
+                  const isForeignKey = !!fkInfo;
+                  const fkClass = isForeignKey ? " fk-column" : "";
+                  const fkTitle = isForeignKey
+                    ? `Foreign Key: References ${fkInfo.referencedTable}.${fkInfo.referencedColumn}`
+                    : "";
+                  return `
+                <th class="sortable-header resizable-header${fkClass}" 
                     data-column="${index}" 
                     data-sort="none" 
                     role="columnheader" 
                     tabindex="0"
                     aria-sort="none"
-                    aria-label="Column ${col}, sortable">
+                    title="${fkTitle || `Column ${col}, sortable`}"
+                    aria-label="Column ${col}, sortable${
+                    isForeignKey ? ", foreign key" : ""
+                  }">
                   <div class="column-header">
                     <span class="column-name">${col}</span>
+                    ${
+                      isForeignKey
+                        ? `<span class="fk-indicator" title="${fkTitle}">🔗</span>`
+                        : ""
+                    }
                     <button class="pin-btn" 
                             title="Pin column ${col}" 
                             data-action="pin" 
@@ -125,13 +150,19 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                        aria-label="Resize column ${col}"
                        aria-orientation="vertical"></div>
                 </th>
-              `
-                )
+              `;
+                })
                 .join("")}
             </tr>
           </thead>
           <tbody role="rowgroup" class="table-body">
-            ${renderTableRows(pageData, startIndex, columns, isSchemaTable)}
+            ${renderTableRows(
+              pageData,
+              startIndex,
+              columns,
+              isSchemaTable,
+              foreignKeyMap
+            )}
           </tbody>
         </table>
       </div>
@@ -162,7 +193,8 @@ function renderTableRows(
   data,
   startIndex = 0,
   columns = [],
-  isSchemaTable = false
+  isSchemaTable = false,
+  foreignKeyMap = new Map()
 ) {
   return data
     .map((row, localIndex) => {
@@ -170,10 +202,18 @@ function renderTableRows(
       return `
         <tr data-row-index="${globalIndex}" data-local-index="${localIndex}" class="resizable-row" role="row">
           ${row
-            .map(
-              (cell, cellIndex) => `
+            .map((cell, cellIndex) => {
+              const columnName = columns[cellIndex];
+              const isForeignKey = foreignKeyMap.has(columnName);
+              const fkClass = isForeignKey ? " fk-cell" : "";
+              const fkInfo = foreignKeyMap.get(columnName);
+              const fkTitle = isForeignKey
+                ? `Foreign Key: References ${fkInfo.referencedTable}.${fkInfo.referencedColumn}`
+                : "";
+
+              return `
             <td data-column="${cellIndex}" 
-                class="data-cell" 
+                class="data-cell${fkClass}" 
                 role="gridcell"
                 tabindex="0"
                 ${!isSchemaTable ? `data-editable="true"` : ""}
@@ -185,9 +225,10 @@ function renderTableRows(
                       }"`
                     : ""
                 }
+                ${fkTitle ? `title="${fkTitle}"` : ""}
                 aria-label="Row ${globalIndex + 1}, Column ${cellIndex + 1}: ${
                 cell !== null ? String(cell).substring(0, 50) : "null"
-              }">
+              }${isForeignKey ? " (Foreign Key)" : ""}">
               <div class="cell-content" data-original-value="${
                 cell !== null ? String(cell).replace(/"/g, "&quot;") : ""
               }">
@@ -212,8 +253,8 @@ function renderTableRows(
                   : ""
               }
             </td>
-          `
-            )
+          `;
+            })
             .join("")}
         </tr>
       `;

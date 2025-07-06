@@ -440,7 +440,7 @@ function handleQueryResult(message) {
  */
 function handleTableSchema(message) {
   if (message.success) {
-    displayTableSchema(message.data, message.columns);
+    displayTableSchema(message.data, message.columns, message.foreignKeys);
   } else {
     if (typeof showError !== "undefined") {
       showError(`Failed to load table schema: ${message.tableName}`);
@@ -458,6 +458,7 @@ function handleTableData(message) {
       page: message.page,
       pageSize: message.pageSize,
       totalRows: message.totalRows,
+      foreignKeys: message.foreignKeys,
     });
   } else {
     if (typeof showError !== "undefined") {
@@ -665,8 +666,9 @@ function displayQueryResults(data, columns) {
  * Display table schema
  * @param {Array} data - Schema data
  * @param {Array} columns - Column names
+ * @param {Array} foreignKeys - Foreign key information
  */
-function displayTableSchema(data, columns) {
+function displayTableSchema(data, columns, foreignKeys = []) {
   const elements = getAllDOMElements ? getAllDOMElements() : {};
   const currentState = getCurrentState ? getCurrentState() : {};
 
@@ -680,7 +682,9 @@ function displayTableSchema(data, columns) {
     return;
   }
 
-  const table = createDataTable ? createDataTable(data, columns, "schema") : "";
+  const table = createDataTable
+    ? createDataTable(data, columns, "schema", { foreignKeys })
+    : "";
   elements.schemaContent.innerHTML = table;
 
   // Initialize table features for the new table
@@ -746,6 +750,14 @@ function displayTableData(data, columns, tableName, options = {}) {
   );
   if (tableWrapper && typeof initializeTableEvents !== "undefined") {
     initializeTableEvents(tableWrapper);
+  }
+
+  // Check for pending foreign key highlight
+  if (tableWrapper && typeof highlightForeignKeyTarget !== "undefined") {
+    // Use setTimeout to ensure DOM is fully rendered and table is ready
+    setTimeout(() => {
+      highlightForeignKeyTarget(tableWrapper);
+    }, 250);
   }
 }
 

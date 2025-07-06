@@ -21,6 +21,17 @@ export interface ColumnInfo {
     notnull: boolean;
     dflt_value: any;
     pk: boolean;
+    // Add foreign key information
+    fk?: {
+        referencedTable: string;
+        referencedColumn: string;
+    };
+}
+
+export interface ForeignKeyInfo {
+    column: string;
+    referencedTable: string;
+    referencedColumn: string;
 }
 
 export interface QueryResult {
@@ -223,6 +234,20 @@ export class DatabaseService {
             });
         }
         stmt.free();
+
+        // Get foreign key information and merge with column info
+        const foreignKeys = await this.getForeignKeys(tableName);
+        
+        // Add foreign key information to columns
+        columns.forEach(column => {
+            const fkInfo = foreignKeys.find(fk => fk.column === column.name);
+            if (fkInfo) {
+                column.fk = {
+                    referencedTable: fkInfo.referencedTable,
+                    referencedColumn: fkInfo.referencedColumn
+                };
+            }
+        });
 
         return columns;
     }
@@ -552,6 +577,27 @@ export class DatabaseService {
         
         console.log(`Schema for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
         return result;
+    }
+
+    async getForeignKeys(tableName: string): Promise<ForeignKeyInfo[]> {
+        if (!this.db) {
+            throw new Error('Database not opened');
+        }
+
+        const stmt = this.db.prepare(`PRAGMA foreign_key_list(${tableName})`);
+        const foreignKeys: ForeignKeyInfo[] = [];
+        
+        while (stmt.step()) {
+            const row = stmt.getAsObject();
+            foreignKeys.push({
+                column: row.from as string,
+                referencedTable: row.table as string,
+                referencedColumn: row.to as string
+            });
+        }
+        stmt.free();
+
+        return foreignKeys;
     }
 
     closeDatabase(): void {
