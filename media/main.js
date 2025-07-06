@@ -191,7 +191,7 @@
      * @param {object} result - Query result object
      */
     function displayQueryResult(result) {
-      let html = '';
+      let html = "";
       if (result.error) {
         html = `
           <div class="error-message">
@@ -213,9 +213,9 @@
         return;
       }
       const columns = result.columns || Object.keys(result.data[0] || {});
-      let table = '';
-      if (typeof createDataTable === 'function') {
-        table = createDataTable(result.data, columns, 'query-result');
+      let table = "";
+      if (typeof createDataTable === "function") {
+        table = createDataTable(result.data, columns, "query-result");
       } else {
         table = createBasicTable(result.data, columns);
       }
@@ -424,7 +424,10 @@
       };
     }
   } catch (error) {
-    console.error("SQLite IntelliView: Fatal error during initialization:", error);
+    console.error(
+      "SQLite IntelliView: Fatal error during initialization:",
+      error
+    );
     // Show error in the UI
     document.body.innerHTML = `
       <div style="padding: 20px; color: #f48771; background: #2d1b1b; border-radius: 4px; margin: 20px;">

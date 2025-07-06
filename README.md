@@ -159,7 +159,7 @@ To test the extension, you can create a sample database:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/sqlite-intelliview-vscode.git
+git clone https://github.com/Bowlerr/sqlite-intelliview-vscode.git
 cd sqlite-intelliview-vscode
 
 # Install dependencies
@@ -207,9 +207,9 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and version history.
 
 ## Support
 
-- 🐛 [Report Issues](https://github.com/your-username/sqlite-intelliview-vscode/issues)
-- 💡 [Feature Requests](https://github.com/your-username/sqlite-intelliview-vscode/issues)
-- 📖 [Documentation](https://github.com/your-username/sqlite-intelliview-vscode/wiki)
+- 🐛 [Report Issues](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues)
+- 💡 [Feature Requests](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues)
+- 📖 [Documentation](https://github.com/Bowlerr/sqlite-intelliview-vscode/wiki)
 
 ---
 

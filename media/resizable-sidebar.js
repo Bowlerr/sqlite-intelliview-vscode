@@ -222,7 +222,9 @@ class ResizableSidebar {
 
   loadSavedState() {
     try {
-      const savedState = localStorage.getItem("sqlite-intelliview-vscode-sidebar-state");
+      const savedState = localStorage.getItem(
+        "sqlite-intelliview-vscode-sidebar-state"
+      );
       if (savedState) {
         const state = JSON.parse(savedState);
 

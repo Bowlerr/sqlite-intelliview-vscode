@@ -3,20 +3,20 @@
   "displayName": "SQLite IntelliView",
   "description": "A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination",
   "version": "0.2.0",
-  "publisher": "your-publisher-name",
+  "publisher": "bowlerr",
   "author": {
-    "name": "Your Name",
-    "email": "your.email@example.com"
+    "name": "Bowlerr",
+    "email": "cawbsprogramming@gmail.com"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/sqlite-intelliview-vscode.git"
+    "url": "https://github.com/Bowlerr/sqlite-intelliview-vscode.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/sqlite-intelliview-vscode/issues"
+    "url": "https://github.com/Bowlerr/sqlite-intelliview-vscode/issues"
   },
-  "homepage": "https://github.com/your-username/sqlite-intelliview-vscode#readme",
+  "homepage": "https://github.com/Bowlerr/sqlite-intelliview-vscode#readme",
   "keywords": [
     "sqlite",
     "database",
