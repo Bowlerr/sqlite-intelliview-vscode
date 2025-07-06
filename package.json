@@ -1,7 +1,7 @@
 {
   "name": "sqlite-intelliview-vscode",
   "displayName": "SQLite IntelliView",
-  "description": "A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination",
+  "description": "Modern SQLite/SQLCipher database viewer and editor for VS Code: Monaco-powered queries, ER diagrams, cell editing, encryption, and more.",
   "version": "0.2.0",
   "publisher": "bowlerr",
   "author": {
@@ -17,26 +17,51 @@
     "url": "https://github.com/Bowlerr/sqlite-intelliview-vscode/issues"
   },
   "homepage": "https://github.com/Bowlerr/sqlite-intelliview-vscode#readme",
+  "icon": "./images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "keywords": [
     "sqlite",
+    "sqlcipher",
     "database",
     "viewer",
     "sql",
     "sqlcipher",
-    "data",
-    "query",
     "table",
-    "editor"
+    "editor",
+    "vscode",
+    "vscode-extension",
+    "monaco-editor",
+    "db-viewer",
+    "db-editor",
+    "pagination",
+    "encryption",
+    "developer-tools",
+    "productivity",
+    "code-insight",
+    "data-visualization",
+    "cell-editing"
   ],
   "engines": {
-    "vscode": "^1.101.0"
+    "vscode": "^1.60.0",
+    "node": ">=16.0.0"
   },
   "categories": [
-    "Data Science",
-    "Visualization",
-    "Other"
+    "Other",
+    "Database"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:sqlite-intelliview-vscode.openDatabase",
+    "onCommand:sqlite-intelliview-vscode.connectWithKey",
+    "onCommand:sqlite-intelliview-vscode.refreshDatabase",
+    "onCommand:sqlite-intelliview-vscode.exportData",
+    "onLanguage:sql",
+    "onFileSystem:db",
+    "onFileSystem:sqlite",
+    "onFileSystem:sqlite3"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -105,20 +130,64 @@
           "icon": "$(refresh)"
         }
       ]
+    },
+    "keybindings": [
+      {
+        "command": "sqlite-intelliview-vscode.openDatabase",
+        "key": "ctrl+shift+o",
+        "mac": "cmd+shift+o",
+        "when": "explorerViewletVisible"
+      },
+      {
+        "command": "sqlite-intelliview-vscode.connectWithKey",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k"
+      },
+      {
+        "command": "sqlite-intelliview-vscode.refreshDatabase",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r"
+      },
+      {
+        "command": "sqlite-intelliview-vscode.exportData",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e"
+      }
+    ],
+    "configuration": {
+      "title": "SQLite IntelliView",
+      "properties": {
+        "sqliteIntelliView.defaultPageSize": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "Default number of rows per page in data tables."
+        },
+        "sqliteIntelliView.enableEncryption": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable SQLCipher encryption support for opening encrypted databases."
+        },
+        "sqliteIntelliView.themeIntegration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic theme integration for the database editor UI."
+        }
+      }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "lint": "eslint src --fix",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src",
+    "pretest": "npm run compile && npm run lint",
     "test": "vscode-test"
   },
   "devDependencies": {
@@ -133,7 +202,8 @@
     "esbuild": "^0.25.3",
     "eslint": "^9.25.1",
     "npm-run-all": "^4.1.5",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@vscode/vsce": "^3.6.0"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",

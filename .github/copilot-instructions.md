@@ -78,7 +78,7 @@ This is a VS Code extension project. Please use the get_vscode_api with a query 
 
 ## Project Context
 
-This is a production-ready VS Code extension for viewing and editing SQLite databases with SQLCipher support, advanced table pagination, and comprehensive cell editing capabilities. The extension provides a modern database management interface directly within VS Code.
+This is a VS Code extension for viewing and editing SQLite databases with SQLCipher support, advanced table pagination, and comprehensive cell editing capabilities. The extension provides a modern database management interface directly within VS Code.
 
 ### Core Value Proposition
 

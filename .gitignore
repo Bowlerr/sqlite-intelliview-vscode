@@ -10,3 +10,9 @@ example*.db
 *.sql
 test_*.js
 generate_*.js
+
+# Compiled JavaScript and sourcemap files
+src/*.js
+src/*.js.map
+src/test/*.js
+src/test/*.js.map

@@ -473,7 +473,7 @@ This is the initial release of the SQLite IntelliView extension. The extension p
 **Key Features:**
 
 - Seamless integration with VS Code's file explorer
-- Production-ready UI that matches VS Code's design language
+- UI that matches VS Code's design language
 - Full SQLite database support with modern web technologies
 - Extensible architecture for future enhancements
 
