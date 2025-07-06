@@ -48,6 +48,11 @@
           initializeDiagram();
         }
 
+        // Initialize context menu functionality
+        if (typeof initializeContextMenu === "function") {
+          initializeContextMenu();
+        }
+
         // Show connection section initially - will be hidden after successful connection
         if (typeof showConnectionSection !== "undefined") {
           showConnectionSection();

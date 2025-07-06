@@ -3056,3 +3056,107 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   background: var(--vscode-button-secondaryBackground);
   color: var(--vscode-button-secondaryForeground);
 }
+
+/* ===== CONTEXT MENU ===== */
+.context-menu {
+  position: fixed;
+  background: var(--vscode-menu-background);
+  border: 1px solid var(--vscode-menu-border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  min-width: 150px;
+  padding: 4px 0;
+  font-size: 13px;
+  display: none;
+  user-select: none;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-menu-foreground);
+  transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover {
+  background-color: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+
+.context-menu-item:active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.context-menu-item .icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-menu-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--vscode-menu-separatorBackground);
+  margin: 4px 0;
+}
+
+/* Table cell context menu styling */
+.data-table td {
+  position: relative;
+}
+
+.data-table td.context-menu-target {
+  background-color: var(--vscode-list-hoverBackground);
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* Prevent text selection during context menu operations */
+.context-menu-active * {
+  user-select: none !important;
+}
+
+/* Animation for context menu appearance */
+.context-menu.show {
+  display: block;
+  animation: contextMenuFadeIn 0.15s ease-out;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Dark theme adjustments */
+.vscode-dark .context-menu {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* High contrast theme adjustments */
+.vscode-high-contrast .context-menu {
+  border: 2px solid var(--vscode-contrastBorder);
+  box-shadow: none;
+}
+
+.vscode-high-contrast .context-menu-item:hover {
+  border: 1px solid var(--vscode-contrastActiveBorder);
+}

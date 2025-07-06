@@ -2,6 +2,59 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.5] - 2025-07-06
+
+### Added
+
+- 📋 **Context Menu for Table Cells**: Right-click functionality for copy operations
+  - **Copy Cell**: Right-click any cell to copy its value to the clipboard
+  - **Copy Row**: Copy entire row as tab-separated values (TSV format)
+  - **Copy Column**: Copy entire column including header as line-separated values
+  - **Smart Positioning**: Context menu automatically adjusts to stay within viewport
+  - **Theme Integration**: Fully integrated with VS Code's light, dark, and high contrast themes
+  - **Keyboard Support**: Press Escape to close the context menu
+  - **Visual Feedback**: Selected cell is highlighted while context menu is open
+  - **Smooth Animation**: Context menu appears with fade-in animation
+
+### Technical Implementation
+
+- 🔧 **New Context Menu Module**: `media/context-menu.js`
+
+  - Complete context menu system with event handling
+  - Clipboard integration using modern Clipboard API with fallback
+  - Cell highlighting and visual feedback system
+  - Smart positioning algorithm to prevent menu overflow
+  - Keyboard navigation and accessibility support
+
+- 🎨 **Enhanced CSS Styling**: Added context menu styles to `media/vscode.css`
+
+  - Context menu container with proper z-index and positioning
+  - Menu items with hover, active, and disabled states
+  - Theme-aware styling using VS Code CSS custom properties
+  - Smooth animations and transitions
+  - High contrast theme compatibility
+
+- 📡 **Integration with Existing System**: Seamless integration with table functionality
+  - Context menu only appears on editable data tables
+  - Disabled on read-only schema and query result tables
+  - Proper cleanup and event management
+  - Integration with existing notification system
+
+### Enhanced User Experience
+
+- 🎯 **Intuitive Copy Operations**: Familiar right-click context menu experience
+
+  - Native-feeling context menu with proper OS conventions
+  - Clear visual feedback for copy operations
+  - Success notifications for completed copy operations
+  - Proper error handling for clipboard failures
+
+- 🔄 **Multi-format Support**: Flexible data copying options
+  - Cell values copied as plain text
+  - Row data copied as TSV for spreadsheet compatibility
+  - Column data copied with headers for data analysis
+  - Automatic handling of NULL values and special characters
+
 ## [0.2.4] - 2025-07-05
 
 ### Added

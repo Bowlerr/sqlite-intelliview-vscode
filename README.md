@@ -9,7 +9,8 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - ⚡ **Query Editor**: Execute custom SQL queries with helpful examples and shortcuts
 - 📊 **Data Visualization**: View table data in a clean, sortable grid with statistics
 - ✏️ **Cell Editing**: Edit database cells directly in the table view with real-time updates
-- 📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
+- � **Context Menu**: Right-click cells for copy operations (Copy Cell, Copy Row, Copy Column)
+- �📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
 - 🔐 **SQLCipher Support**: Connect to encrypted databases with password protection
 - 🎨 **VS Code Theme Integration**: Matches your current VS Code theme perfectly
 - ⌨️ **Keyboard Shortcuts**: Ctrl/Cmd+Enter to execute, Ctrl/Cmd+K to clear queries
@@ -68,6 +69,7 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Real-time Updates**: Changes are immediately saved to the database
 - **Data Type Handling**: Automatic conversion for numbers, strings, and NULL values
 - **Read-only Protection**: Schema and query result tables are protected from editing
+- **Context Menu**: Right-click any cell to access copy operations (Copy Cell, Copy Row, Copy Column)
 - View table schema information
 - Row and column count statistics
 - Clean, responsive table display
@@ -84,6 +86,16 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Real-time Updates**: Changes are immediately reflected in the database
 - **Visual Indicators**: Tables show "✏️ Editable" or "🔒 Read-only" status
 
+#### Context Menu
+
+- **Right-click** any cell in a data table to open the context menu
+- **Copy Cell**: Copies the selected cell value to clipboard
+- **Copy Row**: Copies the entire row as tab-separated values
+- **Copy Column**: Copies the entire column including header
+- **Smart Positioning**: Menu automatically adjusts to stay within viewport
+- **Theme Integration**: Matches VS Code's current theme
+- **Keyboard Support**: Press Escape to close the menu
+
 ### Keyboard Shortcuts
 
 - **Ctrl/Cmd + Enter**: Execute the current query
@@ -91,7 +103,8 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Double-click**: Edit a data table cell (Data tab only)
 - **Enter or F2**: Start editing a selected cell (Data tab only)
 - **Enter**: Save cell changes
-- **Escape**: Cancel cell editing or close notifications
+- **Escape**: Cancel cell editing, close notifications, or close context menu
+- **Right-click**: Open context menu on table cells for copy operations
 
 ### SQLCipher Support
 
