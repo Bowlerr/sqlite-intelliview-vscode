@@ -583,7 +583,14 @@ body.sidebar-resizing * {
 
 /* Keep padding for other panels */
 #query-panel {
-  padding: var(--container-padding);
+  display: none;
+}
+#query-panel.active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ===== CONTENT AREAS ===== */
@@ -603,65 +610,303 @@ body.sidebar-resizing * {
   padding: 0;
 }
 
-#query-results {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 4px;
+/* ===== MODAL STYLES ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+.modal-overlay.hidden {
+  display: none;
+}
+.modal {
   background: var(--vscode-editor-background);
-  padding: 8px;
-  margin-top: 12px;
-}
-
-#query-results .info {
-  text-align: center;
-  padding: 20px;
-  font-style: italic;
-  flex-shrink: 0;
-}
-
-#query-results .enhanced-table-wrapper {
-  border: none;
-  border-radius: 0;
+  color: var(--vscode-foreground);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  max-width: 90vw;
+  max-height: 80vh;
+  min-width: 320px;
+  min-height: 120px;
+  overflow: auto;
   padding: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px 8px 24px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  border-radius: 8px 8px 0 0;
+}
+.modal-title {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.modal-close:hover {
+  opacity: 1;
+}
+.modal-body {
+  padding: 16px 24px 24px 24px;
+  overflow: auto;
+  flex: 1;
+}
+
+/* ===== MODAL ANIMATIONS (ENHANCED) ===== */
+@keyframes modalOverlayFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(6px);
+  }
+}
+@keyframes modalOverlayFadeOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(6px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+@keyframes modalDialogPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(48px) scale(0.95);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.03);
+  }
+  80% {
+    transform: translateY(2px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes modalDialogPopOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+  }
+}
+
+.modal-overlay {
+  animation: modalOverlayFadeIn 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    backdrop-filter 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(6px);
+}
+.modal-overlay.hidden {
+  animation: modalOverlayFadeOut 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.modal {
+  animation: modalDialogPopIn 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.38s, transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.modal-overlay.hidden .modal {
+  animation: modalDialogPopOut 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal,
+  .modal-overlay.hidden,
+  .modal-overlay.hidden .modal {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ===== QUERY EDITOR ===== */
 .query-editor {
+  width: 100%;
   flex-shrink: 0;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   position: relative;
 }
 
+.query-header {
+  display: flex;
+  width: 100%; /* Ensure full width */
+  justify-content: space-between; /* Pushes actions to the far right of the tab */
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 4px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.query-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  margin: 0;
+}
+
+.query-header-actions {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end; /* Ensures actions are right-aligned in their container */
+  align-items: center;
+  gap: 8px;
+}
+
+.query-header-actions .primary-button,
+.query-header-actions .secondary-button {
+  font-size: 0.9em;
+  padding: 6px 12px;
+}
+
+.query-header-actions .keyboard-shortcut {
+  font-size: 0.8em;
+}
+
+.query-icon {
+  font-size: 1.2em;
+}
+
+.query-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.query-status.executing {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  opacity: 1;
+}
+
+.query-status.success {
+  background: var(--vscode-debugConsole-infoForeground);
+  color: var(--vscode-editor-background);
+  opacity: 1;
+}
+
+.query-status.error {
+  background: var(--vscode-errorForeground);
+  color: var(--vscode-editor-background);
+  opacity: 1;
+}
+
 .query-controls {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 8px;
 }
 
-.query-actions {
+.editor-wrapper {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Remove border, radius, and background for a flush look */
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.monaco-editor-container,
+.query-editor-container {
+  flex: 1;
+  width: 100%;
+  position: relative;
+}
+
+.fallback-textarea,
+.query-textarea-fallback {
+  width: 100%;
+  flex: 1;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  border: none;
+  padding: 16px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 120px;
+  max-height: 600px;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  outline: none;
+}
+
+.fallback-textarea:focus {
+  outline: none;
+}
+
+.button-icon {
+  font-size: 0.9em;
+}
+
+.keyboard-shortcut {
+  font-size: 0.75em;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.query-info {
   display: flex;
-  gap: 12px;
-  margin-top: 0;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-top: 12px;
+  gap: 20px;
 }
 
-.query-actions .primary-button {
-  padding: 10px 20px;
-  font-weight: 600;
-  border-radius: 4px;
-  font-size: 0.9em;
-  transition: all 0.2s ease;
+.query-stats {
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.query-actions .secondary-button {
-  padding: 8px 16px;
-  font-weight: 500;
-  border-radius: 4px;
-  font-size: 0.9em;
-  transition: all 0.2s ease;
+.query-stats.visible {
+  opacity: 1;
 }
 
 .query-editor textarea {
@@ -703,6 +948,7 @@ body.sidebar-resizing * {
 #query-panel .query-editor {
   display: block !important;
   visibility: visible !important;
+  flex: 1;
 }
 
 #query-panel .query-controls {
@@ -713,6 +959,18 @@ body.sidebar-resizing * {
 #query-panel textarea {
   display: block !important;
   visibility: visible !important;
+  flex: 1;
+}
+
+#query-panel {
+  display: none;
+}
+#query-panel.active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ===== FORM INPUTS ===== */
@@ -2265,7 +2523,6 @@ body.resizing {
 /* =============================================================================
    ER Diagram Styles
    ============================================================================= */
-
 /* Ensure diagram container only appears in diagram panel */
 #diagram-container {
   flex: 1;
@@ -2539,7 +2796,7 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
     transform: scale(1.1) translateY(-10px);
   }
   70% {
-    transform: scale(0.95) translateY(-5px);
+    transform: scale(0.9) translateY(0);
   }
   100% {
     opacity: 1;
@@ -3191,7 +3448,6 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   max-width: 700px;
-  max-height: 85vh;
   width: 90%;
   padding: 24px;
   font-family: var(--vscode-font-family);
@@ -3599,4 +3855,36 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   .enhanced-table-wrapper {
     scroll-behavior: auto;
   }
+}
+
+#query-editor-container {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.query-editor,
+.query-controls,
+.editor-wrapper,
+#query-editor-container {
+  overflow: visible !important;
+  min-height: 0;
+}
+
+/* Floating buttons for query editor */
+.floating-query-buttons {
+  position: absolute;
+  bottom: 12px;
+  right: 24px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+/* Force-hide the Query editor unless the Query tab is active, as a failsafe */
+#query-panel:not(.active) .query-editor {
+  display: none !important;
+  visibility: hidden !important;
 }

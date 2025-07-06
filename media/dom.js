@@ -11,7 +11,6 @@ const domElements = {
   tablesListElement: null,
   executeQueryBtn: null,
   clearQueryBtn: null,
-  sqlQueryTextarea: null,
   tabs: null,
   tabPanels: null,
   schemaContent: null,
@@ -34,7 +33,6 @@ function initializeDOMElements() {
   domElements.tablesListElement = document.getElementById("tables-list");
   domElements.executeQueryBtn = document.getElementById("execute-query");
   domElements.clearQueryBtn = document.getElementById("clear-query");
-  domElements.sqlQueryTextarea = document.getElementById("sql-query");
   domElements.tabs = document.querySelectorAll(".tab");
   domElements.tabPanels = document.querySelectorAll(".tab-panel");
   domElements.schemaContent = document.getElementById("schema-content");
@@ -215,12 +213,50 @@ function checkConnectionSectionVisibility() {
   }
 }
 
+// Add modal container to DOM on load
+function addResultsModalToDOM() {
+  if (document.getElementById("results-modal-overlay")) return;
+  const overlay = document.createElement("div");
+  overlay.id = "results-modal-overlay";
+  overlay.className = "modal-overlay hidden";
+  overlay.innerHTML = `
+    <div class="modal" id="results-modal">
+      <div class="modal-header">
+        <span class="modal-title">Query Results</span>
+        <button class="modal-close" id="close-results-modal" title="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="results-modal-body"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  // Close on click outside modal or on close button
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) hideResultsModal();
+  });
+  document.getElementById("close-results-modal").onclick = hideResultsModal;
+}
+
+function showResultsModal(html) {
+  addResultsModalToDOM();
+  const overlay = document.getElementById("results-modal-overlay");
+  const body = document.getElementById("results-modal-body");
+  if (body) body.innerHTML = html;
+  if (overlay) overlay.classList.remove("hidden");
+}
+
+function hideResultsModal() {
+  const overlay = document.getElementById("results-modal-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
 // Make this function available globally
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).forceHideConnectionSection =
     forceHideConnectionSection;
   /** @type {any} */ (window).checkConnectionSectionVisibility =
     checkConnectionSectionVisibility;
+  window.showResultsModal = showResultsModal;
+  window.hideResultsModal = hideResultsModal;
 }
 
 // Export functions for use in other modules

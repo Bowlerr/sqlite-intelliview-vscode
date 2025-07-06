@@ -12,10 +12,6 @@
  * @param {Object} message - Error message
  */
 function handleError(message) {
-  if (typeof hideLoading !== "undefined") {
-    hideLoading();
-  }
-
   // Reset connect button state on error
   const elements = getAllDOMElements ? getAllDOMElements() : {};
   if (elements.connectBtn) {
@@ -48,11 +44,11 @@ function initializeEventListeners() {
   // Clear query button
   if (elements.clearQueryBtn) {
     elements.clearQueryBtn.addEventListener("click", () => {
-      if (elements.sqlQueryTextarea) {
-        elements.sqlQueryTextarea.value = "";
-        if (typeof autoResizeTextarea !== "undefined") {
-          autoResizeTextarea();
-        }
+      if (
+        /** @type {any} */ (window).queryEditor &&
+        /** @type {any} */ (window).queryEditor.clearEditor
+      ) {
+        /** @type {any} */ (window).queryEditor.clearEditor();
       }
     });
   }
@@ -73,23 +69,6 @@ function initializeEventListeners() {
 
   // Global keyboard shortcuts
   document.addEventListener("keydown", handleGlobalKeyboard);
-
-  // Enter key in query textarea
-  if (elements.sqlQueryTextarea) {
-    elements.sqlQueryTextarea.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        handleExecuteQuery();
-      }
-    });
-
-    // Auto-resize query textarea
-    elements.sqlQueryTextarea.addEventListener("input", () => {
-      if (typeof autoResizeTextarea !== "undefined") {
-        autoResizeTextarea();
-      }
-    });
-  }
 
   // Handle messages from the extension
   window.addEventListener("message", handleExtensionMessage);
@@ -129,10 +108,9 @@ function handleGlobalKeyboard(e) {
   // Ctrl/Cmd + K to clear query
   if ((e.ctrlKey || e.metaKey) && e.key === "k") {
     e.preventDefault();
-    const elements = getAllDOMElements ? getAllDOMElements() : {};
-    if (elements.sqlQueryTextarea) {
-      elements.sqlQueryTextarea.value = "";
-      elements.sqlQueryTextarea.focus();
+    // Clear query through the Monaco editor if available
+    if (window.queryEditor && window.queryEditor.clearEditor) {
+      window.queryEditor.clearEditor();
     }
   }
 
@@ -250,19 +228,22 @@ function handleConnect() {
  */
 function handleExecuteQuery() {
   const elements = getAllDOMElements ? getAllDOMElements() : {};
-  const query = elements.sqlQueryTextarea
-    ? elements.sqlQueryTextarea.value.trim()
-    : "";
+
+  // Get query from enhanced editor if available, otherwise use fallback
+  let query = "";
+
+  if (
+    /** @type {any} */ (window).queryEditor &&
+    /** @type {any} */ (window).queryEditor.getValue
+  ) {
+    query = /** @type {any} */ (window).queryEditor.getValue().trim();
+  }
 
   if (!query) {
     if (typeof showError !== "undefined") {
       showError("Please enter a SQL query");
     }
     return;
-  }
-
-  if (typeof showLoading !== "undefined") {
-    showLoading("Executing query...");
   }
 
   // Send query to extension
@@ -279,10 +260,6 @@ function handleExecuteQuery() {
  * @param {Object} message - Update message
  */
 function handleUpdate(message) {
-  if (typeof hideLoading !== "undefined") {
-    hideLoading();
-  }
-
   // Reset connect button state
   const elements = getAllDOMElements ? getAllDOMElements() : {};
   if (elements.connectBtn) {
@@ -336,10 +313,6 @@ function handleUpdate(message) {
  */
 function handleDatabaseInfo(message) {
   console.log("handleDatabaseInfo called with message:", message);
-
-  if (typeof hideLoading !== "undefined") {
-    hideLoading();
-  }
 
   // Reset connect button state regardless of success/failure
   const elements = getAllDOMElements ? getAllDOMElements() : {};
@@ -409,11 +382,25 @@ function handleDatabaseInfo(message) {
  * @param {Object} message - Query result message
  */
 function handleQueryResult(message) {
-  if (typeof hideLoading !== "undefined") {
-    hideLoading();
-  }
-
   if (message.success) {
+    // Replace displayQueryResults to use modal
+    function displayQueryResults(data, columns) {
+      let html = "";
+      if (!data || data.length === 0) {
+        html = `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
+        window.showResultsModal(html);
+        return;
+      }
+      let table = "";
+      if (typeof createDataTable === "function") {
+        table = createDataTable(data, columns, "query-result");
+      } else {
+        table = "<div>Table rendering unavailable</div>";
+      }
+      html = `<div class="table-container">${table}</div>`;
+      window.showResultsModal(html);
+    }
+
     displayQueryResults(message.data, message.columns);
 
     const rowCount = message.data.length;
@@ -428,6 +415,60 @@ function handleQueryResult(message) {
       showError("Query execution failed");
     }
   }
+
+  // Dispatch event to notify query completion (for editor focus restoration)
+  const event = new CustomEvent("queryExecutionComplete", {
+    detail: {
+      success: message.success,
+      rowCount: message.success ? message.data.length : 0,
+    },
+  });
+  document.dispatchEvent(event);
+
+  // Additional direct focus restoration for Monaco editor
+  setTimeout(() => {
+    if (window.queryEditor && window.queryEditor.editor) {
+      const editor = window.queryEditor.editor;
+
+      // Force the editor to regain focus and responsiveness
+      try {
+        console.log("handleQueryResult: Restoring Monaco editor focus");
+
+        // Check if editor is still responsive
+        const model = editor.getModel();
+        if (model) {
+          // Force layout recalculation
+          editor.layout();
+
+          // Ensure editor has focus
+          if (!editor.hasTextFocus()) {
+            editor.focus();
+          }
+
+          // Make sure the editor's DOM is interactive
+          const editorDom = editor.getDomNode();
+          if (editorDom) {
+            const textarea = editorDom.querySelector("textarea");
+            if (textarea) {
+              // Briefly focus the internal textarea to ensure it's active
+              textarea.focus();
+              textarea.blur();
+              editor.focus();
+            }
+          }
+        }
+      } catch (error) {
+        console.error(
+          "handleQueryResult: Error restoring editor focus:",
+          error
+        );
+        // If restoration fails, trigger a refresh
+        if (window.queryEditor.refreshEditor) {
+          window.queryEditor.refreshEditor();
+        }
+      }
+    }
+  }, 100);
 }
 
 /**
@@ -626,39 +667,75 @@ function displayTablesList(tables) {
  * @param {Array} data - Query result data
  * @param {Array} columns - Column names
  */
+// Replace displayQueryResults to use modal
 function displayQueryResults(data, columns) {
-  const elements = getAllDOMElements ? getAllDOMElements() : {};
-  if (!elements.queryResults) {
-    return;
-  }
-
+  let html = "";
   if (!data || data.length === 0) {
-    elements.queryResults.innerHTML =
-      '<div class="info">Query returned no results</div>';
+    html = `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
+    window.showResultsModal(html);
+    return;
+  }
+  let table = "";
+  if (typeof createDataTable === "function") {
+    table = createDataTable(data, columns, "query-result");
+  } else {
+    table = "<div>Table rendering unavailable</div>";
+  }
+  html = `<div class="table-container">${table}</div>`;
+  window.showResultsModal(html);
+}
+
+/**
+ * Restore Monaco editor state after DOM manipulation
+ * @param {Object} editorState - Stored editor state
+ */
+function restoreEditorState(editorState) {
+  if (!window.queryEditor || !window.queryEditor.editor) {
     return;
   }
 
-  const table = createDataTable ? createDataTable(data, columns, "query") : "";
-  elements.queryResults.innerHTML = `
-    <div class="table-stats">
-      <div class="stat">
-        <div class="stat-label">Rows</div>
-        <div class="stat-value">${data.length}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Columns</div>
-        <div class="stat-value">${columns.length}</div>
-      </div>
-    </div>
-    ${table}
-  `;
+  try {
+    const editor = window.queryEditor.editor;
+    console.log("restoreEditorState: Restoring editor state", editorState);
 
-  // Initialize table features for the new table
-  const tableWrapper = elements.queryResults.querySelector(
-    ".enhanced-table-wrapper"
-  );
-  if (tableWrapper && typeof initializeTableEvents !== "undefined") {
-    initializeTableEvents(tableWrapper);
+    // Force layout recalculation
+    editor.layout();
+
+    // Restore position and selection
+    if (editorState.position) {
+      editor.setPosition(editorState.position);
+    }
+    if (editorState.selection) {
+      editor.setSelection(editorState.selection);
+    }
+
+    // Restore scroll position
+    if (editorState.scrollTop !== undefined) {
+      editor.setScrollTop(editorState.scrollTop);
+    }
+    if (editorState.scrollLeft !== undefined) {
+      editor.setScrollLeft(editorState.scrollLeft);
+    }
+
+    // Restore focus if it was focused before
+    if (editorState.hasFocus) {
+      editor.focus();
+
+      // Ensure the editor's internal textarea is properly focused
+      const editorDom = editor.getDomNode();
+      if (editorDom) {
+        const textarea = editorDom.querySelector("textarea");
+        if (textarea) {
+          textarea.focus();
+          textarea.blur();
+          editor.focus();
+        }
+      }
+    }
+
+    console.log("restoreEditorState: Editor state restored successfully");
+  } catch (error) {
+    console.error("restoreEditorState: Error restoring editor state:", error);
   }
 }
 

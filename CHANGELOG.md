@@ -2,7 +2,31 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
-## [Unreleased] - 2025-07-06
+## [0.2.8] - 2025-06-07
+
+### ✨ New Features
+
+- 📝 **Monaco-powered Query Editor**: The SQL query editor now uses Monaco Editor for a modern, full-featured experience
+  - Syntax highlighting, autocompletion, and SQL snippets
+  - Dynamic table/column name completions (auto-populated from your database)
+  - Floating action buttons and keyboard shortcuts (Ctrl+Enter to execute, Ctrl+K to clear, Ctrl+Shift+R to refresh, Ctrl+Alt+R for emergency fix)
+  - Results now appear in a modern modal dialog with advanced styling and animations
+  - Improved accessibility and keyboard navigation
+- 🖼️ **Query Results Modal**: Query results are now displayed in a modal dialog, not inline, for a cleaner and more focused workflow
+- 🧑‍💻 **UI/UX Improvements**:
+  - Query panel and editor layout updated for better usability
+  - CSS updated for modal, query editor, and floating buttons
+  - Query panel only visible when active; improved flex layout
+- 🛠️ **Backend/Extension Updates**:
+  - Extension loads Monaco Editor from CDN and injects the new enhanced query editor
+  - Secure CSP updated for Monaco and blob workers
+  - Backend now sends all table columns for completions
+- 📦 **Dependency Updates**:
+  - Added `monaco-editor` to dependencies
+- 🧹 **Documentation Cleanup**:
+  - Removed legacy guides: `CELL_EDITING_GUIDE.md`, `CONTEXT_MENU_GUIDE.md`, `FOREIGN_KEY_GUIDE.md`
+
+## [0.2.8] - 2025-06-07
 
 ### ✨ New Features
 
@@ -30,7 +54,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 - Improved table rendering to support foreign key metadata
 - Added comprehensive CSS styling for foreign key visual indicators
 
-## [0.2.7] - 2025-07-06
+## [0.2.7] - 2025-06-07
 
 ### Added
 
@@ -107,7 +131,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
   - Error handling for failed deletions with retry capability
   - Automatic table statistics updates for accurate row counts
 
-## [0.2.6] - 2025-07-06
+## [0.2.6] - 2025-06-07
 
 ### Added
 
@@ -144,7 +168,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
   - Complete table export for comprehensive data dumps
   - Formatted JSON for easy reading and debugging
 
-## [0.2.5] - 2025-07-06
+## [0.2.5] - 2025-06-07
 
 ### Added
 
@@ -197,7 +221,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
   - Column data copied with headers for data analysis
   - Automatic handling of NULL values and special characters
 
-## [0.2.4] - 2025-07-05
+## [0.2.4] - 2025-05-07
 
 ### Added
 
@@ -247,7 +271,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
   - Proper handling of concurrent edits and data conflicts
   - Maintains table state and pagination during edits
 
-## [0.2.3] - 2025-07-05
+## [0.2.3] - 2025-05-07
 
 ### Added
 
@@ -274,7 +298,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
   - Better tooltip positioning and styling for selected table indicator
   - Consistent visual feedback and hover states
 
-## [0.2.2] - 2025-07-05
+## [0.2.2] - 2025-05-07
 
 ### Refactored
 
@@ -295,7 +319,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
   - Updated comments to reflect D3-only implementation
   - Improved maintainability with single diagram system
 
-## [0.2.1] - 2025-07-05
+## [0.2.1] - 2025-05-07
 
 ### Added
 
@@ -349,7 +373,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 - Better separation of concerns in diagram generation
 - Responsive design improvements for mobile devices
 
-## [0.2.0] - 2025-07-05
+## [0.2.0] - 2025-05-07
 
 ### Added
 
@@ -388,7 +412,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 - Better error handling and state management
 - Optimized table rendering for large datasets
 
-## [0.0.1] - 2025-07-03
+## [0.0.1] - 2025-05-07
 
 ### Added
 

@@ -6,17 +6,21 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 
 - 📁 **Custom Editor for SQLite Files**: Automatically opens .db, .sqlite, and .sqlite3 files
 - 🔍 **Database Explorer**: Tree view showing tables and their types with smart selection
-- ⚡ **Query Editor**: Execute custom SQL queries with helpful examples and shortcuts
+- ⚡ **Query Editor (Now Monaco-powered!)**: Execute custom SQL queries with full Monaco Editor integration
+  - Syntax highlighting, autocompletion, and SQL snippets
+  - Dynamic table/column name completions
+  - Floating action buttons and keyboard shortcuts (Ctrl+Enter to execute, Ctrl+K to clear, Ctrl+Shift+R to refresh editor)
+  - Results now appear in a modern modal dialog
 - 📊 **Data Visualization**: View table data in a clean, sortable grid with statistics
 - ✏️ **Cell Editing**: Edit database cells directly in the table view with real-time updates
 - 📋 **Context Menu**: Right-click cells for copy operations and foreign key navigation
 - 🔗 **Foreign Key Navigation**: Click to navigate directly to referenced rows in related tables
 - 📄 **Advanced Pagination**: Handle large datasets with configurable page sizes (50-1000 records)
-- 🔐 **SQLCipher Support**: Connect to encrypted databases with password protection
+- 🔒 **SQLCipher Support**: Connect to encrypted databases with password protection
 - 🎨 **VS Code Theme Integration**: Matches your current VS Code theme perfectly
-- ⌨️ **Keyboard Shortcuts**: Ctrl/Cmd+Enter to execute, Ctrl/Cmd+K to clear queries
+- ⌨️ **Keyboard Shortcuts**: Ctrl/Cmd+Enter to execute, Ctrl/Cmd+K to clear queries, Ctrl+Shift+R to refresh editor
 - 🔄 **Real-time Feedback**: Connection status indicators and query execution feedback
-- 📋 **Smart Schema Display**: Automatic table info display when selecting tables
+- 📑 **Smart Schema Display**: Automatic table info display when selecting tables
 - 🔗 **Foreign Key Visualization**: Visual indicators for foreign key relationships with distinctive styling
 
 ## Installation
@@ -34,10 +38,17 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 2. Select **"Open SQLite Database"** from the context menu
 3. The database will open in a custom editor with full functionality
 
-### Alternative Methods
+### Query Editor (Monaco)
 
-- Use the Command Palette (Ctrl+Shift+P) and search for "SQLite Viewer: Open Database"
-- Simply double-click on a database file to open it with the custom editor
+- Write and execute custom SQL queries in a full Monaco Editor instance
+- Autocompletion for SQL keywords, table names, and column names
+- Use provided SQL snippets for common operations
+- Results are displayed in a modern modal dialog with statistics
+- Keyboard shortcuts:
+  - **Ctrl/Cmd + Enter**: Execute query
+  - **Ctrl/Cmd + K**: Clear editor
+  - **Ctrl+Shift+R**: Refresh editor if unresponsive
+  - **Ctrl+Alt+R**: Emergency fix for editor
 
 ### Features Overview
 
@@ -114,6 +125,8 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 
 - **Ctrl/Cmd + Enter**: Execute the current query
 - **Ctrl/Cmd + K**: Clear the query editor
+- **Ctrl+Shift+R**: Refresh the editor if unresponsive
+- **Ctrl+Alt+R**: Emergency fix for the editor
 - **Double-click**: Edit a data table cell (Data tab only)
 - **Enter or F2**: Start editing a selected cell (Data tab only)
 - **Enter**: Save cell changes

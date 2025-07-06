@@ -43,6 +43,29 @@
           addHelpButton();
         }
 
+        // Initialize enhanced query editor
+        if (typeof (/** @type {any} */ (window).QueryEditor) !== "undefined") {
+          console.log("Initializing enhanced query editor...");
+          /** @type {any} */ (window).queryEditor = new /** @type {any} */ (
+            window
+          ).QueryEditor();
+          /** @type {any} */ (window).queryEditor
+            .init()
+            .then(() => {
+              console.log("Enhanced query editor initialized successfully");
+              // Connect to existing buttons
+              connectQueryButtons();
+            })
+            .catch((error) => {
+              console.error(
+                "Failed to initialize enhanced query editor:",
+                error
+              );
+            });
+        } else {
+          console.warn("QueryEditor class not found, using fallback");
+        }
+
         // Initialize diagram functionality
         if (typeof initializeDiagram === "function") {
           initializeDiagram();
@@ -168,43 +191,35 @@
      * @param {object} result - Query result object
      */
     function displayQueryResult(result) {
-      const queryResults = document.getElementById("query-results");
-      if (!queryResults) {
-        return;
-      }
-
+      let html = '';
       if (result.error) {
-        queryResults.innerHTML = `
+        html = `
           <div class="error-message">
             <h3>Query Error</h3>
             <p>${result.error}</p>
           </div>
         `;
+        window.showResultsModal(html);
         return;
       }
-
       if (!result.data || result.data.length === 0) {
-        queryResults.innerHTML = `
+        html = `
           <div class="no-results">
             <h3>No Results</h3>
             <p>Query executed successfully but returned no data.</p>
           </div>
         `;
+        window.showResultsModal(html);
         return;
       }
-
-      // Create table with advanced features using table.js functions
       const columns = result.columns || Object.keys(result.data[0] || {});
-      let table = "";
-
-      if (typeof createDataTable === "function") {
-        table = createDataTable(result.data, columns, "query-result");
+      let table = '';
+      if (typeof createDataTable === 'function') {
+        table = createDataTable(result.data, columns, 'query-result');
       } else {
-        // Fallback basic table
         table = createBasicTable(result.data, columns);
       }
-
-      queryResults.innerHTML = `
+      html = `
         <div class="query-result-info">
           <div class="result-stats">
             <div class="stat-item">
@@ -221,14 +236,7 @@
           ${table}
         </div>
       `;
-
-      // Initialize table features if available
-      const tableWrapper = queryResults.querySelector(
-        ".enhanced-table-wrapper"
-      );
-      if (tableWrapper && typeof initializeTableEvents === "function") {
-        initializeTableEvents(tableWrapper);
-      }
+      window.showResultsModal(html);
     }
 
     /**

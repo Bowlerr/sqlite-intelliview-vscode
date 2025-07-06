@@ -118,7 +118,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; img-src ${webview.cspSource} data:; worker-src blob:; child-src blob:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${styleResetUri}" rel="stylesheet">
                 <link href="${stylesMainUri}" rel="stylesheet">
@@ -198,10 +198,19 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                                 <div id="query-panel" class="tab-panel">
                                     <div class="query-editor">
                                         <div class="query-controls">
-                                            <textarea id="sql-query" placeholder="Enter your SQL query here...&#10;&#10;Examples:&#10;• SELECT * FROM sqlite_master WHERE type='table';&#10;• SELECT * FROM [table_name] LIMIT 10;&#10;• PRAGMA table_info([table_name]);&#10;• SELECT COUNT(*) FROM [table_name];&#10;&#10;💡 Tips:&#10;• Use Ctrl+Enter (Cmd+Enter) to execute&#10;• Use Ctrl+F (Cmd+F) to search in table results&#10;• Click column headers to sort data&#10;• Use 📌 to pin important columns&#10;• Click on table names in sidebar to view schema"></textarea>
-                                            <div class="query-actions">
-                                                <button id="execute-query" class="primary-button">Execute Query</button>
-                                                <button id="clear-query" class="secondary-button">Clear</button>
+                                            <div class="editor-wrapper">
+                                                <div id="query-editor-container" class="query-editor-container"></div>
+                                                <div class="floating-query-buttons">
+                                                    <button id="execute-query" class="primary-button">
+                                                        <span class="button-icon">▶</span>
+                                                        Execute Query
+                                                        <span class="keyboard-shortcut">Ctrl+Enter</span>
+                                                    </button>
+                                                    <button id="clear-query" class="secondary-button">
+                                                        <span class="button-icon">🗑</span>
+                                                        Clear
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -238,6 +247,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <!-- Load D3.js for enhanced diagrams -->
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', 'd3', 'dist', 'd3.min.js'))}"></script>
                 
+                <!-- Load Monaco Editor -->
+                <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+                
                 <!-- Load modular JavaScript files in dependency order -->
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'state.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'dom.js'))}"></script>
@@ -249,6 +261,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'context-menu.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'diagram.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'enhanced-diagram.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'query-editor-enhanced.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'events.js'))}"></script>
                 
                 <!-- Main application script - loads last and uses functions from modules above -->
@@ -262,10 +275,30 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const dbService = await this.getOrCreateConnection(databasePath, key);
             const tables = await dbService.getTables();
 
+            // Fetch columns for all tables
+            const tableColumns: Record<string, string[]> = {};
+            for (const table of tables) {
+                try {
+                    const schema = await dbService.getTableSchema(table.name);
+                    // schema.values is an array of rows, each row is an array of column values
+                    // schema.columns is ["cid", "name", "type", ...]
+                    // We want the 'name' property from each row
+                    const nameIndex = schema.columns.indexOf("name");
+                    if (nameIndex !== -1) {
+                        tableColumns[table.name] = schema.values.map(row => row[nameIndex]);
+                    } else {
+                        tableColumns[table.name] = [];
+                    }
+                } catch (err) {
+                    tableColumns[table.name] = [];
+                }
+            }
+
             webviewPanel.webview.postMessage({
                 type: 'databaseInfo',
                 success: true,
-                tables: tables
+                tables: tables,
+                tableColumns: tableColumns
             });
         } catch (error) {
             // Close the connection if it failed
