@@ -8,7 +8,73 @@ This document describes the new context menu functionality that allows users to 
 
 - **Copy Cell**: Copies the value of the selected cell to the clipboard
 - **Copy Row**: Copies the entire row as tab-separated values
+- **Copy Row JSON**: Copies the entire row as a formatted JSON object with column names as keys
 - **Copy Column**: Copies the entire column including the header
+- **Copy Table JSON**: Copies the entire table as a JSON array of objects
+
+### Data Formats
+
+#### Tab-Separated Values (TSV)
+
+- Row data is copied with tab characters separating values
+- Perfect for pasting into spreadsheets or text editors
+- Preserves data structure for easy parsing
+
+#### JSON Format
+
+- Row JSON: Single object with column names as keys
+- Table JSON: Array of objects representing all rows
+- Proper null handling for empty cells
+- Formatted with 2-space indentation for readability
+- Ideal for API development and data analysis
+
+### JSON Format Examples
+
+#### Copy Row JSON
+
+For a row with employee data:
+
+```json
+{
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "age": 30,
+  "salary": 75000.5,
+  "department": "Engineering",
+  "hire_date": "2023-01-15",
+  "active": 1
+}
+```
+
+#### Copy Table JSON
+
+For multiple rows:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30,
+    "salary": 75000.5,
+    "department": "Engineering",
+    "hire_date": "2023-01-15",
+    "active": 1
+  },
+  {
+    "id": 2,
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "age": 28,
+    "salary": 82000.75,
+    "department": "Marketing",
+    "hire_date": "2023-02-20",
+    "active": 1
+  }
+]
+```
 
 ### User Experience
 
@@ -46,7 +112,9 @@ showContextMenu(x, y); // Show menu at coordinates
 hideContextMenu(); // Hide the menu
 copyCellValue(); // Copy selected cell value
 copyRowData(); // Copy entire row
+copyRowDataAsJSON(); // Copy entire row as JSON
 copyColumnData(); // Copy entire column
+copyTableDataAsJSON(); // Copy entire table as JSON
 ```
 
 ## Usage

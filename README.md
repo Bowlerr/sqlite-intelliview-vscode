@@ -1,4 +1,4 @@
-# SQLite Viewer
+# SQLite Vi- 📋 **Context Menu**: Right-click cells for copy operations (Copy Cell, Copy Row, Copy Row JSON, Copy Column, Copy Table JSON)wer
 
 A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination.
 
@@ -69,7 +69,7 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Real-time Updates**: Changes are immediately saved to the database
 - **Data Type Handling**: Automatic conversion for numbers, strings, and NULL values
 - **Read-only Protection**: Schema and query result tables are protected from editing
-- **Context Menu**: Right-click any cell to access copy operations (Copy Cell, Copy Row, Copy Column)
+- **Context Menu**: Right-click any cell to access copy operations (Copy Cell, Copy Row, Copy Row JSON, Copy Column, Copy Table JSON)
 - View table schema information
 - Row and column count statistics
 - Clean, responsive table display
@@ -91,7 +91,9 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 - **Right-click** any cell in a data table to open the context menu
 - **Copy Cell**: Copies the selected cell value to clipboard
 - **Copy Row**: Copies the entire row as tab-separated values
+- **Copy Row JSON**: Copies the entire row as a formatted JSON object
 - **Copy Column**: Copies the entire column including header
+- **Copy Table JSON**: Copies the entire table as a JSON array of objects
 - **Smart Positioning**: Menu automatically adjusts to stay within viewport
 - **Theme Integration**: Matches VS Code's current theme
 - **Keyboard Support**: Press Escape to close the menu

@@ -46,10 +46,18 @@ function createContextMenuElement() {
       <span class="icon">📄</span>
       <span>Copy Row</span>
     </div>
+    <div class="context-menu-item" data-action="copy-row-json">
+      <span class="icon">📋</span>
+      <span>Copy Row JSON</span>
+    </div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-action="copy-column">
       <span class="icon">🗂️</span>
       <span>Copy Column</span>
+    </div>
+    <div class="context-menu-item" data-action="copy-table-json">
+      <span class="icon">📊</span>
+      <span>Copy Table JSON</span>
     </div>
   `;
 
@@ -228,8 +236,14 @@ function executeContextMenuAction(action) {
     case "copy-row":
       copyRowData();
       break;
+    case "copy-row-json":
+      copyRowDataAsJSON();
+      break;
     case "copy-column":
       copyColumnData();
+      break;
+    case "copy-table-json":
+      copyTableDataAsJSON();
       break;
     default:
       console.log("Unknown context menu action:", action);
@@ -296,6 +310,96 @@ function copyColumnData() {
 
   const columnText = columnData.join("\n");
   copyToClipboard(columnText, "Column data copied");
+}
+
+/**
+ * Copy entire row data as JSON to clipboard
+ */
+function copyRowDataAsJSON() {
+  if (!currentRow) {
+    return;
+  }
+
+  const table = currentRow.closest(".data-table");
+  if (!table) {
+    return;
+  }
+
+  // Get column headers
+  const headers = table.querySelectorAll("thead th");
+  const columnNames = Array.from(headers).map((header) =>
+    getColumnHeaderText(header)
+  );
+
+  // Get row data
+  const cells = currentRow.querySelectorAll("td");
+  const rowData = Array.from(cells).map((cell) => {
+    const value = getCellDisplayValue(cell);
+    // Convert empty strings back to null for JSON representation
+    return value === "" ? null : value;
+  });
+
+  // Create JSON object
+  const rowObject = {};
+  columnNames.forEach((columnName, index) => {
+    if (index < rowData.length) {
+      rowObject[columnName] = rowData[index];
+    }
+  });
+
+  // Convert to formatted JSON
+  const jsonString = JSON.stringify(rowObject, null, 2);
+  copyToClipboard(jsonString, "Row data copied as JSON");
+}
+
+/**
+ * Copy entire table data as JSON to clipboard
+ */
+function copyTableDataAsJSON() {
+  if (!currentCell) {
+    return;
+  }
+
+  const table = currentCell.closest(".data-table");
+  if (!table) {
+    return;
+  }
+
+  // Get column headers
+  const headers = table.querySelectorAll("thead th");
+  const columnNames = Array.from(headers).map((header) =>
+    getColumnHeaderText(header)
+  );
+
+  // Get all rows
+  const rows = table.querySelectorAll("tbody tr");
+  const tableData = [];
+
+  rows.forEach((row) => {
+    const cells = row.querySelectorAll("td");
+    const rowData = Array.from(cells).map((cell) => {
+      const value = getCellDisplayValue(cell);
+      // Convert empty strings back to null for JSON representation
+      return value === "" ? null : value;
+    });
+
+    // Create row object
+    const rowObject = {};
+    columnNames.forEach((columnName, index) => {
+      if (index < rowData.length) {
+        rowObject[columnName] = rowData[index];
+      }
+    });
+
+    tableData.push(rowObject);
+  });
+
+  // Convert to formatted JSON
+  const jsonString = JSON.stringify(tableData, null, 2);
+  copyToClipboard(
+    jsonString,
+    `Table data copied as JSON (${tableData.length} rows)`
+  );
 }
 
 /**
@@ -418,7 +522,7 @@ function handleContextMenuKeyboard(e) {
  * @returns {Array} Available actions
  */
 function getContextMenuActions(cell) {
-  const actions = ["copy-cell", "copy-row"];
+  const actions = ["copy-cell", "copy-row", "copy-row-json"];
 
   // Add copy column action if we have multiple rows
   const table = cell.closest(".data-table");
@@ -426,6 +530,7 @@ function getContextMenuActions(cell) {
     const rows = table.querySelectorAll("tbody tr");
     if (rows.length > 1) {
       actions.push("copy-column");
+      actions.push("copy-table-json");
     }
   }
 
@@ -458,5 +563,7 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).hideContextMenu = hideContextMenu;
   /** @type {any} */ (window).copyCellValue = copyCellValue;
   /** @type {any} */ (window).copyRowData = copyRowData;
+  /** @type {any} */ (window).copyRowDataAsJSON = copyRowDataAsJSON;
   /** @type {any} */ (window).copyColumnData = copyColumnData;
+  /** @type {any} */ (window).copyTableDataAsJSON = copyTableDataAsJSON;
 }

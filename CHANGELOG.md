@@ -2,6 +2,43 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.6] - 2025-07-06
+
+### Added
+
+- 📋 **JSON Copy Operations**: Enhanced context menu with JSON data export
+  - **Copy Row JSON**: Right-click any cell to copy the entire row as a formatted JSON object
+  - **Copy Table JSON**: Copy the entire table as a JSON array of objects
+  - **Structured Data Format**: Column names become JSON keys, maintaining data relationships
+  - **Proper Null Handling**: Empty cells are represented as null values in JSON
+  - **Formatted Output**: JSON is formatted with proper indentation for readability
+  - **Data Type Preservation**: Numbers, strings, and null values are properly typed in JSON
+
+### Technical Implementation
+
+- 🔧 **Enhanced Context Menu**: Extended `media/context-menu.js` with JSON functionality
+
+  - Added `copyRowDataAsJSON()` function for single row JSON export
+  - Added `copyTableDataAsJSON()` function for complete table JSON export
+  - Proper column header mapping to JSON object keys
+  - Null value handling for empty cells
+  - JSON formatting with 2-space indentation
+
+- 🎨 **Updated Menu Interface**: Added new menu items with appropriate icons
+  - Copy Row JSON option with clipboard icon
+  - Copy Table JSON option with chart icon
+  - Proper menu item ordering and grouping
+  - Updated action handling for new copy operations
+
+### Enhanced User Experience
+
+- 🎯 **Developer-Friendly Data Export**: Perfect for API development and data analysis
+  - JSON format ideal for importing into other applications
+  - Properly structured data with column names as keys
+  - Single row export for focused data analysis
+  - Complete table export for comprehensive data dumps
+  - Formatted JSON for easy reading and debugging
+
 ## [0.2.5] - 2025-07-06
 
 ### Added
