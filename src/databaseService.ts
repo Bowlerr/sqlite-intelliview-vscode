@@ -347,6 +347,84 @@ export class DatabaseService {
         }
     }
 
+    async deleteRow(tableName: string, rowIdentifier: any): Promise<void> {
+        if (!this.db) {
+            throw new Error('Database not opened');
+        }
+
+        console.log(`[deleteRow] Starting row deletion:`, {
+            tableName,
+            rowIdentifier
+        });
+
+        // Sanitize table name
+        const sanitizedTableName = tableName.replace(/"/g, '""');
+        
+        try {
+            let deleteQuery: string;
+            let parameters: any[];
+
+            // Handle different types of row identifiers
+            if (typeof rowIdentifier === 'object' && rowIdentifier !== null) {
+                if (rowIdentifier.column && rowIdentifier.value !== undefined) {
+                    // Simple column-value identifier (e.g., {column: "id", value: 1})
+                    const sanitizedColumnName = rowIdentifier.column.replace(/"/g, '""');
+                    deleteQuery = `DELETE FROM "${sanitizedTableName}" WHERE "${sanitizedColumnName}" = ?`;
+                    parameters = [rowIdentifier.value];
+                } else {
+                    // Multiple column identifier (e.g., {name: "John", email: "john@example.com"})
+                    const whereConditions: string[] = [];
+                    parameters = [];
+                    
+                    for (const [columnName, value] of Object.entries(rowIdentifier)) {
+                        const sanitizedColumnName = columnName.replace(/"/g, '""');
+                        if (value === null) {
+                            whereConditions.push(`"${sanitizedColumnName}" IS NULL`);
+                        } else {
+                            whereConditions.push(`"${sanitizedColumnName}" = ?`);
+                            parameters.push(value);
+                        }
+                    }
+                    
+                    if (whereConditions.length === 0) {
+                        throw new Error('No valid identifier columns provided');
+                    }
+                    
+                    deleteQuery = `DELETE FROM "${sanitizedTableName}" WHERE ${whereConditions.join(' AND ')}`;
+                }
+            } else {
+                throw new Error('Invalid row identifier format');
+            }
+            
+            console.log(`[deleteRow] Executing query:`, deleteQuery);
+            console.log(`[deleteRow] Parameters:`, parameters);
+            
+            const stmt = this.db.prepare(deleteQuery);
+            stmt.run(parameters);
+            stmt.free();
+            
+            console.log(`[deleteRow] Delete query executed successfully`);
+            
+            // Verify the deletion by checking row count
+            const countQuery = `SELECT COUNT(*) as count FROM "${sanitizedTableName}"`;
+            const countStmt = this.db.prepare(countQuery);
+            const countResult = countStmt.step();
+            const rowCount = countResult ? countStmt.get()[0] : 0;
+            countStmt.free();
+            
+            console.log(`[deleteRow] Rows remaining in table: ${rowCount}`);
+            
+            // CRITICAL: Save changes back to the database file
+            await this.saveChangesToFile();
+            
+            console.log(`[deleteRow] Row deletion completed successfully`);
+            
+        } catch (error) {
+            console.error(`[deleteRow] Failed to delete row:`, error);
+            throw new Error(`Failed to delete row: ${error}`);
+        }
+    }
+
     /**
      * Save changes from the in-memory database back to the file
      */

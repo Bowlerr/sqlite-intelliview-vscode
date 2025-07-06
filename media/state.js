@@ -86,3 +86,11 @@ if (typeof module !== "undefined" && module.exports) {
     resetState,
   };
 }
+
+// Make functions available globally
+if (typeof window !== "undefined") {
+  /** @type {any} */ (window).getCurrentState = getCurrentState;
+  /** @type {any} */ (window).updateState = updateState;
+  /** @type {any} */ (window).initializeState = initializeState;
+  /** @type {any} */ (window).resetState = resetState;
+}

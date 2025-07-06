@@ -193,6 +193,12 @@ function handleExtensionMessage(event) {
     case "cellUpdateError":
       handleCellUpdateError(message);
       break;
+    case "deleteRowSuccess":
+      handleDeleteRowSuccess(message);
+      break;
+    case "deleteRowError":
+      handleDeleteRowError(message);
+      break;
     default:
       console.log("Unknown message type:", message.type);
   }
@@ -1115,6 +1121,40 @@ function handleCellUpdateError(message) {
   if (typeof showError !== "undefined") {
     showError(`Failed to update cell: ${message.message}`);
   }
+}
+
+/**
+ * Handle successful row deletion
+ * @param {Object} message - Success message from backend
+ */
+function handleDeleteRowSuccess(message) {
+  const { tableName, rowId } = message;
+
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).handleDeleteSuccess) === "function"
+  ) {
+    /** @type {any} */ (window).handleDeleteSuccess(message);
+  }
+
+  console.log(`Row deleted successfully from ${tableName}:`, rowId);
+}
+
+/**
+ * Handle failed row deletion
+ * @param {Object} message - Error message from backend
+ */
+function handleDeleteRowError(message) {
+  const { tableName, rowId } = message;
+
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).handleDeleteError) === "function"
+  ) {
+    /** @type {any} */ (window).handleDeleteError(message);
+  }
+
+  console.error(`Failed to delete row from ${tableName}:`, message.message);
 }
 
 /**

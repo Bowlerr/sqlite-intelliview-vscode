@@ -2,6 +2,80 @@
 
 All notable changes to the "SQLite Viewer" extension will be documented in this file.
 
+## [0.2.7] - 2025-07-06
+
+### Added
+
+- 🗑️ **Delete Row Functionality**: Enhanced context menu with row deletion capability
+  - **Delete Row**: Right-click any cell to delete the entire row with confirmation dialog
+  - **Custom Confirmation Dialog**: VS Code-compatible confirmation dialog replaces native confirm()
+  - **Smart Row Identification**: Automatically identifies rows using primary key or all column values
+  - **Real-time Database Updates**: Changes are immediately committed to the SQLite database
+  - **Visual Feedback**: Success notifications and error handling for deletion operations
+  - **Table Statistics Update**: Row counts and pagination automatically updated after deletion
+
+### Fixed
+
+- 🔧 **Confirmation Dialog Issue**: Fixed delete row confirmation not appearing
+
+  - **Custom Dialog Implementation**: Replaced native confirm() with custom VS Code-themed dialog
+  - **Webview Compatibility**: Native confirm() may not work in VS Code webviews
+  - **Enhanced UX**: Modal overlay with proper focus management and keyboard support
+  - **Themed Styling**: Danger button styling with VS Code color variables
+  - **Multiple Close Methods**: Dialog can be closed via Cancel, ESC key, or clicking outside
+
+- 🔧 **Delete Row Backend Communication**: Fixed delete row not executing
+  - **Missing Encryption Key**: Added missing encryption key parameter to delete row messages
+  - **State Management**: Made getCurrentState function globally available for context menu
+  - **Proper Message Format**: Delete row messages now include all required parameters
+  - **Backend Compatibility**: Ensures compatibility with encrypted database connections
+  - **SQL.js API Usage**: Fixed proper usage of SQL.js prepare/run API for delete operations
+  - **Database Persistence**: Ensures deleted rows are properly saved to database file
+
+### Technical Implementation
+
+- 🔧 **Backend Database Operations**: Enhanced database service with deletion capability
+
+  - Added `deleteRow()` method to DatabaseService for row deletion
+  - Smart row identification using primary key columns (id, rowid, \_id, pk)
+  - Fallback to complete row matching when no primary key is found
+  - Proper SQL sanitization and parameterized queries for security
+  - Transaction handling and file persistence for reliable operations
+
+- 🎨 **Enhanced Context Menu**: Extended context menu with delete functionality
+
+  - Added "Delete Row" option with danger styling (red color)
+  - Custom confirmation dialog with VS Code theme integration
+  - Modal overlay with proper focus management and accessibility
+  - Multiple dialog close methods (Cancel, ESC, click outside)
+  - Confirmation dialog with row details for user verification
+  - Proper error handling and user feedback system
+  - Integration with existing notification system
+  - Smart table name extraction from DOM elements
+
+- 📡 **Message System Extension**: Added delete row communication protocol
+
+  - New `deleteRow` message type for webview-to-extension communication
+  - `deleteRowSuccess` and `deleteRowError` response message types
+  - Proper error propagation and user feedback
+  - Integration with existing message handling architecture
+  - Fixed encryption key parameter passing for database connections
+
+- 🔧 **State Management Enhancement**: Improved global function availability
+  - Made `getCurrentState` function globally accessible for context menu
+  - Added proper window object assignments in state.js
+  - Enhanced cross-module communication for encrypted databases
+  - Ensures consistent state access across all webview modules
+
+### Enhanced User Experience
+
+- 🎯 **Safe Row Deletion**: Intuitive and secure row deletion workflow
+  - Clear confirmation dialog showing table name and first cell value
+  - Visual distinction for delete action (red coloring)
+  - Immediate visual feedback with row removal from table
+  - Error handling for failed deletions with retry capability
+  - Automatic table statistics updates for accurate row counts
+
 ## [0.2.6] - 2025-07-06
 
 ### Added

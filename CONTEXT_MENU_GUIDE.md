@@ -12,6 +12,29 @@ This document describes the new context menu functionality that allows users to 
 - **Copy Column**: Copies the entire column including the header
 - **Copy Table JSON**: Copies the entire table as a JSON array of objects
 
+### Data Operations
+
+- **Delete Row**: Permanently removes the selected row from the database with confirmation dialog
+
+#### Delete Row Confirmation
+
+The delete row feature includes a custom confirmation dialog that:
+
+- Shows the table name and first cell value for context
+- Displays a clear warning that the action cannot be undone
+- Uses VS Code-themed styling with danger colors for the delete button
+- Can be cancelled by clicking Cancel, pressing ESC, or clicking outside the dialog
+- Only proceeds with deletion when the Delete button is explicitly clicked
+
+**Note**: The custom confirmation dialog replaces the native `confirm()` function which may not be available in VS Code webviews.
+
+#### Technical Implementation Notes
+
+- **Encryption Key Support**: Delete operations automatically include the current encryption key for encrypted databases
+- **State Management**: The context menu has access to the global application state through `getCurrentState()`
+- **Message Protocol**: Uses the same message system as other database operations
+- **Error Handling**: Includes comprehensive error handling with user-friendly messages
+
 ### Data Formats
 
 #### Tab-Separated Values (TSV)
@@ -95,16 +118,34 @@ For multiple rows:
 
 ### CSS Classes
 
+#### Context Menu
+
 ```css
 .context-menu              /* Main menu container */
 .context-menu-item         /* Individual menu items */
 .context-menu-item:hover   /* Hover state for menu items */
+.context-menu-item-danger  /* Delete row item with danger styling */
 .context-menu-target       /* Highlighted cell */
 .context-menu-separator    /* Menu separator line */
 .context-menu.show         /* Menu animation class */
 ```
 
+#### Confirmation Dialog
+
+```css
+.confirm-dialog-overlay     /* Modal overlay backdrop */
+/* Modal overlay backdrop */
+.confirm-dialog            /* Dialog container */
+.confirm-dialog-message    /* Dialog message text */
+.confirm-dialog-buttons    /* Button container */
+.confirm-dialog-btn        /* Base button styling */
+.confirm-dialog-btn-cancel /* Cancel button */
+.confirm-dialog-btn-confirm; /* Delete button with danger styling */
+```
+
 ### JavaScript Functions
+
+#### Context Menu Functions
 
 ```javascript
 initializeContextMenu(); // Initialize context menu functionality
@@ -115,6 +156,16 @@ copyRowData(); // Copy entire row
 copyRowDataAsJSON(); // Copy entire row as JSON
 copyColumnData(); // Copy entire column
 copyTableDataAsJSON(); // Copy entire table as JSON
+```
+
+#### Delete Row Functions
+
+```javascript
+deleteRowWithConfirmation(); // Delete row with confirmation dialog
+showCustomConfirmDialog(message, onConfirm); // Show custom confirmation dialog
+executeRowDeletion(tableName, row); // Execute the actual deletion
+handleDeleteSuccess(); // Handle successful deletion
+handleDeleteError(); // Handle deletion errors
 ```
 
 ## Usage

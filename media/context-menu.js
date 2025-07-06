@@ -8,6 +8,7 @@
 let contextMenu = null;
 let currentCell = null;
 let currentRow = null;
+let pendingDeleteRow = null; // Store row being deleted until response comes back
 
 /**
  * Initialize context menu functionality
@@ -58,6 +59,11 @@ function createContextMenuElement() {
     <div class="context-menu-item" data-action="copy-table-json">
       <span class="icon">📊</span>
       <span>Copy Table JSON</span>
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item context-menu-item-danger" data-action="delete-row">
+      <span class="icon">🗑️</span>
+      <span>Delete Row</span>
     </div>
   `;
 
@@ -244,6 +250,9 @@ function executeContextMenuAction(action) {
       break;
     case "copy-table-json":
       copyTableDataAsJSON();
+      break;
+    case "delete-row":
+      deleteRowWithConfirmation();
       break;
     default:
       console.log("Unknown context menu action:", action);
@@ -534,6 +543,9 @@ function getContextMenuActions(cell) {
     }
   }
 
+  // Add delete row action for editable tables
+  actions.push("delete-row");
+
   return actions;
 }
 
@@ -557,6 +569,372 @@ function updateContextMenuItems(actions) {
   });
 }
 
+/**
+ * Delete row with confirmation dialog
+ */
+function deleteRowWithConfirmation() {
+  if (!currentRow || !currentCell) {
+    console.error("No current row or cell for deletion");
+    return;
+  }
+
+  const table = currentRow.closest(".data-table");
+  if (!table) {
+    console.error("Could not find table for current row");
+    return;
+  }
+
+  // Store row reference to prevent it from being lost
+  const rowToDelete = currentRow;
+  const cellToReference = currentCell;
+
+  // Get table name from the table ID or data attribute
+  const tableId = table.id || "";
+  const tableName = extractTableNameFromId(tableId);
+
+  if (!tableName) {
+    showDeleteError("Could not determine table name for deletion");
+    return;
+  }
+
+  // Get row data for confirmation display
+  const cells = rowToDelete.querySelectorAll("td");
+  const rowData = Array.from(cells).map((cell) => getCellDisplayValue(cell));
+  const firstCellValue = rowData[0] || "Unknown";
+
+  // Show confirmation dialog
+  const confirmMessage = `Are you sure you want to delete this row?\n\nTable: ${tableName}\nFirst cell: ${firstCellValue}\n\nThis action cannot be undone.`;
+
+  // Use custom confirmation dialog since VS Code webviews may restrict native confirm()
+  showCustomConfirmDialog(confirmMessage, () => {
+    console.log("Delete confirmed, executing row deletion...");
+    // Use the stored row reference instead of currentRow
+    executeRowDeletion(tableName, rowToDelete);
+  });
+}
+
+/**
+ * Execute the actual row deletion
+ * @param {string} tableName - Name of the table
+ * @param {HTMLTableRowElement} row - Row element to delete
+ */
+function executeRowDeletion(tableName, row) {
+  console.log("executeRowDeletion called with:", tableName, row);
+
+  if (!row) {
+    console.error("No row provided for deletion");
+    return;
+  }
+
+  // Store the row reference for when the response comes back
+  pendingDeleteRow = row;
+
+  // Get row identifier for deletion
+  const rowId = getRowIdentifier(row);
+
+  if (!rowId) {
+    showDeleteError("Could not identify row for deletion");
+    return;
+  }
+
+  // Debug logging
+  console.log("Row identifier generated:", rowId);
+
+  // Show loading state
+  showDeleteLoading();
+
+  // Get current encryption key from state
+  let currentState = {};
+  let encryptionKey = "";
+
+  try {
+    if (typeof (/** @type {any} */ (window).getCurrentState) === "function") {
+      currentState = (window)
+        /** @type {any} */ .getCurrentState();
+      encryptionKey = currentState.encryptionKey || "";
+    }
+  } catch (error) {
+    console.warn("Could not get current state:", error);
+  }
+
+  // Send deletion request to extension
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).vscode) !== "undefined"
+  ) {
+    const message = {
+      type: "deleteRow",
+      tableName: tableName,
+      rowId: rowId,
+      key: encryptionKey,
+    };
+    console.log("Sending delete message to extension:", message);
+    /** @type {any} */ (window).vscode.postMessage(message);
+  } else {
+    console.error(
+      "Cannot communicate with extension - vscode API not available"
+    );
+    showDeleteError("Cannot communicate with extension");
+  }
+}
+
+/**
+ * Get row identifier for deletion (usually the primary key)
+ * @param {HTMLTableRowElement} row - Row element
+ * @returns {Object|null} Row identifier object
+ */
+function getRowIdentifier(row) {
+  if (!row) {
+    return null;
+  }
+
+  const table = row.closest(".data-table");
+  if (!table) {
+    return null;
+  }
+
+  // Get column headers to find primary key or row ID
+  const headers = table.querySelectorAll("thead th");
+  const cells = row.querySelectorAll("td");
+
+  // Look for common primary key column names
+  const primaryKeyColumns = ["id", "rowid", "_id", "pk"];
+
+  for (let i = 0; i < headers.length && i < cells.length; i++) {
+    const header = /** @type {HTMLTableHeaderCellElement} */ (headers[i]);
+    const cell = /** @type {HTMLTableCellElement} */ (cells[i]);
+    const columnName = getColumnHeaderText(header).toLowerCase();
+    if (primaryKeyColumns.includes(columnName)) {
+      const cellValue = getCellDisplayValue(cell);
+      return {
+        column: columnName,
+        value: cellValue,
+      };
+    }
+  }
+
+  // If no primary key found, use all column values for identification
+  const rowIdentifier = {};
+  for (let i = 0; i < headers.length && i < cells.length; i++) {
+    const header = /** @type {HTMLTableHeaderCellElement} */ (headers[i]);
+    const cell = /** @type {HTMLTableCellElement} */ (cells[i]);
+    const columnName = getColumnHeaderText(header);
+    const cellValue = getCellDisplayValue(cell);
+    rowIdentifier[columnName] = cellValue === "" ? null : cellValue;
+  }
+
+  return rowIdentifier;
+}
+
+/**
+ * Extract table name from table ID
+ * @param {string} tableId - Table ID
+ * @returns {string|null} Table name
+ */
+function extractTableNameFromId(tableId) {
+  if (!tableId) {
+    return null;
+  }
+
+  // Table IDs are typically in format: "table-{tableName}-{timestamp}"
+  const match = tableId.match(/^table-(.+?)-\d+$/);
+  if (match) {
+    return match[1];
+  }
+
+  // Alternative format: "table-{tableName}"
+  const simpleMatch = tableId.match(/^table-(.+)$/);
+  if (simpleMatch) {
+    return simpleMatch[1];
+  }
+
+  return null;
+}
+
+/**
+ * Show delete loading state
+ */
+function showDeleteLoading() {
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).showSuccess) === "function"
+  ) {
+    /** @type {any} */ (window).showSuccess("Deleting row...");
+  }
+}
+
+/**
+ * Show delete success message
+ */
+function showDeleteSuccess() {
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).showSuccess) === "function"
+  ) {
+    /** @type {any} */ (window).showSuccess("Row deleted successfully");
+  }
+}
+
+/**
+ * Show delete error message
+ * @param {string} message - Error message
+ */
+function showDeleteError(message) {
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).showError) === "function"
+  ) {
+    /** @type {any} */ (window).showError(message);
+  } else {
+    console.error("Delete error:", message);
+  }
+}
+
+/**
+ * Handle successful row deletion
+ * @param {Object} response - Response from extension
+ */
+function handleDeleteSuccess(response) {
+  console.log("handleDeleteSuccess called with:", response);
+  showDeleteSuccess();
+
+  // Remove the row from the table using pendingDeleteRow
+  if (pendingDeleteRow) {
+    const table = pendingDeleteRow.closest(".data-table");
+    console.log("Removing row from table:", pendingDeleteRow);
+    pendingDeleteRow.remove();
+
+    // Update table statistics
+    if (table) {
+      updateTableStatistics(table);
+    }
+  } else {
+    console.warn("No pendingDeleteRow found to remove from UI");
+  }
+
+  // Clear references
+  pendingDeleteRow = null;
+  currentRow = null;
+  currentCell = null;
+}
+
+/**
+ * Handle row deletion error
+ * @param {Object} response - Error response from extension
+ */
+function handleDeleteError(response) {
+  console.log("handleDeleteError called with:", response);
+  showDeleteError(response.message || "Failed to delete row");
+
+  // Clear pending delete row on error
+  pendingDeleteRow = null;
+}
+
+/**
+ * Update table statistics after row deletion
+ * @param {HTMLTableElement} table - Table element
+ */
+function updateTableStatistics(table) {
+  if (!table) {
+    return;
+  }
+
+  const tableWrapper = table.closest(".enhanced-table-wrapper");
+  if (!tableWrapper) {
+    return;
+  }
+
+  // Update row count in table statistics
+  const rows = table.querySelectorAll("tbody tr");
+  const rowCount = rows.length;
+
+  const recordsInfo = tableWrapper.querySelector(".records-info .stat-value");
+  if (recordsInfo) {
+    recordsInfo.textContent = rowCount.toLocaleString();
+  }
+
+  // Update pagination if needed
+  if (
+    typeof window !== "undefined" &&
+    typeof (/** @type {any} */ (window).updatePaginationControls) === "function"
+  ) {
+    // This would need to be implemented to handle pagination updates
+    console.log("Row deleted, pagination may need updating");
+  }
+}
+
+/**
+ * Show custom confirmation dialog
+ * @param {string} message - Confirmation message
+ * @param {Function} onConfirm - Callback for when user confirms
+ */
+function showCustomConfirmDialog(message, onConfirm) {
+  // Create dialog elements
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-dialog-overlay";
+
+  const dialog = document.createElement("div");
+  dialog.className = "confirm-dialog";
+
+  const messageEl = document.createElement("div");
+  messageEl.className = "confirm-dialog-message";
+  messageEl.textContent = message;
+
+  const buttonsEl = document.createElement("div");
+  buttonsEl.className = "confirm-dialog-buttons";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "confirm-dialog-btn confirm-dialog-btn-cancel";
+  cancelBtn.textContent = "Cancel";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "confirm-dialog-btn confirm-dialog-btn-confirm";
+  confirmBtn.textContent = "Delete";
+
+  buttonsEl.appendChild(cancelBtn);
+  buttonsEl.appendChild(confirmBtn);
+
+  dialog.appendChild(messageEl);
+  dialog.appendChild(buttonsEl);
+  overlay.appendChild(dialog);
+
+  // Add event listeners
+  const closeDialog = () => {
+    overlay.remove();
+  };
+
+  cancelBtn.addEventListener("click", closeDialog);
+
+  confirmBtn.addEventListener("click", () => {
+    console.log("Delete button clicked in confirmation dialog");
+    closeDialog();
+    console.log("About to call onConfirm callback");
+    onConfirm();
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      closeDialog();
+    }
+  });
+
+  // Handle ESC key
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      closeDialog();
+      document.removeEventListener("keydown", handleKeyDown);
+    }
+  };
+
+  document.addEventListener("keydown", handleKeyDown);
+
+  // Add to DOM
+  document.body.appendChild(overlay);
+
+  // Focus confirm button
+  confirmBtn.focus();
+}
+
 // Make functions available globally
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).initializeContextMenu = initializeContextMenu;
@@ -566,4 +944,9 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).copyRowDataAsJSON = copyRowDataAsJSON;
   /** @type {any} */ (window).copyColumnData = copyColumnData;
   /** @type {any} */ (window).copyTableDataAsJSON = copyTableDataAsJSON;
+  /** @type {any} */ (window).deleteRowWithConfirmation =
+    deleteRowWithConfirmation;
+  /** @type {any} */ (window).showCustomConfirmDialog = showCustomConfirmDialog;
+  /** @type {any} */ (window).handleDeleteSuccess = handleDeleteSuccess;
+  /** @type {any} */ (window).handleDeleteError = handleDeleteError;
 }

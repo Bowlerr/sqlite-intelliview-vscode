@@ -2978,12 +2978,8 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
   }
 
   .empty-state-icon {
-    font-size: 3em;
+    font-size: 3rem;
     margin-bottom: 16px;
-  }
-
-  #diagram-container .empty-state {
-    padding: 40px 2rem 2rem 2rem;
   }
 }
 
@@ -3159,4 +3155,105 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
 
 .vscode-high-contrast .context-menu-item:hover {
   border: 1px solid var(--vscode-contrastActiveBorder);
+}
+
+/* Danger context menu item (delete row) styling */
+.context-menu-item-danger {
+  color: var(--vscode-errorForeground);
+}
+
+.context-menu-item-danger:hover {
+  background-color: var(--vscode-inputValidation-errorBackground);
+  color: var(--vscode-errorForeground);
+}
+
+.context-menu-item-danger:active {
+  background-color: var(--vscode-inputValidation-errorBorder);
+}
+
+/* ===== CUSTOM CONFIRMATION DIALOG ===== */
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.confirm-dialog {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  width: 90%;
+  padding: 20px;
+  font-family: var(--vscode-font-family);
+}
+
+.confirm-dialog-message {
+  color: var(--vscode-foreground);
+  margin-bottom: 20px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+
+.confirm-dialog-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-dialog-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--vscode-font-family);
+  transition: background-color 0.1s ease;
+}
+
+.confirm-dialog-btn-cancel {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.confirm-dialog-btn-cancel:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.confirm-dialog-btn-confirm {
+  background: var(--vscode-inputValidation-errorBackground);
+  color: var(--vscode-errorForeground);
+}
+
+.confirm-dialog-btn-confirm:hover {
+  background: var(--vscode-inputValidation-errorBorder);
+}
+
+.confirm-dialog-btn-confirm:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+/* Dark theme adjustments */
+.vscode-dark .confirm-dialog {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* High contrast theme adjustments */
+.vscode-high-contrast .confirm-dialog {
+  border: 2px solid var(--vscode-contrastBorder);
+  box-shadow: none;
+}
+
+.vscode-high-contrast .confirm-dialog-btn:focus {
+  outline: 2px solid var(--vscode-contrastActiveBorder);
 }

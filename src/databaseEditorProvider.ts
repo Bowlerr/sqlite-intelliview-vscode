@@ -66,6 +66,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
         // Handle messages from the webview
         webviewPanel.webview.onDidReceiveMessage(e => {
+            console.log(`[onDidReceiveMessage] Received message type: ${e.type}`, e);
+            
             switch (e.type) {
                 case 'requestDatabaseInfo':
                     this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath, e.key);
@@ -81,6 +83,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     return;
                 case 'updateCellData':
                     this.handleCellUpdateRequest(webviewPanel, document.uri.fsPath, e.tableName, e.rowIndex, e.columnName, e.newValue, e.key);
+                    return;
+                case 'deleteRow':
+                    console.log(`[onDidReceiveMessage] Processing deleteRow message`);
+                    this.handleDeleteRowRequest(webviewPanel, document.uri.fsPath, e.tableName, e.rowId, e.key);
                     return;
                 case 'generateERDiagram':
                     this.handleERDiagramRequest(webviewPanel, document.uri.fsPath, e.key);
@@ -540,6 +546,42 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 type: 'erDiagram',
                 success: false,
                 error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    }
+
+    private async handleDeleteRowRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, rowId: any, key?: string) {
+        console.log(`[handleDeleteRowRequest] Starting delete row request:`, {
+            databasePath,
+            tableName,
+            rowId,
+            hasKey: !!key
+        });
+
+        try {
+            const dbService = await this.getOrCreateConnection(databasePath, key);
+            
+            // Delete the row
+            console.log(`[handleDeleteRowRequest] Deleting row with identifier:`, rowId);
+            await dbService.deleteRow(tableName, rowId);
+            
+            // Send success response
+            webviewPanel.webview.postMessage({
+                type: 'deleteRowSuccess',
+                success: true,
+                tableName: tableName,
+                rowId: rowId
+            });
+            
+            console.log(`[handleDeleteRowRequest] Row deletion completed successfully`);
+        } catch (error) {
+            console.error(`[handleDeleteRowRequest] Row deletion failed:`, error);
+            webviewPanel.webview.postMessage({
+                type: 'deleteRowError',
+                success: false,
+                message: `Failed to delete row: ${error}`,
+                tableName: tableName,
+                rowId: rowId
             });
         }
     }
