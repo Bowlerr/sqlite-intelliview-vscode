@@ -6,249 +6,938 @@ This is a VS Code extension project. Please use the get_vscode_api with a query 
 
 ## Project Context
 
-This is a production-ready VS Code extension for viewing SQLite databases with SQLCipher support. The extension should:
+This is a production-ready VS Code extension for viewing and editing SQLite databases with SQLCipher support, advanced table pagination, and comprehensive cell editing capabilities. The extension provides a modern database management interface directly within VS Code.
 
-- Provide a modern UI that matches VS Code's design language
-- Support SQLite database file viewing (.db files)
-- Support SQLCipher encrypted databases with key input
-- Offer table browsing, query execution, and data visualization
-- Follow VS Code extension best practices and patterns
-- Use TypeScript for type safety and better development experience
-- Bundle with esbuild for optimal performance
+### Core Value Proposition
+
+- **Database-as-Code**: View and edit SQLite databases as easily as text files
+- **Zero Configuration**: Auto-detection and opening of database files
+- **Modern UI**: Clean, responsive interface that matches VS Code's design language
+- **Advanced Features**: Pagination, cell editing, ER diagrams, and data visualization
+- **Developer-Friendly**: Built with TypeScript, comprehensive testing, and extensible architecture
 
 ## Key Features
 
-- Custom editor for .db files
-- Tree view for database schema exploration
-- Query editor with syntax highlighting
-- Results grid with sorting/filtering
-- SQLCipher key management
-- Export functionality
-- Modern webview-based UI
+### 📁 **Database File Support**
 
-## Architecture
+- **File Types**: `.db`, `.sqlite`, `.sqlite3` files
+- **Custom Editor**: Automatic registration as default editor for SQLite files
+- **Context Menu**: Right-click integration in VS Code Explorer
+- **SQLCipher Support**: Encrypted database support with key management
 
-- Main extension in TypeScript
-- Webview for UI components with modular JavaScript structure
-- SQLite/SQLCipher integration via native modules
-- Command palette integration
-- File system watcher for database changes
+### 🔍 **Database Explorer**
 
-## Media Structure
+- **Tree View**: Hierarchical database structure display
+- **Smart Selection**: Click tables to view schema and data
+- **Real-time Updates**: Automatic refresh on database changes
+- **Connection Status**: Visual indicators for connection state
 
-The webview UI is organized into modular JavaScript files:
+### ⚡ **Query Editor**
 
-- `main.js` - Main entry point that includes all module code inline for webview bundling
-- `state.js` - State management module (application state, persistence)
-- `dom.js` - DOM utilities and element management
-- `notifications.js` - Notification system and help features
-- `utils.js` - Utility functions (formatting, validation, etc.)
-- `resizing.js` - UI resizing and layout management
-- `table.js` - Advanced table features (search, sort, export, pin, resize columns)
-- `events.js` - Event handling and message passing
-- `reset.css` - CSS reset styles
-- `vscode.css` - VS Code theme-compatible styles
+- **SQL Execution**: Full SQL query support with syntax highlighting
+- **Helpful Examples**: Pre-filled starter queries and tips
+- **Keyboard Shortcuts**: Ctrl/Cmd+Enter to execute, Ctrl/Cmd+K to clear
+- **Result Display**: Clean tabular results with statistics
 
-## Development Notes
+### 📊 **Advanced Data Visualization**
 
-- All JavaScript modules are designed to be included inline in `main.js` for webview compatibility
-- The extension uses a single bundled JavaScript file approach for the webview
-- Modules are organized by functionality for maintainability
-- State management is centralized in the state module
-- Table features include advanced functionality like column pinning, search, sorting, and data export
-- Event handling is separated for better organization and debugging
+- **Pagination**: Configurable page sizes (50-1000 records)
+- **Column Management**: Pinning, resizing, and reordering
+- **Search & Filter**: Global search and column-specific filtering
+- **Sorting**: Multi-state sorting with visual indicators
+- **Export**: CSV export with filtering preservation
 
-## Working with the Modular Structure
+### ✏️ **Cell Editing System**
 
-When making changes to the webview functionality:
+- **Inline Editing**: Double-click or F2 to edit cells directly
+- **Data Type Support**: Text, numbers, NULL values with auto-detection
+- **Real-time Updates**: Immediate database commits
+- **Visual Feedback**: Success/error states with proper UX
+- **Keyboard Navigation**: Full keyboard support for editing workflow
 
-1. **Edit individual module files** (state.js, dom.js, etc.) for specific functionality
-2. **Update main.js** to include any new module code inline
-3. **Maintain module boundaries** - keep related functionality grouped together
-4. **Use proper error handling** - wrap operations in try/catch blocks
-5. **Add debug logging** - use console.log for debugging webview issues
+### 🎨 **ER Diagram Visualization**
 
-## Module Responsibilities
+- **Interactive Diagrams**: D3.js-powered entity-relationship diagrams
+- **Auto-layout**: Intelligent positioning of tables and relationships
+- **Zoom & Pan**: Full navigation controls for large schemas
+- **Relationship Mapping**: Visual foreign key connections
+- **Export Options**: Save diagrams as images
 
-- **state.js**: Manages application state, persistence, and state updates
-- **dom.js**: DOM element references, tab switching, and UI utilities
-- **notifications.js**: User notifications, help system, and UI messages
-- **utils.js**: Pure utility functions for formatting, validation, and data processing
-- **resizing.js**: Window resizing, panel management, and layout adjustments
-- **table.js**: Advanced table features - search, sort, export, column management
-- **events.js**: Event listeners, message handling, and user interactions
+## Styling Architecture
 
-## Common Patterns
+### Single CSS File Approach ✅ CURRENT
 
-- Use TypeScript-style JSDoc comments for better IntelliSense
-- Null-check DOM elements before use
-- Use the global `vscode` API for extension communication
-- Cache DOM elements in the domElements object
-- Use the state management functions for persistent data
-- Handle errors gracefully with user-friendly messages
+The extension uses a **single CSS file architecture** with `media/vscode.css` containing all styles. This approach was chosen after attempting CSS modularization due to:
 
-## Extension Details
+- **Cascade Order Dependencies**: The styles rely on specific CSS rule ordering for proper visual hierarchy
+- **VS Code Theme Integration**: Complex interactions with VS Code's CSS custom properties work better in a cohesive file
+- **Component Interdependencies**: Tightly coupled UI components (sidebar, header, tables, tabs) require coordinated styling
+- **Extension Constraints**: VS Code webview context has limitations that make single-file CSS more reliable
 
-- **Name**: SQLite Viewer
-- **Version**: 0.0.1
-- **Publisher**: Production-ready VS Code extension
-- **VS Code Engine**: ^1.101.0
-- **License**: MIT
-- **Categories**: Data Science, Visualization, Other
+### `vscode.css` - Complete Styling Solution
 
-## File Support
+The single CSS file is organized into logical sections with clear comments:
 
-The extension supports the following SQLite file extensions:
+```css
+/* ===== ROOT VARIABLES ===== */
+:root {
+  --container-padding: 20px;
+  /* VS Code theme variables are used throughout */
+}
 
-- `.db` - Standard SQLite database files
-- `.sqlite` - SQLite database files
-- `.sqlite3` - SQLite3 database files
+/* ===== BASE STYLES ===== */
+/* Foundation styles for html, body, and basic elements */
 
-## Commands
+/* ===== LAYOUT CONTAINERS ===== */
+/* Main layout structure: container, header, main-content, main-panel */
 
-- `sqlite-viewer.openDatabase` - Open SQLite Database
-- `sqlite-viewer.connectWithKey` - Connect with SQLCipher Key
-- `sqlite-viewer.refreshDatabase` - Refresh Database
-- `sqlite-viewer.exportData` - Export Data
+/* ===== CONNECTION STATUS ===== */
+/* Database connection indicators and states */
 
-## Dependencies
+/* ===== SIDEBAR ===== */
+/* Resizable sidebar with tables list and controls */
 
-**Runtime Dependencies:**
+/* ===== TABS ===== */
+/* Tab navigation and content panels */
 
-- `sql.js` (^1.13.0) - SQLite compiled to JavaScript
-- `sqlite3` (^5.1.7) - Node.js SQLite3 bindings
+/* ===== QUERY EDITOR ===== */
+/* SQL query input and execution controls */
 
-**Development Dependencies:**
+/* ===== DATA TABLES ===== */
+/* Advanced table features: pagination, cell editing, sorting */
 
-- `esbuild` (^0.25.3) - Fast JavaScript bundler
-- `typescript` (^5.8.3) - TypeScript compiler
-- `eslint` (^9.25.1) - JavaScript/TypeScript linter
-- `npm-run-all` (^4.1.5) - Run multiple npm scripts
-- Various VS Code testing and type definition packages
+/* ===== PAGINATION ===== */
+/* Table pagination controls and navigation */
 
-## Build System
+/* ===== FORMS & INPUTS ===== */
+/* Input fields, buttons, and form controls */
 
-- **Primary Build**: esbuild for fast bundling and minification
-- **Type Checking**: TypeScript compiler with strict mode enabled
-- **Linting**: ESLint with TypeScript parser
-- **Watch Mode**: Parallel watching of TypeScript and esbuild
-- **Production**: Minified bundle with no source maps
-- **Development**: Source maps enabled for debugging
+/* ===== NOTIFICATIONS ===== */
+/* Alert system and user feedback */
 
-## Scripts
+/* ===== ER DIAGRAMS ===== */
+/* D3.js diagram styling and interactions */
 
-- `npm run compile` - Full build with type checking and linting
-- `npm run watch` - Development mode with file watching
-- `npm run package` - Production build
-- `npm run lint` - Run ESLint
-- `npm run test` - Run extension tests
+/* ===== LOADING STATES ===== */
+/* Loading animations and error states */
 
-## Source Structure
+/* ===== RESPONSIVE DESIGN ===== */
+/* Media queries for different screen sizes */
+```
 
-- `src/extension.ts` - Main extension entry point
-- `src/databaseEditorProvider.ts` - Custom editor provider for .db files
-- `src/databaseExplorerProvider.ts` - Tree view provider for database schema
-- `src/databaseService.ts` - SQLite database operations and queries
-- `src/test/` - Extension test suite
-- `media/` - Webview assets (HTML, CSS, JavaScript modules)
-- `dist/` - Compiled output directory
+### Key Features of the Single CSS File
 
-## Configuration
+- **Organized Sections**: Clear section headers and logical grouping
+- **VS Code Theme Integration**: Extensive use of `--vscode-*` custom properties
+- **Component States**: Comprehensive state management (hover, active, disabled, etc.)
+- **Responsive Design**: Mobile-first approach with breakpoints
+- **Accessibility**: Focus indicators and contrast compliance
+- **Performance**: Single file load with optimal cascade order
 
-- **TypeScript**: ES2022 target, Node16 modules, strict type checking
-- **ESBuild**: CommonJS format, Node.js platform, VS Code external
-- **ESLint**: TypeScript parser with recommended rules
+### CSS Development Workflow
 
-## VS Code Integration
+1. **Locate the correct section** in `vscode.css`:
 
-The extension integrates deeply with VS Code through:
+   - Use section comments to find relevant styles
+   - Components are grouped logically (layout → sidebar → tables → forms)
+   - States and variants are defined after base component styles
 
-- **Custom Editor**: Registers as default editor for SQLite files
-- **Explorer Context Menu**: Right-click options for database files
-- **Database Explorer View**: Tree view in the Explorer panel
-- **Command Palette**: All commands available via Ctrl+Shift+P
-- **Theme Integration**: Automatically matches VS Code's active theme
-- **Keyboard Shortcuts**:
-  - Ctrl/Cmd+Enter: Execute query
-  - Ctrl/Cmd+K: Clear query
-  - Ctrl/Cmd+F: Search in table results
-  - Escape: Close notifications
-  - ?: Show help (help button in header)
+2. **Maintain section organization**:
 
-## Error Handling
+   - Keep related styles together within sections
+   - Add new components in the appropriate section
+   - Use consistent naming conventions
 
-The extension implements comprehensive error handling:
+3. **Test theme compatibility**:
 
-- **Database Connection**: Graceful handling of connection failures
-- **SQLCipher Decryption**: User-friendly error messages for wrong keys
-- **Query Execution**: Syntax error reporting with helpful suggestions
-- **File Operations**: Proper error handling for file access issues
-- **WebView Communication**: Robust message passing between extension and UI
+   - Verify styles work in both light and dark themes
+   - Test high contrast theme compatibility
+   - Ensure proper contrast ratios for accessibility
 
-## Performance Considerations
+4. **CSS Best Practices**:
+   - Use VS Code CSS custom properties for theme-aware values
+   - Follow existing naming conventions and specificity levels
+   - Keep cascade order intact when adding new rules
+   - Comment complex or non-obvious style rules
 
-- **Lazy Loading**: Database schema and data loaded on demand
-- **Caching**: Table schemas cached to reduce database queries
-- **Pagination**: Large result sets handled with pagination
-- **Debouncing**: Search and filter operations debounced for performance
-- **Memory Management**: Proper cleanup of database connections
+### Common CSS Patterns
 
-## Testing
+```css
+/* Component base styles */
+.component-name {
+  /* Base styles using VS Code theme variables */
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-panel-border);
+}
 
-The extension includes:
+/* Component states */
+.component-name:hover {
+  background: var(--vscode-list-hoverBackground);
+}
 
-- **Unit Tests**: Core functionality testing
-- **Integration Tests**: Extension activation and command testing
-- **WebView Tests**: UI component testing
-- **Database Tests**: SQLite operations testing
-- **VS Code Test Runner**: Integrated with VS Code test framework
+.component-name.active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
 
-## Debugging
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .component-name {
+    /* Mobile-specific styles */
+  }
+}
+```
 
-For development and debugging:
+### Migration from Modular CSS
 
-- **Console Logging**: Extensive logging in both extension and webview
-- **Source Maps**: Available in development builds
-- **VS Code DevTools**: WebView debugging support
-- **Error Reporting**: Detailed error messages with stack traces
-- **State Inspection**: Global objects available for debugging
+**⚠️ IMPORTANT**: The project previously attempted to split CSS into modular files (`media/styles/`), but this approach was abandoned due to:
 
-## Advanced Table Features
+- **Cascade conflicts**: CSS rules were overriding each other unexpectedly
+- **Missing dependencies**: Critical styles were separated from their dependencies
+- **Loading order issues**: CSS files loaded in wrong order causing layout problems
+- **Theme integration problems**: VS Code theme variables didn't work properly across files
 
-The extension includes comprehensive table functionality:
+If you encounter references to modular CSS files or the `media/styles/` directory in documentation or code, these should be updated to reference the single `vscode.css` file.
 
-### 🔍 **Advanced Search & Filtering**
+## Technical Architecture
 
-- **Global Search**: Search across all table data with highlighted results
-- **Column Filtering**: Filter individual columns by specific values
-- **Real-time Results**: See filtered row counts instantly
-- **Keyboard Shortcut**: `Ctrl+F` / `Cmd+F` to focus search
+### Core Dependencies
 
-### 📌 **Column Management**
+- **SQL.js**: Primary database engine for webview compatibility
+- **better-sqlite3**: Native SQLite binding for better performance in Node.js context
+- **sqlite3**: Legacy SQLite binding for compatibility
+- **D3.js**: Advanced data visualization and ER diagram rendering
+- **TypeScript**: Primary development language with strict type checking
+- **ESBuild**: Fast bundling and compilation for production builds
 
-- **Column Pinning**: Keep key columns visible while scrolling with 📌 button
-- **Column Resizing**: Drag resize handles to adjust column widths
-- **Visual Indicators**: Pinned columns have distinctive styling
-- **Sticky Positioning**: Pinned columns stay in place during horizontal scroll
+### Database Engine Architecture
 
-### 🔄 **Advanced Sorting**
+The extension uses a **hybrid database approach** for optimal performance:
 
-- **Click to Sort**: Click any column header to sort data
-- **Multiple Sort States**: None → Ascending → Descending → None
-- **Smart Sorting**: Handles text, numbers, and NULL values correctly
-- **Visual Indicators**: Sort direction arrows (↑/↓) in headers
+1. **SQL.js in Webview**: JavaScript-based SQLite engine that runs in the webview context
 
-### 💾 **Data Export**
+   - Enables database operations directly in the browser-like environment
+   - Handles encrypted databases through temporary decryption
+   - Cross-platform compatibility without native bindings
 
-- **CSV Export**: Export visible/filtered data to CSV format
-- **Automatic Download**: Files download directly to Downloads folder
-- **Preserves Filtering**: Only exports currently visible rows
-- **Proper Escaping**: Handles commas, quotes, and special characters
+2. **Native SQLite in Extension Host**: Better performance for backend operations
+   - Uses `better-sqlite3` for high-performance database operations
+   - Handles SQLCipher encrypted databases with native libraries
+   - Provides reliable database file management
 
-### 📊 **Enhanced Display**
+### File Structure & Responsibilities
 
-- **Row Statistics**: Show visible vs total rows
-- **Column Information**: Display column counts
-- **Hover Highlighting**: Better row/column highlighting
-- **NULL Value Styling**: Distinctive styling for NULL values
-- **Scrollable Containers**: Better handling of large datasets
+```
+src/
+├── extension.ts              # Extension entry point, command registration
+├── databaseEditorProvider.ts # Custom editor provider, webview management
+├── databaseExplorerProvider.ts # Tree view provider for database structure
+├── databaseService.ts        # Core database operations and SQL execution
+└── test/
+    └── extension.test.ts     # Basic extension tests (needs expansion)
+
+media/
+├── main.js                   # Webview entry point and app initialization
+├── state.js                  # Application state management
+├── events.js                 # Event handling and user interactions
+├── table.js                  # Table rendering and cell editing
+├── diagram.js                # Basic ER diagram functionality
+├── enhanced-diagram.js       # Advanced D3.js diagram features
+├── resizable-sidebar.js      # UI component for sidebar resizing
+├── resizing.js               # Column resizing functionality
+├── notifications.js          # User feedback and notification system
+├── utils.js                  # Utility functions and helpers
+├── dom.js                    # DOM manipulation helpers
+└── vscode.css               # Single consolidated stylesheet
+```
+
+### Message Passing Architecture
+
+The extension uses VS Code's webview message passing system for communication:
+
+**Extension Host → Webview**:
+
+- `databaseData`: Table data and schema information
+- `queryResult`: SQL query execution results
+- `cellUpdateSuccess`/`cellUpdateError`: Cell editing feedback
+- `connectionStatus`: Database connection state changes
+
+**Webview → Extension Host**:
+
+- `executeQuery`: SQL query execution requests
+- `updateCellData`: Cell editing update requests
+- `requestTableData`: Table data requests with pagination
+- `getDatabaseSchema`: Schema information requests
+
+### Build System
+
+- **ESBuild**: Fast TypeScript compilation and bundling
+- **Watch Mode**: Parallel TypeScript checking and ESBuild compilation
+- **Production Build**: Minified bundle with source maps disabled
+- **Extension Packaging**: VS Code extension packaging with `vsce`
+
+### Testing Architecture
+
+The project uses multiple testing approaches:
+
+1. **VS Code Extension Tests**: Standard VS Code extension test suite
+
+   - Located in `src/test/extension.test.ts`
+   - Uses VS Code's test framework with Mocha
+
+2. **Integration Tests**: Custom Node.js scripts for database operations
+
+   - Files like `test_cell_editing.js`, `test_pagination.js`
+   - Test real database operations without VS Code dependency
+   - Can be run independently with `node test_*.js`
+
+3. **Manual Testing**: Sample databases and SQL files
+   - `sample.db`, `test_*.db`: Various test databases
+   - `create_encrypted.sql`, `sample.sql`: Database setup scripts
+
+## Testing Strategy
+
+### Test File Organization
+
+The project uses a **multi-layered testing approach** with different types of tests:
+
+1. **Integration Tests** (`test_*.js` files):
+
+   - **Purpose**: Test database operations without VS Code dependency
+   - **Examples**: `test_cell_editing.js`, `test_pagination.js`, `test_encrypted.db`
+   - **Usage**: `node test_filename.js`
+   - **Benefits**: Fast execution, isolated testing, CI/CD friendly
+
+2. **Extension Tests** (`src/test/extension.test.ts`):
+
+   - **Purpose**: Test VS Code extension integration
+   - **Framework**: Mocha with VS Code test runner
+   - **Usage**: `npm test`
+   - **Scope**: Command registration, provider initialization, basic functionality
+
+3. **Manual Testing** (Sample databases):
+   - **Purpose**: End-to-end user experience testing
+   - **Files**: `sample.db`, `example_large.db`, `test_encrypted.db`
+   - **Usage**: Open files in VS Code to test extension behavior
+
+### Test Database Files
+
+```
+sample.db              # Basic SQLite database with sample data
+test_encrypted.db      # SQLCipher encrypted database for testing
+example_large.db       # Large dataset for pagination testing
+test_complete_flow.db  # Full feature testing database
+test_with_relationships.db # Foreign key relationship testing
+```
+
+### Writing New Tests
+
+1. **Integration Tests**:
+
+   ```javascript
+   #!/usr/bin/env node
+   const sqlite3 = require("sqlite3").verbose();
+   const path = require("path");
+
+   function testNewFeature() {
+     const dbPath = path.join(__dirname, "test_database.db");
+     const db = new sqlite3.Database(dbPath);
+
+     // Test implementation
+     db.run("INSERT INTO ...", (err) => {
+       if (err) {
+         console.error("Test failed:", err);
+         return;
+       }
+       console.log("✅ Test passed");
+     });
+   }
+
+   testNewFeature();
+   ```
+
+2. **Extension Tests**:
+
+   ```typescript
+   import * as assert from "assert";
+   import * as vscode from "vscode";
+
+   suite("New Feature Tests", () => {
+     test("Should handle new functionality", async () => {
+       // Test VS Code extension behavior
+       const result = await vscode.commands.executeCommand("your-command");
+       assert.strictEqual(result, expectedValue);
+     });
+   });
+   ```
+
+## Deployment and Distribution
+
+### Extension Packaging
+
+1. **Build Process**:
+
+   ```bash
+   npm run package    # Creates optimized production build
+   vsce package      # Creates .vsix extension package
+   ```
+
+2. **Package Configuration** (`package.json`):
+   - **Publisher**: Update with your VS Code Marketplace publisher ID
+   - **Version**: Follow semantic versioning (major.minor.patch)
+   - **Repository**: Update GitHub repository URLs
+   - **Categories**: Data Science, Visualization, Other
+
+### VS Code Marketplace
+
+1. **Publisher Setup**:
+
+   - Create publisher account at https://marketplace.visualstudio.com/manage
+   - Update `package.json` with publisher name
+   - Configure repository and homepage URLs
+
+2. **Extension Metadata**:
+   - **Display Name**: User-friendly extension name
+   - **Description**: Clear, concise feature description
+   - **Keywords**: Searchable terms (sqlite, database, viewer, etc.)
+   - **Categories**: Proper categorization for discoverability
+
+### Release Management
+
+1. **Version Strategy**:
+
+   - **Major**: Breaking changes or major feature additions
+   - **Minor**: New features, backward compatible
+   - **Patch**: Bug fixes, minor improvements
+
+2. **Changelog Management**:
+   - Update `CHANGELOG.md` with each release
+   - Document breaking changes clearly
+   - Include migration instructions when needed
+
+### Platform Compatibility
+
+1. **Operating Systems**:
+
+   - **Windows**: Native SQLite bindings support
+   - **macOS**: Full functionality with native libraries
+   - **Linux**: Tested on Ubuntu, should work on other distributions
+
+2. **VS Code Versions**:
+   - **Minimum**: VS Code 1.101.0 (specified in package.json)
+   - **Testing**: Test against latest stable and insider builds
+   - **API Usage**: Uses stable VS Code APIs only
+
+## Security Considerations
+
+### Database Security
+
+1. **SQLCipher Support**:
+
+   - Encryption keys stored in memory only
+   - Temporary decrypted files cleaned up automatically
+   - No key persistence or logging
+
+2. **SQL Injection Prevention**:
+   - Parameterized queries for user input
+   - Input validation and sanitization
+   - Limited SQL execution permissions
+
+### Extension Security
+
+1. **File Access**:
+
+   - Only reads user-selected database files
+   - No automatic file system scanning
+   - Respects VS Code security policies
+
+2. **Network Security**:
+   - No external network requests
+   - All operations are local-only
+   - No telemetry or data collection
+
+### User Privacy
+
+1. **Data Handling**:
+
+   - Database content never leaves user's machine
+   - No cloud storage or external services
+   - Local processing only
+
+2. **Logging**:
+   - Debug information only in development
+   - No sensitive data in logs
+   - User can disable logging if needed
+
+## Performance Guidelines
+
+### Database Operations
+
+1. **Query Optimization**:
+
+   - Use LIMIT/OFFSET for pagination
+   - Create indexes for frequently queried columns
+   - Avoid SELECT \* when possible
+
+2. **Connection Management**:
+   - Reuse connections when possible
+   - Proper connection cleanup
+   - Handle connection timeouts gracefully
+
+### UI Performance
+
+1. **Table Rendering**:
+
+   - Virtual scrolling for large datasets
+   - Efficient DOM updates
+   - Debounced user input handling
+
+2. **Memory Management**:
+   - Clean up event listeners
+   - Dispose of unused resources
+   - Monitor memory usage in large datasets
+
+### Best Practices
+
+1. **Code Organization**:
+
+   - Modular architecture for maintainability
+   - Clear separation of concerns
+   - Consistent naming conventions
+
+2. **Error Handling**:
+
+   - Graceful degradation on errors
+   - User-friendly error messages
+   - Comprehensive logging for debugging
+
+3. **Documentation**:
+   - Clear code comments
+   - API documentation
+   - User guides and examples
+
+## Common CSS Patterns
+
+```css
+/* Component base styles */
+.component-name {
+  /* Base styles using VS Code theme variables */
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+/* Component states */
+.component-name:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.component-name.active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .component-name {
+    /* Mobile-specific styles */
+  }
+}
+```
+
+### Migration from Modular CSS
+
+**⚠️ IMPORTANT**: The project previously attempted to split CSS into modular files (`media/styles/`), but this approach was abandoned due to:
+
+- **Cascade conflicts**: CSS rules were overriding each other unexpectedly
+- **Missing dependencies**: Critical styles were separated from their dependencies
+- **Loading order issues**: CSS files loaded in wrong order causing layout problems
+- **Theme integration problems**: VS Code theme variables didn't work properly across files
+
+If you encounter references to modular CSS files or the `media/styles/` directory in documentation or code, these should be updated to reference the single `vscode.css` file.
+
+## Technical Architecture
+
+### Core Dependencies
+
+- **SQL.js**: Primary database engine for webview compatibility
+- **better-sqlite3**: Native SQLite binding for better performance in Node.js context
+- **sqlite3**: Legacy SQLite binding for compatibility
+- **D3.js**: Advanced data visualization and ER diagram rendering
+- **TypeScript**: Primary development language with strict type checking
+- **ESBuild**: Fast bundling and compilation for production builds
+
+### Database Engine Architecture
+
+The extension uses a **hybrid database approach** for optimal performance:
+
+1. **SQL.js in Webview**: JavaScript-based SQLite engine that runs in the webview context
+
+   - Enables database operations directly in the browser-like environment
+   - Handles encrypted databases through temporary decryption
+   - Cross-platform compatibility without native bindings
+
+2. **Native SQLite in Extension Host**: Better performance for backend operations
+   - Uses `better-sqlite3` for high-performance database operations
+   - Handles SQLCipher encrypted databases with native libraries
+   - Provides reliable database file management
+
+### File Structure & Responsibilities
+
+```
+src/
+├── extension.ts              # Extension entry point, command registration
+├── databaseEditorProvider.ts # Custom editor provider, webview management
+├── databaseExplorerProvider.ts # Tree view provider for database structure
+├── databaseService.ts        # Core database operations and SQL execution
+└── test/
+    └── extension.test.ts     # Basic extension tests (needs expansion)
+
+media/
+├── main.js                   # Webview entry point and app initialization
+├── state.js                  # Application state management
+├── events.js                 # Event handling and user interactions
+├── table.js                  # Table rendering and cell editing
+├── diagram.js                # Basic ER diagram functionality
+├── enhanced-diagram.js       # Advanced D3.js diagram features
+├── resizable-sidebar.js      # UI component for sidebar resizing
+├── resizing.js               # Column resizing functionality
+├── notifications.js          # User feedback and notification system
+├── utils.js                  # Utility functions and helpers
+├── dom.js                    # DOM manipulation helpers
+└── vscode.css               # Single consolidated stylesheet
+```
+
+### Message Passing Architecture
+
+The extension uses VS Code's webview message passing system for communication:
+
+**Extension Host → Webview**:
+
+- `databaseData`: Table data and schema information
+- `queryResult`: SQL query execution results
+- `cellUpdateSuccess`/`cellUpdateError`: Cell editing feedback
+- `connectionStatus`: Database connection state changes
+
+**Webview → Extension Host**:
+
+- `executeQuery`: SQL query execution requests
+- `updateCellData`: Cell editing update requests
+- `requestTableData`: Table data requests with pagination
+- `getDatabaseSchema`: Schema information requests
+
+### Build System
+
+- **ESBuild**: Fast TypeScript compilation and bundling
+- **Watch Mode**: Parallel TypeScript checking and ESBuild compilation
+- **Production Build**: Minified bundle with source maps disabled
+- **Extension Packaging**: VS Code extension packaging with `vsce`
+
+### Testing Architecture
+
+The project uses multiple testing approaches:
+
+1. **VS Code Extension Tests**: Standard VS Code extension test suite
+
+   - Located in `src/test/extension.test.ts`
+   - Uses VS Code's test framework with Mocha
+
+2. **Integration Tests**: Custom Node.js scripts for database operations
+
+   - Files like `test_cell_editing.js`, `test_pagination.js`
+   - Test real database operations without VS Code dependency
+   - Can be run independently with `node test_*.js`
+
+3. **Manual Testing**: Sample databases and SQL files
+   - `sample.db`, `test_*.db`: Various test databases
+   - `create_encrypted.sql`, `sample.sql`: Database setup scripts
+
+## Testing Strategy
+
+### Test File Organization
+
+The project uses a **multi-layered testing approach** with different types of tests:
+
+1. **Integration Tests** (`test_*.js` files):
+
+   - **Purpose**: Test database operations without VS Code dependency
+   - **Examples**: `test_cell_editing.js`, `test_pagination.js`, `test_encrypted.db`
+   - **Usage**: `node test_filename.js`
+   - **Benefits**: Fast execution, isolated testing, CI/CD friendly
+
+2. **Extension Tests** (`src/test/extension.test.ts`):
+
+   - **Purpose**: Test VS Code extension integration
+   - **Framework**: Mocha with VS Code test runner
+   - **Usage**: `npm test`
+   - **Scope**: Command registration, provider initialization, basic functionality
+
+3. **Manual Testing** (Sample databases):
+   - **Purpose**: End-to-end user experience testing
+   - **Files**: `sample.db`, `example_large.db`, `test_encrypted.db`
+   - **Usage**: Open files in VS Code to test extension behavior
+
+### Test Database Files
+
+```
+sample.db              # Basic SQLite database with sample data
+test_encrypted.db      # SQLCipher encrypted database for testing
+example_large.db       # Large dataset for pagination testing
+test_complete_flow.db  # Full feature testing database
+test_with_relationships.db # Foreign key relationship testing
+```
+
+### Writing New Tests
+
+1. **Integration Tests**:
+
+   ```javascript
+   #!/usr/bin/env node
+   const sqlite3 = require("sqlite3").verbose();
+   const path = require("path");
+
+   function testNewFeature() {
+     const dbPath = path.join(__dirname, "test_database.db");
+     const db = new sqlite3.Database(dbPath);
+
+     // Test implementation
+     db.run("INSERT INTO ...", (err) => {
+       if (err) {
+         console.error("Test failed:", err);
+         return;
+       }
+       console.log("✅ Test passed");
+     });
+   }
+
+   testNewFeature();
+   ```
+
+2. **Extension Tests**:
+
+   ```typescript
+   import * as assert from "assert";
+   import * as vscode from "vscode";
+
+   suite("New Feature Tests", () => {
+     test("Should handle new functionality", async () => {
+       // Test VS Code extension behavior
+       const result = await vscode.commands.executeCommand("your-command");
+       assert.strictEqual(result, expectedValue);
+     });
+   });
+   ```
+
+## Deployment and Distribution
+
+### Extension Packaging
+
+1. **Build Process**:
+
+   ```bash
+   npm run package    # Creates optimized production build
+   vsce package      # Creates .vsix extension package
+   ```
+
+2. **Package Configuration** (`package.json`):
+   - **Publisher**: Update with your VS Code Marketplace publisher ID
+   - **Version**: Follow semantic versioning (major.minor.patch)
+   - **Repository**: Update GitHub repository URLs
+   - **Categories**: Data Science, Visualization, Other
+
+### VS Code Marketplace
+
+1. **Publisher Setup**:
+
+   - Create publisher account at https://marketplace.visualstudio.com/manage
+   - Update `package.json` with publisher name
+   - Configure repository and homepage URLs
+
+2. **Extension Metadata**:
+   - **Display Name**: User-friendly extension name
+   - **Description**: Clear, concise feature description
+   - **Keywords**: Searchable terms (sqlite, database, viewer, etc.)
+   - **Categories**: Proper categorization for discoverability
+
+### Release Management
+
+1. **Version Strategy**:
+
+   - **Major**: Breaking changes or major feature additions
+   - **Minor**: New features, backward compatible
+   - **Patch**: Bug fixes, minor improvements
+
+2. **Changelog Management**:
+   - Update `CHANGELOG.md` with each release
+   - Document breaking changes clearly
+   - Include migration instructions when needed
+
+### Platform Compatibility
+
+1. **Operating Systems**:
+
+   - **Windows**: Native SQLite bindings support
+   - **macOS**: Full functionality with native libraries
+   - **Linux**: Tested on Ubuntu, should work on other distributions
+
+2. **VS Code Versions**:
+   - **Minimum**: VS Code 1.101.0 (specified in package.json)
+   - **Testing**: Test against latest stable and insider builds
+   - **API Usage**: Uses stable VS Code APIs only
+
+## Security Considerations
+
+### Database Security
+
+1. **SQLCipher Support**:
+
+   - Encryption keys stored in memory only
+   - Temporary decrypted files cleaned up automatically
+   - No key persistence or logging
+
+2. **SQL Injection Prevention**:
+   - Parameterized queries for user input
+   - Input validation and sanitization
+   - Limited SQL execution permissions
+
+### Extension Security
+
+1. **File Access**:
+
+   - Only reads user-selected database files
+   - No automatic file system scanning
+   - Respects VS Code security policies
+
+2. **Network Security**:
+   - No external network requests
+   - All operations are local-only
+   - No telemetry or data collection
+
+### User Privacy
+
+1. **Data Handling**:
+
+   - Database content never leaves user's machine
+   - No cloud storage or external services
+   - Local processing only
+
+2. **Logging**:
+   - Debug information only in development
+   - No sensitive data in logs
+   - User can disable logging if needed
+
+## Performance Guidelines
+
+### Database Operations
+
+1. **Query Optimization**:
+
+   - Use LIMIT/OFFSET for pagination
+   - Create indexes for frequently queried columns
+   - Avoid SELECT \* when possible
+
+2. **Connection Management**:
+   - Reuse connections when possible
+   - Proper connection cleanup
+   - Handle connection timeouts gracefully
+
+### UI Performance
+
+1. **Table Rendering**:
+
+   - Virtual scrolling for large datasets
+   - Efficient DOM updates
+   - Debounced user input handling
+
+2. **Memory Management**:
+   - Clean up event listeners
+   - Dispose of unused resources
+   - Monitor memory usage in large datasets
+
+### Best Practices
+
+1. **Code Organization**:
+
+   - Modular architecture for maintainability
+   - Clear separation of concerns
+   - Consistent naming conventions
+
+2. **Error Handling**:
+
+   - Graceful degradation on errors
+   - User-friendly error messages
+   - Comprehensive logging for debugging
+
+3. **Documentation**:
+   - Clear code comments
+   - API documentation
+   - User guides and examples
+
+## Common Implementation Patterns
+
+### Adding New Database Operations
+
+1. **Backend** (`src/databaseService.ts`):
+
+   ```typescript
+   async newOperation(params: any): Promise<any> {
+     // Implement database operation
+     return result;
+   }
+   ```
+
+2. **Message Handling** (`src/databaseEditorProvider.ts`):
+
+   ```typescript
+   case 'newOperation':
+     const result = await this.databaseService.newOperation(data);
+     webviewPanel.webview.postMessage({ type: 'newOperationResult', data: result });
+     break;
+   ```
+
+3. **Frontend** (`media/main.js` or relevant module):
+
+   ```javascript
+   // Send message to backend
+   vscode.postMessage({ type: "newOperation", data: params });
+
+   // Handle response
+   window.addEventListener("message", (event) => {
+     if (event.data.type === "newOperationResult") {
+       // Handle the result
+     }
+   });
+   ```
+
+### Adding New UI Components
+
+1. **Styles** (`media/vscode.css`):
+
+   ```css
+   /* Add to appropriate section */
+   .new-component {
+     background: var(--vscode-editor-background);
+     /* ... styles using VS Code theme variables */
+   }
+   ```
+
+2. **JavaScript** (create new file or add to existing):
+
+   ```javascript
+   function renderNewComponent(data) {
+     // Component rendering logic
+   }
+
+   function initializeNewComponent() {
+     // Component initialization
+   }
+   ```
+
+3. **Integration** (`media/main.js`):
+   ```javascript
+   // Call initialization function
+   if (typeof initializeNewComponent === "function") {
+     initializeNewComponent();
+   }
+   ```
