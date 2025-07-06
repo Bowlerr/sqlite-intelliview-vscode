@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * Event handling for the SQLite Viewer
+ * Event handling for the SQLite IntelliView
  */
 
 /**

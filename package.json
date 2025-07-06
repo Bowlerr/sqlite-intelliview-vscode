@@ -1,6 +1,6 @@
 {
-  "name": "sqlite-viewer",
-  "displayName": "SQLite Viewer",
+  "name": "sqlite-intelliview-vscode",
+  "displayName": "SQLite IntelliView",
   "description": "A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination",
   "version": "0.2.0",
   "publisher": "your-publisher-name",
@@ -11,12 +11,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/sqlite-viewer.git"
+    "url": "https://github.com/your-username/sqlite-intelliview-vscode.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/sqlite-viewer/issues"
+    "url": "https://github.com/your-username/sqlite-intelliview-vscode/issues"
   },
-  "homepage": "https://github.com/your-username/sqlite-viewer#readme",
+  "homepage": "https://github.com/your-username/sqlite-intelliview-vscode#readme",
   "keywords": [
     "sqlite",
     "database",
@@ -41,30 +41,30 @@
   "contributes": {
     "commands": [
       {
-        "command": "sqlite-viewer.openDatabase",
+        "command": "sqlite-intelliview-vscode.openDatabase",
         "title": "Open SQLite Database",
-        "category": "SQLite Viewer"
+        "category": "SQLite IntelliView"
       },
       {
-        "command": "sqlite-viewer.connectWithKey",
+        "command": "sqlite-intelliview-vscode.connectWithKey",
         "title": "Connect with SQLCipher Key",
-        "category": "SQLite Viewer"
+        "category": "SQLite IntelliView"
       },
       {
-        "command": "sqlite-viewer.refreshDatabase",
+        "command": "sqlite-intelliview-vscode.refreshDatabase",
         "title": "Refresh Database",
-        "category": "SQLite Viewer"
+        "category": "SQLite IntelliView"
       },
       {
-        "command": "sqlite-viewer.exportData",
+        "command": "sqlite-intelliview-vscode.exportData",
         "title": "Export Data",
-        "category": "SQLite Viewer"
+        "category": "SQLite IntelliView"
       }
     ],
     "customEditors": [
       {
-        "viewType": "sqlite-viewer.databaseEditor",
-        "displayName": "SQLite Database Viewer",
+        "viewType": "sqlite-intelliview-vscode.databaseEditor",
+        "displayName": "SQLite Database IntelliView",
         "selector": [
           {
             "filenamePattern": "*.db"
@@ -82,9 +82,9 @@
     "views": {
       "explorer": [
         {
-          "id": "sqlite-viewer.databaseExplorer",
+          "id": "sqlite-intelliview-vscode.databaseExplorer",
           "name": "Database Explorer",
-          "when": "sqlite-viewer.hasOpenDatabase",
+          "when": "sqlite-intelliview-vscode.hasOpenDatabase",
           "icon": "$(database)"
         }
       ]
@@ -92,15 +92,15 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "sqlite-viewer.openDatabase",
+          "command": "sqlite-intelliview-vscode.openDatabase",
           "when": "resourceExtname == .db || resourceExtname == .sqlite || resourceExtname == .sqlite3",
           "group": "1_open"
         }
       ],
       "view/title": [
         {
-          "command": "sqlite-viewer.refreshDatabase",
-          "when": "view == sqlite-viewer.databaseExplorer",
+          "command": "sqlite-intelliview-vscode.refreshDatabase",
+          "when": "view == sqlite-intelliview-vscode.databaseExplorer",
           "group": "navigation",
           "icon": "$(refresh)"
         }

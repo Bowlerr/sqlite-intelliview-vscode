@@ -85,7 +85,7 @@ export class DatabaseExplorerProvider implements vscode.TreeDataProvider<Databas
             this.currentTables = await this.databaseService.getTables();
             
             // Set context to show the tree view
-            vscode.commands.executeCommand('setContext', 'sqlite-viewer.hasOpenDatabase', true);
+            vscode.commands.executeCommand('setContext', 'sqlite-intelliview-vscode.hasOpenDatabase', true);
             this.refresh();
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open database: ${error}`);
@@ -97,7 +97,7 @@ export class DatabaseExplorerProvider implements vscode.TreeDataProvider<Databas
         this.databaseService.closeDatabase();
         this.currentDatabase = undefined;
         this.currentTables = [];
-        vscode.commands.executeCommand('setContext', 'sqlite-viewer.hasOpenDatabase', false);
+        vscode.commands.executeCommand('setContext', 'sqlite-intelliview-vscode.hasOpenDatabase', false);
         this.refresh();
     }
 

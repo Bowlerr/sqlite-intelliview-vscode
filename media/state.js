@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * State management for the SQLite Viewer
+ * State management for the SQLite IntelliView
  */
 
 // Reference to the current state

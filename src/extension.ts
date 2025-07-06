@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('SQLite Viewer extension is now active!');
+	console.log('SQLite IntelliView extension is now active!');
 
 	// Initialize the database explorer provider
 	databaseExplorerProvider = new DatabaseExplorerProvider();
@@ -21,14 +21,14 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(DatabaseEditorProvider.register(context));
 
 	// Register the tree view
-	const treeView = vscode.window.createTreeView('sqlite-viewer.databaseExplorer', {
+	const treeView = vscode.window.createTreeView('sqlite-intelliview-vscode.databaseExplorer', {
 		treeDataProvider: databaseExplorerProvider,
 		showCollapseAll: true
 	});
 	context.subscriptions.push(treeView);
 
 	// Register commands
-	const openDatabaseCommand = vscode.commands.registerCommand('sqlite-viewer.openDatabase', async (uri?: vscode.Uri) => {
+	const openDatabaseCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.openDatabase', async (uri?: vscode.Uri) => {
 		let databasePath: string;
 
 		if (uri) {
@@ -60,11 +60,11 @@ export function activate(context: vscode.ExtensionContext) {
 			});
 		} catch (error) {
 			// If opening as text document fails, try to open with custom editor directly
-			await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(databasePath), 'sqlite-viewer.databaseEditor');
+			await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(databasePath), 'sqlite-intelliview-vscode.databaseEditor');
 		}
 	});
 
-	const connectWithKeyCommand = vscode.commands.registerCommand('sqlite-viewer.connectWithKey', async () => {
+	const connectWithKeyCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.connectWithKey', async () => {
 		const encryptionKey = await vscode.window.showInputBox({
 			prompt: 'Enter SQLCipher encryption key',
 			password: true,
@@ -87,12 +87,12 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	const refreshDatabaseCommand = vscode.commands.registerCommand('sqlite-viewer.refreshDatabase', () => {
+	const refreshDatabaseCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.refreshDatabase', () => {
 		databaseExplorerProvider.refresh();
 		vscode.window.showInformationMessage('Database explorer refreshed');
 	});
 
-	const exportDataCommand = vscode.commands.registerCommand('sqlite-viewer.exportData', async () => {
+	const exportDataCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.exportData', async () => {
 		const tables = databaseExplorerProvider.getCurrentTables();
 		if (tables.length === 0) {
 			vscode.window.showWarningMessage('No database is currently open');
@@ -122,7 +122,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	// Show welcome message
-	vscode.window.showInformationMessage('SQLite Viewer is ready! Right-click on .db files to open them.');
+	vscode.window.showInformationMessage('SQLite IntelliView is ready! Right-click on .db files to open them.');
 }
 
 // This method is called when your extension is deactivated

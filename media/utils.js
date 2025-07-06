@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * Utility functions for the SQLite Viewer
+ * Utility functions for the SQLite IntelliView
  */
 
 /**

@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "SQLite Viewer" extension will be documented in this file.
+All notable changes to the "SQLite IntelliView" extension will be documented in this file.
 
 ## [0.2.8] - 2025-06-07
 
@@ -416,7 +416,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 
 ### Added
 
-- 🎉 Initial release of SQLite Viewer extension
+- 🎉 Initial release of SQLite IntelliView extension
 - 📁 Custom editor for .db, .sqlite, and .sqlite3 files
 - 🔍 Database Explorer tree view with tables
 - ⚡ SQL Query editor with execution capabilities
@@ -468,7 +468,7 @@ All notable changes to the "SQLite Viewer" extension will be documented in this 
 
 ### Version 0.0.1
 
-This is the initial release of the SQLite Viewer extension. The extension provides a complete solution for viewing and querying SQLite databases directly within VS Code.
+This is the initial release of the SQLite IntelliView extension. The extension provides a complete solution for viewing and querying SQLite databases directly within VS Code.
 
 **Key Features:**
 

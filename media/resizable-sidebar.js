@@ -212,7 +212,7 @@ class ResizableSidebar {
         isMinimized: this.isMinimized,
       };
       localStorage.setItem(
-        "sqlite-viewer-sidebar-state",
+        "sqlite-intelliview-vscode-sidebar-state",
         JSON.stringify(state)
       );
     } catch (error) {
@@ -222,7 +222,7 @@ class ResizableSidebar {
 
   loadSavedState() {
     try {
-      const savedState = localStorage.getItem("sqlite-viewer-sidebar-state");
+      const savedState = localStorage.getItem("sqlite-intelliview-vscode-sidebar-state");
       if (savedState) {
         const state = JSON.parse(savedState);
 

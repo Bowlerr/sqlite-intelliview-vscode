@@ -1,12 +1,12 @@
 // @ts-check
 
 /**
- * Main entry point for SQLite Viewer webview
+ * Main entry point for SQLite IntelliView webview
  * Uses functions from modular files loaded before this script
  */
 
 (function () {
-  console.log("SQLite Viewer: Starting main initialization...");
+  console.log("SQLite IntelliView: Starting main initialization...");
 
   try {
     // @ts-ignore - acquireVsCodeApi is provided by VS Code webview runtime
@@ -20,10 +20,10 @@
     // ============================================================================
 
     /**
-     * Initialize the SQLite Viewer application
+     * Initialize the SQLite IntelliView application
      */
     function initializeApp() {
-      console.log("Initializing SQLite Viewer application...");
+      console.log("Initializing SQLite IntelliView application...");
 
       try {
         // Initialize modules (functions from loaded JS files)
@@ -89,7 +89,7 @@
         // Set up message handling from extension (delegated to events.js)
         // The events.js module will handle window.addEventListener("message", handleExtensionMessage)
 
-        console.log("SQLite Viewer initialized successfully");
+        console.log("SQLite IntelliView initialized successfully");
 
         // Load initial data
         loadInitialData();
@@ -424,11 +424,11 @@
       };
     }
   } catch (error) {
-    console.error("SQLite Viewer: Fatal error during initialization:", error);
+    console.error("SQLite IntelliView: Fatal error during initialization:", error);
     // Show error in the UI
     document.body.innerHTML = `
       <div style="padding: 20px; color: #f48771; background: #2d1b1b; border-radius: 4px; margin: 20px;">
-        <h3>SQLite Viewer Error</h3>
+        <h3>SQLite IntelliView Error</h3>
         <p>Failed to initialize the extension: ${error.message}</p>
         <p>Please check the webview console for more details.</p>
       </div>

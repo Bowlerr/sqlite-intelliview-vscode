@@ -5,7 +5,7 @@ import { DatabaseService } from './databaseService';
 
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
     
-    private static readonly viewType = 'sqlite-viewer.databaseEditor';
+    private static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
     private activeConnections: Map<string, DatabaseService> = new Map();
     
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
@@ -122,14 +122,14 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${styleResetUri}" rel="stylesheet">
                 <link href="${stylesMainUri}" rel="stylesheet">
-                <title>SQLite Database Viewer</title>
+                <title>SQLite IntelliView</title>
             </head>
             <body>
                 <div class="container">
                     <div class="header">
                         <div class="header-left">
                             <div class="title-row">
-                                <h1>SQLite Database Viewer</h1>
+                                <h1>SQLite IntelliView</h1>
                                 <div class="header-controls">
                                     <div class="connection-status-container">
                                         <div id="connection-status" class="connection-status disconnected">Disconnected</div>

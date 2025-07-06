@@ -1,4 +1,4 @@
-# SQLite Viewer
+# SQLite IntelliView
 
 A production-ready VS Code extension for viewing SQLite databases with SQLCipher support and advanced table pagination.
 
@@ -27,7 +27,7 @@ A production-ready VS Code extension for viewing SQLite databases with SQLCipher
 
 1. Open VS Code
 2. Go to Extensions (Ctrl+Shift+X)
-3. Search for "SQLite Viewer"
+3. Search for "SQLite IntelliView"
 4. Install the extension
 
 ## Usage
@@ -159,8 +159,8 @@ To test the extension, you can create a sample database:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/sqlite-viewer.git
-cd sqlite-viewer
+git clone https://github.com/your-username/sqlite-intelliview-vscode.git
+cd sqlite-intelliview-vscode
 
 # Install dependencies
 npm install
@@ -207,9 +207,9 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and version history.
 
 ## Support
 
-- 🐛 [Report Issues](https://github.com/your-username/sqlite-viewer/issues)
-- 💡 [Feature Requests](https://github.com/your-username/sqlite-viewer/issues)
-- 📖 [Documentation](https://github.com/your-username/sqlite-viewer/wiki)
+- 🐛 [Report Issues](https://github.com/your-username/sqlite-intelliview-vscode/issues)
+- 💡 [Feature Requests](https://github.com/your-username/sqlite-intelliview-vscode/issues)
+- 📖 [Documentation](https://github.com/your-username/sqlite-intelliview-vscode/wiki)
 
 ---
 
