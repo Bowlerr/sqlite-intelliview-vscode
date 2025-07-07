@@ -4,6 +4,8 @@ All notable changes to the "SQLite IntelliView" extension will be documented in 
 
 ## [Unreleased]
 
+## [0.2.12] - 2025-07-07
+
 ### 🐛 Bug Fixes
 
 - Fixed issue where the data tab would open with 1000 results instead of the intended 100.
