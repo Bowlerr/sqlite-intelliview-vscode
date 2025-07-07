@@ -22,7 +22,7 @@ jobs:
       - name: TypeScript Check
         run: npm run check-types
       - name: Build
-        run: npm run compile
+        run: npm run build
       - name: Test
         run: xvfb-run -a npm test
       - name: Package Extension
