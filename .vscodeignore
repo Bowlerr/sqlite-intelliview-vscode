@@ -12,3 +12,10 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+# Un-ignore sql.js WASM and JS files for packaging
+!node_modules/sql.js/dist/sql-wasm.wasm
+!node_modules/sql.js/dist/sql-wasm.js
+!node_modules/sql.js/dist/sql-asm.js
+!node_modules/sql.js/dist/sql-asm-debug.js
+!node_modules/sql.js/dist/sql-wasm-debug.wasm
+!node_modules/sql.js/dist/sql-wasm-debug.js
