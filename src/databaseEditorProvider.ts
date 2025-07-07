@@ -245,7 +245,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 </div>
                 
                 <!-- Load D3.js for enhanced diagrams -->
-                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', 'd3', 'dist', 'd3.min.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'd3.min.js'))}"></script>
                 
                 <!-- Load Monaco Editor -->
                 <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
