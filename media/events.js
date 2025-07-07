@@ -650,10 +650,13 @@ function displayTablesList(tables) {
             type: "getTableSchema",
             tableName: tableName,
           });
-        }
-
-        if (typeof switchTab !== "undefined") {
-          switchTab("schema");
+          // Also request table data to refresh the Data tab
+          vscode.postMessage({
+            type: "getTableData",
+            tableName: tableName,
+            page: 1,
+            pageSize: 100,
+          });
         }
       }
     });

@@ -8,6 +8,7 @@ All notable changes to the "SQLite IntelliView" extension will be documented in 
 
 - Fixed issue where the data tab would open with 1000 results instead of the intended 100.
 - Removed duplicate inline table statistics from the Data tab (cleaned up both JavaScript logic and CSS styling).
+- Fixed issue where the active tab would automatically switch to the schema tab when selecting a table in the sidebar. Now, the tab remains unchanged and only the data/schema refreshes.
 
 ## [0.2.11] - 2025-07-07
 
