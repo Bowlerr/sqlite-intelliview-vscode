@@ -2,6 +2,18 @@
 
 All notable changes to the "SQLite IntelliView" extension will be documented in this file.
 
+## [0.2.9] - 2025-07-07
+
+### 🛠️ Packaging Fix
+- Added the following to `.vscodeignore` to ensure required sql.js WASM and JS files are included in the extension package:
+  - `# Un-ignore sql.js WASM and JS files for packaging`
+  - `!node_modules/sql.js/dist/sql-wasm.wasm`
+  - `!node_modules/sql.js/dist/sql-wasm.js`
+  - `!node_modules/sql.js/dist/sql-asm.js`
+  - `!node_modules/sql.js/dist/sql-asm-debug.js`
+  - `!node_modules/sql.js/dist/sql-wasm-debug.wasm`
+  - `!node_modules/sql.js/dist/sql-wasm-debug.js`
+
 ## [0.2.8] - 2025-06-07
 
 ### ✨ New Features
@@ -416,7 +428,7 @@ All notable changes to the "SQLite IntelliView" extension will be documented in 
 
 ### Added
 
-- 🎉 Initial release of SQLite IntelliView extension
+- 🎉 Initial release of the SQLite IntelliView extension
 - 📁 Custom editor for .db, .sqlite, and .sqlite3 files
 - 🔍 Database Explorer tree view with tables
 - ⚡ SQL Query editor with execution capabilities
