@@ -167,10 +167,17 @@
         "Requesting table data with encryption key:",
         state.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
       );
+      // Always request first page with default page size
       vscode.postMessage({
         type: "getTableData",
         tableName: tableName,
         key: state.encryptionKey,
+        page: 1,
+        pageSize:
+          typeof PAGINATION_CONFIG !== "undefined" &&
+          PAGINATION_CONFIG.defaultPageSize
+            ? PAGINATION_CONFIG.defaultPageSize
+            : 100,
       });
     }
 

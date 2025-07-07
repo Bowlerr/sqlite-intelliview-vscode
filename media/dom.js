@@ -163,6 +163,12 @@ function switchTab(tabName) {
         type: "getTableData",
         tableName: currentState.selectedTable,
         key: currentState.encryptionKey || "",
+        page: 1,
+        pageSize:
+          typeof PAGINATION_CONFIG !== "undefined" &&
+          PAGINATION_CONFIG.defaultPageSize
+            ? PAGINATION_CONFIG.defaultPageSize
+            : 100,
       });
     }
   }
@@ -215,7 +221,9 @@ function checkConnectionSectionVisibility() {
 
 // Add modal container to DOM on load
 function addResultsModalToDOM() {
-  if (document.getElementById("results-modal-overlay")) return;
+  if (document.getElementById("results-modal-overlay")) {
+    return;
+  }
   const overlay = document.createElement("div");
   overlay.id = "results-modal-overlay";
   overlay.className = "modal-overlay hidden";
@@ -231,7 +239,9 @@ function addResultsModalToDOM() {
   document.body.appendChild(overlay);
   // Close on click outside modal or on close button
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) hideResultsModal();
+    if (e.target === overlay) {
+      hideResultsModal();
+    }
   });
   document.getElementById("close-results-modal").onclick = hideResultsModal;
 }
@@ -240,13 +250,19 @@ function showResultsModal(html) {
   addResultsModalToDOM();
   const overlay = document.getElementById("results-modal-overlay");
   const body = document.getElementById("results-modal-body");
-  if (body) body.innerHTML = html;
-  if (overlay) overlay.classList.remove("hidden");
+  if (body) {
+    body.innerHTML = html;
+  }
+  if (overlay) {
+    overlay.classList.remove("hidden");
+  }
 }
 
 function hideResultsModal() {
   const overlay = document.getElementById("results-modal-overlay");
-  if (overlay) overlay.classList.add("hidden");
+  if (overlay) {
+    overlay.classList.add("hidden");
+  }
 }
 
 // Make this function available globally

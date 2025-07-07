@@ -1200,6 +1200,12 @@ function navigateToForeignKeyReference() {
       type: "getTableData",
       tableName: foreignKeyInfo.referencedTable,
       key: getCurrentEncryptionKey(),
+      page: 1,
+      pageSize:
+        typeof PAGINATION_CONFIG !== "undefined" &&
+        PAGINATION_CONFIG.defaultPageSize
+          ? PAGINATION_CONFIG.defaultPageSize
+          : 100,
     });
 
     // Switch to data tab to show the table
@@ -1223,7 +1229,7 @@ function getCurrentEncryptionKey() {
     typeof window !== "undefined" &&
     typeof (/** @type {any} */ (window).getCurrentState) === "function"
   ) {
-    const state = (window)
+    const state = window
       /** @type {any} */ .getCurrentState();
     return state.encryptionKey;
   }
