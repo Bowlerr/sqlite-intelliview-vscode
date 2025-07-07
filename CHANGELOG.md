@@ -2,6 +2,12 @@
 
 All notable changes to the "SQLite IntelliView" extension will be documented in this file.
 
+## [0.2.10] - 2025-07-07
+
+### 🐛 Bug Fixes
+- Fixed D3.js loading in webview: D3 is now loaded from the extension's media directory instead of node_modules for reliable packaging and offline support.
+- Updated webview HTML and packaging to ensure D3-based diagrams work in all environments.
+
 ## [0.2.9] - 2025-07-07
 
 ### 🛠️ Packaging Fix
