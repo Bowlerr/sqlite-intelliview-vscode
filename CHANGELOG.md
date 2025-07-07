@@ -7,6 +7,7 @@ All notable changes to the "SQLite IntelliView" extension will be documented in 
 ### 🐛 Bug Fixes
 
 - Fixed issue where the data tab would open with 1000 results instead of the intended 100.
+- Removed duplicate inline table statistics from the Data tab (cleaned up both JavaScript logic and CSS styling).
 
 ## [0.2.11] - 2025-07-07
 

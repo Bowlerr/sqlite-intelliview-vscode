@@ -1563,54 +1563,6 @@ body.resizing {
   gap: 8px;
   align-items: center;
 }
-
-/* Inline table statistics for Data tab */
-.table-inline-stats {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  margin-right: 16px;
-  font-size: 0.85em;
-  color: var(--vscode-descriptionForeground);
-  padding: 8px 12px;
-  background: var(--vscode-badge-background);
-  border-radius: 16px;
-  border: 1px solid var(--vscode-panel-border);
-}
-
-.table-inline-stats .stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  position: relative;
-}
-
-.table-inline-stats .stat-item:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  right: -10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 1px;
-  height: 20px;
-  background: var(--vscode-panel-border);
-}
-
-.table-inline-stats .stat-label {
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-size: 0.75em;
-  color: var(--vscode-descriptionForeground);
-}
-
-.table-inline-stats .stat-value {
-  font-weight: 700;
-  color: var(--vscode-foreground);
-  font-size: 1.1em;
-}
-
 .table-action-btn {
   background: var(--vscode-button-secondaryBackground);
   border: 1px solid var(--vscode-button-border);

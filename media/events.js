@@ -797,29 +797,7 @@ function displayTableData(data, columns, tableName, options = {}) {
     : "";
   const rowText = data.length === 1 ? "row" : "rows";
 
-  // Create inline statistics for the table controls
-  const inlineStats = `
-    <div class="table-inline-stats">
-      <div class="stat-item">
-        <span class="stat-label">Records</span>
-        <span class="stat-value">${data.length} ${rowText}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Columns</span>
-        <span class="stat-value">${columns.length}</span>
-      </div>
-    </div>
-  `;
-
   elements.dataContent.innerHTML = table;
-
-  // Add inline statistics to table controls after table is created
-  const tableControls = elements.dataContent.querySelector(
-    ".table-controls .table-actions"
-  );
-  if (tableControls) {
-    tableControls.insertAdjacentHTML("beforebegin", inlineStats);
-  }
 
   // Initialize table features for the new table
   const tableWrapper = elements.dataContent.querySelector(
