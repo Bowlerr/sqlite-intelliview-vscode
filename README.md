@@ -1,3 +1,7 @@
+# ⚠️ **BETA WARNING**
+
+> **SQLite IntelliView is currently in BETA on the VS Code Marketplace. Features and stability are evolving. Please report issues and feedback via GitHub.**
+
 # SQLite IntelliView
 
 [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/bowlerr.sqlite-intelliview-vscode.svg?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode)

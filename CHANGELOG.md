@@ -2,15 +2,23 @@
 
 All notable changes to the "SQLite IntelliView" extension will be documented in this file.
 
+## [0.2.11] - 2025-07-07
+
+### ⚠️ Beta Warning
+
+- Added a prominent beta warning to the top of the README for the VS Code Marketplace.
+
 ## [0.2.10] - 2025-07-07
 
 ### 🐛 Bug Fixes
+
 - Fixed D3.js loading in webview: D3 is now loaded from the extension's media directory instead of node_modules for reliable packaging and offline support.
 - Updated webview HTML and packaging to ensure D3-based diagrams work in all environments.
 
 ## [0.2.9] - 2025-07-07
 
 ### 🛠️ Packaging Fix
+
 - Added the following to `.vscodeignore` to ensure required sql.js WASM and JS files are included in the extension package:
   - `# Un-ignore sql.js WASM and JS files for packaging`
   - `!node_modules/sql.js/dist/sql-wasm.wasm`
