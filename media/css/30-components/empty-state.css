@@ -1,0 +1,88 @@
+/* ===== EMPTY STATE MESSAGES ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 60px 40px;
+  color: var(--vscode-descriptionForeground);
+  height: 100%;
+  min-height: 300px;
+  padding-top: 80px;
+}
+.empty-state-icon {
+  font-size: 4em;
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+.empty-state-title {
+  font-size: 1.4em;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--vscode-foreground);
+}
+.empty-state-description {
+  font-size: 1em;
+  line-height: 1.5;
+  max-width: 400px;
+  opacity: 0.85;
+}
+
+/* ===== ADVANCED EMPTY STATE ENHANCEMENTS (from vscode.css) ===== */
+#schema-content:empty::before,
+#data-content:empty::before {
+  content: "📊\A Select a table to view its "attr(data-content-type);
+  white-space: pre;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 40px;
+  color: var(--vscode-descriptionForeground);
+  height: 100%;
+  min-height: 300px;
+  font-size: 1.1em;
+  line-height: 1.6;
+}
+#schema-content:empty::before {
+  content: "📋\A Select a table to view its schema\A \A Choose a table from the sidebar to explore its structure, columns, and data types.";
+}
+#data-content:empty::before {
+  content: "📊\A Select a table to view its data\A \A Choose a table from the sidebar to browse its records and content.";
+}
+#schema-content,
+#data-content {
+  position: relative;
+}
+.section:has(.table-item:hover) {
+  overflow: visible;
+  z-index: auto;
+}
+
+/* ===== RESPONSIVE EMPTY STATE ADJUSTMENTS ===== */
+@media (max-height: 600px) {
+  .empty-state {
+    padding-top: 40px;
+    min-height: 250px;
+  }
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+  }
+}
+@media (max-width: 768px) {
+  .empty-state {
+    padding: 40px 20px 20px 20px;
+  }
+  .empty-state-icon {
+    font-size: 3.5em;
+  }
+  .empty-state-title {
+    font-size: 1.2em;
+  }
+  .empty-state-description {
+    font-size: 0.9em;
+    max-width: 300px;
+  }
+}

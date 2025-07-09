@@ -1,0 +1,246 @@
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: var(--sidebar-width, 300px);
+  min-width: var(--sidebar-min-width, 200px);
+  max-width: 600px;
+  background-color: var(--vscode-sideBar-background);
+  border-right: 1px solid var(--vscode-panel-border);
+  overflow-y: auto;
+  padding: var(--container-padding);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  transition: width 0.3s ease;
+}
+.sidebar .minimized-content {
+  display: none;
+}
+.sidebar.minimized .minimized-content {
+  display: flex;
+}
+.sidebar.minimized {
+  width: 48px;
+  min-width: 48px;
+  padding: 8px;
+  overflow: hidden;
+}
+.sidebar.minimized .section h3,
+.sidebar.minimized .tables-list,
+.sidebar.minimized .connection-controls {
+  display: none;
+}
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  position: relative;
+}
+.sidebar-title {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  margin: 0;
+}
+.sidebar-controls {
+  display: flex;
+  gap: 4px;
+}
+.sidebar-toggle {
+  background: none;
+  border: none;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+.sidebar-toggle:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  opacity: 1;
+}
+.sidebar.minimized .sidebar-toggle {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 12px;
+  padding: 6px 4px;
+}
+
+/* Resize handle */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background-color 0.2s ease;
+}
+.sidebar-resize-handle:hover {
+  background: var(--vscode-progressBar-background);
+}
+.sidebar-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 30px;
+  background: var(--vscode-panel-border);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.sidebar-resize-handle:hover::before {
+  opacity: 0.5;
+}
+
+/* Hide resize handle when minimized */
+.sidebar.minimized .sidebar-resize-handle {
+  display: none;
+}
+
+.sidebar.resizing {
+  transition: none;
+  user-select: none;
+}
+body.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.sidebar-resizing * {
+  pointer-events: none;
+}
+
+/* ===== ADVANCED SIDEBAR MINIMIZED ENHANCEMENTS (from vscode.css) ===== */
+.sidebar.minimized .selected-table-indicator {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-charts-blue);
+  text-align: center;
+  padding: 16px 4px;
+  border-radius: 6px;
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-charts-blue);
+  max-width: 32px;
+  min-height: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.9;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.sidebar.minimized .selected-table-indicator:hover {
+  opacity: 1;
+  background: var(--vscode-button-hoverBackground);
+  transform: scale(1.05);
+}
+.sidebar.minimized .selected-table-indicator.empty {
+  color: var(--vscode-descriptionForeground);
+  border-color: var(--vscode-descriptionForeground);
+  background: transparent;
+  opacity: 0.5;
+  font-size: 9px;
+}
+.sidebar.minimized::after {
+  content: "Selected";
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+  font-size: 9px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.4;
+}
+.sidebar.minimized .sidebar-header {
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.sidebar.minimized .sidebar-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+.sidebar.minimized .minimized-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px 0;
+  margin-top: 16px;
+  height: calc(100% - 80px);
+}
+.sidebar.minimized:hover {
+  width: 280px;
+  overflow: visible;
+  z-index: 100;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+}
+.sidebar.minimized:hover .section h3,
+.sidebar.minimized:hover .tables-list,
+.sidebar.minimized:hover .connection-controls {
+  display: block;
+  animation: fadeInSidebar 0.2s ease-out;
+}
+.sidebar.minimized:hover .sidebar-title {
+  writing-mode: initial;
+  text-orientation: initial;
+  font-size: 1.1em;
+  transform: none;
+  margin-bottom: 16px;
+  opacity: 1;
+}
+.sidebar.minimized:hover .minimized-content {
+  display: none;
+}
+.sidebar.minimized:hover::after {
+  display: none;
+}
+@keyframes fadeInSidebar {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.sidebar.minimized.resizing:hover {
+  width: 48px;
+  overflow: hidden;
+  box-shadow: none;
+}
+.sidebar.minimized.resizing:hover .section h3,
+.sidebar.minimized.resizing:hover .tables-list,
+.sidebar.minimized.resizing:hover .connection-controls {
+  display: none;
+}
+
+/* ===== RESPONSIVE SIDEBAR IMPROVEMENTS ===== */
+@media (max-width: 768px) {
+  .sidebar {
+    width: var(--sidebar-width, 250px);
+    min-width: var(--sidebar-min-width, 180px);
+  }
+  .sidebar.minimized {
+    width: 40px;
+    min-width: 40px;
+  }
+}

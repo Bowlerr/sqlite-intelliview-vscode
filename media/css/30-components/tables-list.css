@@ -1,0 +1,66 @@
+/* ===== TABLES LIST ===== */
+.tables-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  position: relative;
+  z-index: 1;
+  padding-top: 2px;
+}
+.tables-list:empty::before {
+  content: "No tables found";
+  display: block;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.95em;
+  text-align: center;
+  margin: 32px 0 0 0;
+  opacity: 0.7;
+}
+.table-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 11;
+}
+.table-item:hover {
+  background: var(--vscode-list-hoverBackground);
+  color: var(--vscode-list-hoverForeground);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  border-color: var(--vscode-focusBorder);
+  overflow: visible;
+  clip-path: none;
+  position: relative;
+}
+.table-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  border-color: var(--vscode-focusBorder);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.table-item:active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  transform: translateY(0);
+}
+
+/* Table name styling for sidebar and table lists */
+.table-name {
+  font-weight: 500;
+  font-size: 0.9em;
+  color: var(--vscode-foreground);
+  margin-right: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

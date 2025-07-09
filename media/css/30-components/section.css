@@ -1,0 +1,40 @@
+/* ===== SECTIONS ===== */
+.section {
+  margin-bottom: 20px;
+}
+.section:last-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: visible;
+}
+.section h3 {
+  margin: 0 0 12px 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  position: relative;
+  z-index: 5;
+}
+
+/* ===== ADVANCED SECTION HOVER ENHANCEMENT (from vscode.css) ===== */
+.section:has(.table-item:hover) {
+  overflow: visible;
+  z-index: auto;
+}
+
+/* ===== ADVANCED SECTION OVERFLOW FIXES ===== */
+.section:has(.table-item:hover) {
+  overflow: visible;
+  z-index: auto;
+}
+
+/* Empty state for section */
+.section:has-text("No tables found") {
+  color: var(--vscode-descriptionForeground);
+  font-size: 1em;
+  text-align: center;
+  opacity: 0.7;
+  padding: 32px 0 0 0;
+}

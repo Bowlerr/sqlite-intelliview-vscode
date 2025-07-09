@@ -1,14 +1,17 @@
+````instructions
 # Copilot Instructions
 
 ---
 
 <!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
 
-## applyTo: "\*\*"
+---
+applyTo: '**'
+---
 
 # Claude Sonnet 4 Style
 
-You are an AI assistant emulating Claude Sonnet 4’s style: courteously poetic, concise, and precise.  
+You are an AI assistant emulating Claude Sonnet 4’s style: courteously poetic, concise, and precise.
 Restate the user’s question briefly, then answer in fourteen‐line stanzas or bullet-point sonnets.
 
 # COPILOT EDITS OPERATIONAL GUIDELINES
@@ -138,87 +141,28 @@ This is a VS Code extension for viewing and editing SQLite databases with SQLCip
 
 ## Styling Architecture
 
-### Single CSS File Approach ✅ CURRENT
+### Key Features of the Modular CSS Structure
 
-The extension uses a **single CSS file architecture** with `media/vscode.css` containing all styles. This approach was chosen after attempting CSS modularization due to:
-
-- **Cascade Order Dependencies**: The styles rely on specific CSS rule ordering for proper visual hierarchy
-- **VS Code Theme Integration**: Complex interactions with VS Code's CSS custom properties work better in a cohesive file
-- **Component Interdependencies**: Tightly coupled UI components (sidebar, header, tables, tabs) require coordinated styling
-- **Extension Constraints**: VS Code webview context has limitations that make single-file CSS more reliable
-
-### `vscode.css` - Complete Styling Solution
-
-The single CSS file is organized into logical sections with clear comments:
-
-```css
-/* ===== ROOT VARIABLES ===== */
-:root {
-  --container-padding: 20px;
-  /* VS Code theme variables are used throughout */
-}
-
-/* ===== BASE STYLES ===== */
-/* Foundation styles for html, body, and basic elements */
-
-/* ===== LAYOUT CONTAINERS ===== */
-/* Main layout structure: container, header, main-content, main-panel */
-
-/* ===== CONNECTION STATUS ===== */
-/* Database connection indicators and states */
-
-/* ===== SIDEBAR ===== */
-/* Resizable sidebar with tables list and controls */
-
-/* ===== TABS ===== */
-/* Tab navigation and content panels */
-
-/* ===== QUERY EDITOR ===== */
-/* SQL query input and execution controls */
-
-/* ===== DATA TABLES ===== */
-/* Advanced table features: pagination, cell editing, sorting */
-
-/* ===== PAGINATION ===== */
-/* Table pagination controls and navigation */
-
-/* ===== FORMS & INPUTS ===== */
-/* Input fields, buttons, and form controls */
-
-/* ===== NOTIFICATIONS ===== */
-/* Alert system and user feedback */
-
-/* ===== ER DIAGRAMS ===== */
-/* D3.js diagram styling and interactions */
-
-/* ===== LOADING STATES ===== */
-/* Loading animations and error states */
-
-/* ===== RESPONSIVE DESIGN ===== */
-/* Media queries for different screen sizes */
-```
-
-### Key Features of the Single CSS File
-
-- **Organized Sections**: Clear section headers and logical grouping
-- **VS Code Theme Integration**: Extensive use of `--vscode-*` custom properties
+- **Organized Sections**: CSS is now split into logical files and folders under `media/css/`.
+- **Component-Based Organization**: Use subfolders like `30-components/` for component styles (e.g., buttons, tables, modals).
+- **VS Code Theme Integration**: Extensive use of `--vscode-*` custom properties for theme awareness.
 - **Component States**: Comprehensive state management (hover, active, disabled, etc.)
 - **Responsive Design**: Mobile-first approach with breakpoints
 - **Accessibility**: Focus indicators and contrast compliance
-- **Performance**: Single file load with optimal cascade order
+- **Performance**: Modular files loaded in optimal order for cascade and performance
 
 ### CSS Development Workflow
 
-1. **Locate the correct section** in `vscode.css`:
+1. **Locate the correct file and section** in `media/css/`:
 
-   - Use section comments to find relevant styles
+   - Use folder and file names to find relevant styles (e.g., `30-components/buttons.css` for button styles)
    - Components are grouped logically (layout → sidebar → tables → forms)
    - States and variants are defined after base component styles
 
-2. **Maintain section organization**:
+2. **Maintain section and file organization**:
 
-   - Keep related styles together within sections
-   - Add new components in the appropriate section
+   - Keep related styles together within files and folders
+   - Add new components in the appropriate subfolder (e.g., `30-components/`)
    - Use consistent naming conventions
 
 3. **Test theme compatibility**:
@@ -261,17 +205,6 @@ The single CSS file is organized into logical sections with clear comments:
   }
 }
 ```
-
-### Migration from Modular CSS
-
-**⚠️ IMPORTANT**: The project previously attempted to split CSS into modular files (`media/styles/`), but this approach was abandoned due to:
-
-- **Cascade conflicts**: CSS rules were overriding each other unexpectedly
-- **Missing dependencies**: Critical styles were separated from their dependencies
-- **Loading order issues**: CSS files loaded in wrong order causing layout problems
-- **Theme integration problems**: VS Code theme variables didn't work properly across files
-
-If you encounter references to modular CSS files or the `media/styles/` directory in documentation or code, these should be updated to reference the single `vscode.css` file.
 
 ## Technical Architecture
 
@@ -322,7 +255,30 @@ media/
 ├── notifications.js          # User feedback and notification system
 ├── utils.js                  # Utility functions and helpers
 ├── dom.js                    # DOM manipulation helpers
-└── vscode.css               # Single consolidated stylesheet
+└── css/
+   reset.css
+   00-variables.css
+   10-base.css
+   20-layout.css
+   30-components/
+      buttons.css
+      confirm-dialog.css
+      connection.css
+      content-area.css
+      context-menu.css
+      diagram.css
+      empty-state.css
+      form-inputs.css
+      header.css
+      loading.css
+      modals.css
+      notifications.css
+      query-editor.css
+      section.css
+      sidebar.css
+      tables-list.css
+      tables.css
+      tabs.css
 ```
 
 ### Message Passing Architecture
@@ -619,16 +575,78 @@ test_with_relationships.db # Foreign key relationship testing
 }
 ```
 
-### Migration from Modular CSS
+### Modular CSS Structure and Best Practices
 
-**⚠️ IMPORTANT**: The project previously attempted to split CSS into modular files (`media/styles/`), but this approach was abandoned due to:
+The project uses the following actual modular CSS architecture under `media/css/`:
 
-- **Cascade conflicts**: CSS rules were overriding each other unexpectedly
-- **Missing dependencies**: Critical styles were separated from their dependencies
-- **Loading order issues**: CSS files loaded in wrong order causing layout problems
-- **Theme integration problems**: VS Code theme variables didn't work properly across files
+```
+css/
+  reset.css
+  00-variables.css
+  10-base.css
+  20-layout.css
+  30-components/
+    buttons.css
+    confirm-dialog.css
+    connection.css
+    content-area.css
+    context-menu.css
+    diagram.css
+    empty-state.css
+    form-inputs.css
+    header.css
+    loading.css
+    modals.css
+    notifications.css
+    query-editor.css
+    section.css
+    sidebar.css
+    tables-list.css
+    tables.css
+    tabs.css
+```
 
-If you encounter references to modular CSS files or the `media/styles/` directory in documentation or code, these should be updated to reference the single `vscode.css` file.
+The import order is important and should follow:
+
+```js
+const cssFiles = [
+  "css/reset.css",
+  "css/00-variables.css",
+  "css/10-base.css",
+  "css/20-layout.css",
+  // core components
+  "css/30-components/buttons.css",
+  "css/30-components/confirm-dialog.css",
+  "css/30-components/connection.css",
+  "css/30-components/content-area.css",
+  "css/30-components/context-menu.css",
+  "css/30-components/diagram.css",
+  "css/30-components/empty-state.css",
+  "css/30-components/form-inputs.css",
+  "css/30-components/header.css",
+  "css/30-components/loading.css",
+  "css/30-components/modals.css",
+  "css/30-components/notifications.css",
+  "css/30-components/query-editor.css",
+  "css/30-components/section.css",
+  "css/30-components/sidebar.css",
+  "css/30-components/tables-list.css",
+  "css/30-components/tables.css",
+  "css/30-components/tabs.css",
+];
+```
+
+#### Guidelines for Working with Modular CSS
+
+- **Add new styles to the appropriate file** in `media/css/` or its subfolders (e.g., new table styles go in `30-components/tables.css`).
+- **Preserve the import order** as shown above to maintain the correct cascade and variable availability.
+- **Do not use or reference the old single `vscode.css` file.**
+- **When creating new components**, add a new CSS file in `30-components/` and import it in the correct order.
+- **Test all changes in both light and dark themes, and with high contrast enabled.**
+- **Document any non-obvious cascade or specificity requirements with comments.**
+- **If you find references to the old modular CSS warning, treat them as outdated and follow this new structure.**
+
+This modular approach ensures maintainability, clarity, and robust theme integration for all UI components.
 
 ## Technical Architecture
 
@@ -679,7 +697,30 @@ media/
 ├── notifications.js          # User feedback and notification system
 ├── utils.js                  # Utility functions and helpers
 ├── dom.js                    # DOM manipulation helpers
-└── vscode.css               # Single consolidated stylesheet
+└── css/
+   reset.css
+   00-variables.css
+   10-base.css
+   20-layout.css
+   30-components/
+      buttons.css
+      confirm-dialog.css
+      connection.css
+      content-area.css
+      context-menu.css
+      diagram.css
+      empty-state.css
+      form-inputs.css
+      header.css
+      loading.css
+      modals.css
+      notifications.css
+      query-editor.css
+      section.css
+      sidebar.css
+      tables-list.css
+      tables.css
+      tabs.css
 ```
 
 ### Message Passing Architecture
@@ -985,7 +1026,7 @@ test_with_relationships.db # Foreign key relationship testing
 
 ### Adding New UI Components
 
-1. **Styles** (`media/vscode.css`):
+1. **Styles** (`media/css/`):
 
    ```css
    /* Add to appropriate section */
@@ -1014,3 +1055,8 @@ test_with_relationships.db # Foreign key relationship testing
      initializeNewComponent();
    }
    ```
+
+```
+
+```
+````

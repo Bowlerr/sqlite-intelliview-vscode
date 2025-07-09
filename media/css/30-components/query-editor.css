@@ -1,0 +1,230 @@
+/* ===== QUERY EDITOR & PANEL ===== */
+.query-editor {
+  width: 100%;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  position: relative;
+}
+.query-header {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 4px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.query-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  margin: 0;
+}
+.query-header-actions {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.query-header-actions .primary-button,
+.query-header-actions .secondary-button {
+  font-size: 0.9em;
+  padding: 6px 12px;
+}
+.query-header-actions .keyboard-shortcut {
+  font-size: 0.8em;
+}
+.query-icon {
+  font-size: 1.2em;
+}
+.query-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.query-status.executing {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  opacity: 1;
+}
+.query-status.success {
+  background: var(--vscode-debugConsole-infoForeground);
+  color: var(--vscode-editor-background);
+  opacity: 1;
+}
+.query-status.error {
+  background: var(--vscode-errorForeground);
+  color: var(--vscode-editor-background);
+  opacity: 1;
+}
+.query-controls {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editor-wrapper {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+/* Ensure Monaco and query editor containers are fully styled */
+.monaco-editor-container,
+.query-editor-container {
+  flex: 1;
+  width: 100%;
+  position: relative;
+}
+
+/* Query editor container for layout */
+#query-editor-container {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grouped layout selectors for query editor */
+.query-editor,
+.query-controls,
+.editor-wrapper,
+#query-editor-container {
+  overflow: visible !important;
+  min-height: 0;
+}
+
+/* Fallback textarea for accessibility and no-Monaco environments */
+.fallback-textarea,
+.query-textarea-fallback {
+  width: 100%;
+  flex: 1;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  border: none;
+  padding: 16px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 120px;
+  max-height: 600px;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  outline: none;
+}
+.fallback-textarea:focus {
+  outline: none;
+}
+.button-icon {
+  font-size: 0.9em;
+}
+.keyboard-shortcut {
+  font-size: 0.75em;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 400;
+  margin-left: 4px;
+}
+.query-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-top: 12px;
+  gap: 20px;
+}
+.query-stats {
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.query-stats.visible {
+  opacity: 1;
+}
+.query-editor textarea {
+  width: 100%;
+  height: 150px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  resize: vertical;
+  margin-bottom: 0;
+  min-height: 120px;
+  max-height: 400px;
+  line-height: 1.5;
+  tab-size: 2;
+  transition: border-color 0.2s ease;
+}
+.query-editor textarea:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+/* Query editor visibility logic for panels */
+#schema-panel .query-editor,
+#schema-panel .query-controls,
+#schema-panel textarea,
+#data-panel .query-editor,
+#data-panel .query-controls,
+#data-panel textarea {
+  display: none !important;
+  visibility: hidden !important;
+}
+#query-panel .query-editor {
+  display: block !important;
+  visibility: visible !important;
+  flex: 1;
+}
+#query-panel .query-controls {
+  display: flex !important;
+  visibility: visible !important;
+}
+#query-panel textarea {
+  display: block !important;
+  visibility: visible !important;
+  flex: 1;
+}
+#query-panel {
+  display: none;
+}
+#query-panel.active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+.floating-query-buttons {
+  position: absolute;
+  bottom: 12px;
+  right: 24px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+#query-panel:not(.active) .query-editor {
+  display: none !important;
+  visibility: hidden !important;
+}

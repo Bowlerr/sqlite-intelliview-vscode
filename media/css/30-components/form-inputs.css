@@ -1,0 +1,16 @@
+/* ===== FORM INPUTS ===== */
+input[type="password"],
+input[type="text"] {
+  width: 100%;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 3px;
+  padding: var(--input-padding-vertical) var(--input-padding-horizontal);
+  margin: var(--input-margin-vertical) var(--input-margin-horizontal);
+}
+input[type="password"]:focus,
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}

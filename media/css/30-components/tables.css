@@ -1,0 +1,1002 @@
+/* ===== TABLE STYLING ===== */
+.table-header {
+  flex-shrink: 0;
+  padding: 16px;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+.table-header h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+/* Table Statistics */
+.table-stats {
+  display: flex;
+  gap: 20px;
+  padding: 12px;
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  flex-shrink: 0;
+}
+#data-panel .table-stats {
+  display: none !important;
+}
+.stat {
+  text-align: center;
+}
+.stat-label {
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-size: 1.2em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+  table-layout: fixed;
+}
+.data-table th,
+.data-table td {
+  padding: 12px 20px 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  border-right: 1px solid var(--vscode-panel-border);
+  line-height: 1.4;
+  font-size: 0.9em;
+}
+.data-table th {
+  background: var(--vscode-list-headerBackground);
+  color: var(--vscode-list-headerForeground);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 14px 20px 14px 16px;
+  min-width: 80px;
+}
+.data-table tr {
+  transition: background-color 0.1s ease;
+}
+.data-table tbody tr:hover {
+  background: var(--vscode-list-hoverBackground) !important;
+  border-left: 3px solid var(--vscode-focusBorder);
+}
+.data-table tr:nth-child(even) {
+  background: var(--vscode-list-oddRowsBackground);
+}
+.data-table tbody tr:nth-child(even):hover {
+  background: var(--vscode-list-hoverBackground) !important;
+  border-left: 3px solid var(--vscode-focusBorder);
+}
+.data-table td {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+.data-table td em {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+.table-container {
+  scroll-behavior: smooth;
+}
+
+.enhanced-table-wrapper {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--vscode-editor-background);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+.table-scroll-container {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  isolation: isolate;
+  z-index: 1;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vscode-scrollbarSlider-background)
+    var(--vscode-scrollbar-shadow);
+}
+
+.table-controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+#data-panel .table-controls {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+}
+.table-search {
+  display: flex;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  max-width: 350px;
+}
+.search-input {
+  width: 100%;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 0.9em;
+  transition: all 0.2s ease;
+  font-family: var(--vscode-font-family);
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+.search-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+  opacity: 0.8;
+}
+.search-clear {
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  display: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  border-radius: 50%;
+  font-size: 16px;
+  padding: 2px;
+  transition: all 0.2s ease;
+}
+.search-clear:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+.table-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.table-action-btn {
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-button-border);
+  color: var(--vscode-button-secondaryForeground);
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.table-action-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.table-action-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* ===== PAGINATION CONTROLS ===== */
+.table-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  border-top: 1px solid var(--vscode-panel-border);
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+}
+.table-footer .footer-stats {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pagination-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-button-border);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.75em;
+  font-weight: 500;
+}
+.pagination-btn:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+  border-color: var(--vscode-button-hoverBackground);
+}
+.pagination-btn:active:not(:disabled) {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pagination-btn.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-color: var(--vscode-button-background);
+}
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 8px;
+}
+.pagination-ellipsis {
+  padding: 0 4px;
+  color: var(--vscode-descriptionForeground);
+  font-weight: bold;
+}
+.page-input-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--vscode-panel-border);
+}
+.page-input-container label {
+  font-size: 0.75em;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+.page-input {
+  width: 60px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 0.75em;
+  text-align: center;
+}
+.page-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-size-selector label {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+.page-size-select {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 0.75em;
+  cursor: pointer;
+}
+.page-size-select:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+/* ===== ADVANCED TABLE INFO & PAGINATION (from vscode.css) ===== */
+.table-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--vscode-foreground);
+}
+.visible-rows {
+  font-weight: 500;
+}
+.selected-info {
+  color: var(--vscode-descriptionForeground);
+}
+.table-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pagination-btn.page-btn {
+  min-width: 32px;
+  font-weight: 500;
+}
+
+/* ===== FOREIGN KEY STYLING ===== */
+.data-table th.fk-column {
+  background: linear-gradient(
+    135deg,
+    var(--vscode-list-headerBackground) 0%,
+    rgba(100, 149, 237, 0.15) 100%
+  );
+  border-left: 3px solid #6495ed;
+  position: relative;
+}
+.data-table th.fk-column::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6495ed, #4169e1);
+  z-index: 1;
+}
+.fk-indicator {
+  color: #6495ed;
+  font-size: 0.9em;
+  margin: 0 4px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+.data-table th.fk-column:hover .fk-indicator {
+  opacity: 1;
+  color: #4169e1;
+}
+.data-table td.fk-cell {
+  background: rgba(100, 149, 237, 0.05);
+  border-left: 2px solid rgba(100, 149, 237, 0.3);
+  position: relative;
+}
+.data-table td.fk-cell:hover {
+  background: rgba(100, 149, 237, 0.1);
+  border-left-color: #6495ed;
+}
+.data-table td.fk-cell::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(100, 149, 237, 0.4),
+    rgba(100, 149, 237, 0.1)
+  );
+}
+.data-table td.fk-cell:hover::before {
+  background: linear-gradient(180deg, #6495ed, rgba(100, 149, 237, 0.3));
+}
+
+/* ===== ADVANCED FOREIGN KEY ROW HIGHLIGHT ===== */
+.data-table tr.fk-target-row {
+  background-color: rgba(0, 123, 255, 0.15);
+  border: 2px solid #007bff;
+  animation: fk-target-highlight 0.8s ease-in-out;
+  position: relative;
+  z-index: 10;
+}
+.data-table tr.fk-target-row td {
+  background-color: rgba(0, 123, 255, 0.15);
+  border-top: 1px solid #007bff;
+  border-bottom: 1px solid #007bff;
+  box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+}
+.data-table tr.fk-target-row td:first-child {
+  border-left: 2px solid #007bff;
+}
+.data-table tr.fk-target-row td:last-child {
+  border-right: 2px solid #007bff;
+}
+@keyframes fk-target-highlight {
+  0% {
+    background-color: rgba(0, 123, 255, 0.4);
+    transform: scale(1.03);
+    box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+  }
+  25% {
+    background-color: rgba(0, 123, 255, 0.3);
+    transform: scale(1.02);
+  }
+  50% {
+    background-color: rgba(0, 123, 255, 0.25);
+    transform: scale(1.01);
+  }
+  75% {
+    background-color: rgba(0, 123, 255, 0.2);
+    transform: scale(1.005);
+  }
+  100% {
+    background-color: rgba(0, 123, 255, 0.15);
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+  }
+}
+
+/* ===== STICKY/PINNED COLUMNS & CELLS ===== */
+.data-table th.pinned {
+  position: sticky !important;
+  left: 0;
+  top: 0;
+  z-index: 15;
+  background: var(--vscode-list-headerBackground) !important;
+  background-color: var(--vscode-list-headerBackground, #2d2d2d) !important;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2) !important;
+  color: var(--vscode-list-headerForeground) !important;
+  opacity: 1 !important;
+  font-weight: 600;
+  transform: translateZ(0);
+  will-change: transform, left, box-shadow;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-height: 100%;
+  display: table-cell;
+  vertical-align: middle;
+  position: relative;
+}
+.data-table th.pinned::after {
+  content: "";
+  position: absolute;
+  right: 0px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--vscode-focusBorder);
+  z-index: 5;
+  pointer-events: none;
+  transform: translateZ(0);
+  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.3);
+}
+.data-table td.pinned {
+  position: sticky !important;
+  left: 0;
+  z-index: 14;
+  background: var(--vscode-editor-background) !important;
+  background-color: var(--vscode-editor-background, #1e1e1e) !important;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2) !important;
+  color: var(--vscode-foreground) !important;
+  transform: translateZ(0);
+  will-change: transform, left, box-shadow;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-height: 100%;
+  display: table-cell;
+  vertical-align: middle;
+  position: relative;
+}
+.data-table td.pinned::after {
+  content: "";
+  position: absolute;
+  right: 0px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--vscode-focusBorder);
+  z-index: 5;
+  pointer-events: none;
+  transform: translateZ(0);
+  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.3);
+}
+.data-table tbody tr:nth-child(even) td.pinned {
+  background: var(--vscode-list-oddRowsBackground) !important;
+  background-color: var(--vscode-list-oddRowsBackground, #252525) !important;
+}
+.data-table tbody tr:hover td.pinned {
+  background: var(--vscode-list-hoverBackground) !important;
+  background-color: var(--vscode-list-hoverBackground, #2a2a2a) !important;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+.data-table th.pinned:hover {
+  background: var(--vscode-list-hoverBackground) !important;
+  background-color: var(--vscode-list-hoverBackground, #2a2a2a) !important;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.25), 0 3px 6px rgba(0, 0, 0, 0.15) !important;
+}
+.data-table th.pinned:focus-visible,
+.data-table td.pinned:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder) !important;
+  outline-offset: -2px;
+  background: var(--vscode-list-focusBackground) !important;
+  background-color: var(--vscode-list-focusBackground, #094771) !important;
+}
+.data-table {
+  position: relative;
+  isolation: isolate;
+}
+.table-scroll-container {
+  position: relative;
+  overflow: auto;
+  isolation: isolate;
+  z-index: 1;
+}
+.data-table thead {
+  position: relative;
+  z-index: 10;
+}
+.data-table tbody {
+  position: relative;
+  z-index: 5;
+}
+.data-table th.pinned,
+.data-table td.pinned {
+  display: table-cell !important;
+  position: sticky !important;
+  float: none !important;
+  clear: none !important;
+  vertical-align: middle;
+  text-align: left;
+  box-sizing: border-box;
+  max-width: none;
+  min-width: 0;
+}
+
+/* ===== COLUMN RESIZE HANDLES & FEEDBACK ===== */
+.data-table th::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 3;
+}
+.data-table tr {
+  position: relative;
+}
+.data-table tr::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  cursor: row-resize;
+  z-index: 5;
+}
+.data-table th:hover::after {
+  background: var(--vscode-focusBorder);
+  opacity: 0.4;
+}
+.data-table tr:hover::after {
+  background: var(--vscode-focusBorder);
+  opacity: 0.3;
+}
+.data-table td::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 25;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+.data-table td:hover::after {
+  background: var(--vscode-focusBorder);
+  opacity: 0.3;
+}
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 30;
+  transition: background-color 0.2s ease;
+}
+.column-resize-handle:hover {
+  background: var(--vscode-focusBorder);
+  opacity: 0.5;
+}
+.column-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 100%;
+  background: var(--vscode-panel-border);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.column-resize-handle:hover::before {
+  opacity: 0.7;
+}
+.resizable-header.resizing,
+.resizable-table.resizing,
+.data-table.resizing {
+  transition: none;
+  user-select: none;
+}
+.data-table.resizing * {
+  user-select: none;
+}
+.data-table.resizing .data-cell {
+  cursor: col-resize !important;
+}
+body.resizing {
+  user-select: none;
+}
+
+/* ===== CELL EDITING & CONTROLS ===== */
+.data-table .data-cell.editing {
+  background: var(--vscode-editor-background);
+  border: 2px solid var(--vscode-focusBorder);
+  padding: 0;
+}
+.data-table .data-cell.editing .cell-content {
+  display: none;
+}
+.data-table .data-cell.editing .cell-editing-controls {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  height: 100%;
+  min-height: 28px;
+}
+.data-table .data-cell .cell-editing-controls {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--vscode-editor-background);
+  border: none;
+  z-index: 10;
+}
+.data-table .data-cell .cell-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  padding: 4px 6px;
+  height: 100%;
+  min-height: 20px;
+}
+.data-table .data-cell .cell-input:focus {
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 2px;
+}
+.data-table .data-cell .cell-save-btn,
+.data-table .data-cell .cell-cancel-btn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.data-table .data-cell .cell-save-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+.data-table .data-cell .cell-cancel-btn {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+.data-table .data-cell .cell-cancel-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+.data-table .data-cell:not([data-editable]) {
+  cursor: default;
+}
+.data-table .data-cell:not([data-editable]):hover {
+  background: var(--vscode-list-hoverBackground);
+  opacity: 0.8;
+}
+
+/* ===== COLUMN SORTING & PINNING ===== */
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.sortable-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+.sortable-header[data-sort="asc"] .sort-indicator::after {
+  content: "\2191";
+  color: var(--vscode-focusBorder);
+  font-weight: bold;
+}
+.sortable-header[data-sort="desc"] .sort-indicator::after {
+  content: "\2193";
+  color: var(--vscode-focusBorder);
+  font-weight: bold;
+}
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.column-name {
+  flex: 1;
+  min-width: 0;
+}
+.pin-btn {
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-button-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 0.75em;
+  color: var(--vscode-button-secondaryForeground);
+  opacity: 0.8;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pin-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+.pin-btn:active {
+  transform: translateY(0);
+}
+.sort-indicator {
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+  margin-left: 6px;
+  transition: color 0.2s ease;
+}
+
+/* ===== TABLE FOOTER STATS & RESPONSIVE PAGINATION ===== */
+.table-footer .footer-stats .stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.table-footer .footer-stats .stat-label {
+  font-weight: 500;
+  color: var(--vscode-descriptionForeground);
+}
+.table-footer .footer-stats .stat-value {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+@media (max-width: 768px) {
+  .table-footer {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .table-pagination {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .pagination-controls {
+    flex-wrap: wrap;
+  }
+  .page-input-container {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+}
+
+/* ===== FOREIGN KEY TOOLTIP & ACCESSIBILITY ===== */
+.data-table th.fk-column[title]::after,
+.data-table td.fk-cell[title]::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--vscode-editorHoverWidget-background);
+  color: var(--vscode-editorHoverWidget-foreground);
+  border: 1px solid var(--vscode-editorHoverWidget-border);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  white-space: nowrap;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.data-table th.fk-column:hover::after,
+.data-table td.fk-cell:hover::after {
+  opacity: 1;
+}
+.data-table th.fk-column.pinned {
+  background: linear-gradient(
+    135deg,
+    var(--vscode-list-headerBackground) 0%,
+    rgba(100, 149, 237, 0.2) 100%
+  );
+  box-shadow: 2px 0 4px rgba(100, 149, 237, 0.2);
+  border-left-color: #4169e1;
+  border-left-width: 3px;
+}
+.data-table td.fk-cell.pinned {
+  background: rgba(100, 149, 237, 0.08);
+  box-shadow: 2px 0 4px rgba(100, 149, 237, 0.15);
+  border-left-color: rgba(100, 149, 237, 0.4);
+}
+.data-table td.fk-cell .cell-content {
+  color: var(--vscode-foreground);
+  font-weight: 500;
+}
+.data-table td.fk-cell:hover .cell-content {
+  color: #4169e1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-indicator,
+  .data-table td.fk-cell::before,
+  .data-table th.fk-column[title]::after,
+  .data-table td.fk-cell[title]::after,
+  .data-table tr.fk-target-row {
+    transition: none;
+    animation: none;
+  }
+}
+@media (prefers-contrast: high) {
+  .data-table th.fk-column {
+    border-left-color: #0000ff;
+    background: var(--vscode-list-headerBackground);
+  }
+  .data-table td.fk-cell {
+    border-left-color: #0000ff;
+    background: rgba(0, 0, 255, 0.1);
+  }
+  .fk-indicator {
+    color: #0000ff;
+  }
+  .data-table tr.fk-target-row {
+    background-color: rgba(0, 123, 255, 0.3);
+    border-color: #0056b3;
+    border-width: 3px;
+  }
+  .data-table tr.fk-target-row td {
+    background-color: rgba(0, 123, 255, 0.3);
+    border-color: #0056b3;
+    box-shadow: 0 0 10px rgba(0, 86, 179, 0.5);
+  }
+}
+
+/* ===== TABLE CONTAINER & ENHANCED WRAPPER ===== */
+.table-container {
+  scroll-behavior: smooth;
+}
+.enhanced-table-wrapper {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  .table-container,
+  .enhanced-table-wrapper {
+    scroll-behavior: auto;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  .data-table tr.fk-target-row {
+    background-color: rgba(0, 123, 255, 0.2);
+    border-color: #0ea5e9;
+  }
+  .data-table tr.fk-target-row td {
+    background-color: rgba(0, 123, 255, 0.2);
+    border-color: #0ea5e9;
+    box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
+  }
+}
+.vscode-dark .data-table tr.fk-target-row {
+  background-color: rgba(0, 123, 255, 0.2);
+  border-color: #0ea5e9;
+}
+.vscode-dark .data-table tr.fk-target-row td {
+  background-color: rgba(0, 123, 255, 0.2);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
+}
+.vscode-high-contrast .data-table tr.fk-target-row {
+  background-color: rgba(0, 123, 255, 0.3);
+  border-color: #0056b3;
+  border-width: 3px;
+}
+.vscode-high-contrast .data-table tr.fk-target-row td {
+  background-color: rgba(0, 123, 255, 0.3);
+  border-color: #0056b3;
+  box-shadow: 0 0 10px rgba(0, 86, 179, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .data-table tr.fk-target-row {
+    animation: none;
+  }
+}
+
+/* ===== CELL EDITING ===== */
+.data-table .data-cell {
+  position: relative;
+  cursor: text;
+}
+.data-table .data-cell:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* Table editable/readonly indicators */
+.table-editable-indicator,
+.table-readonly-indicator {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.table-editable-indicator {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.table-readonly-indicator {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}

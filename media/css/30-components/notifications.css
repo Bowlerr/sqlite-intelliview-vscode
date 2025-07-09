@@ -1,0 +1,202 @@
+/* ===== NOTIFICATIONS ===== */
+.notification {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  max-width: 380px;
+  min-width: 280px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  font-size: 0.9em;
+  line-height: 1.5;
+  z-index: 2000;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 4px solid var(--vscode-notifications-border);
+  backdrop-filter: blur(8px);
+  animation: slideInFromRight 0.3s ease-out;
+  padding-right: 44px; /* room for close */
+}
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+.notification:hover {
+  opacity: 0.95;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+.notification.info,
+.notification.error,
+.notification.warning,
+.notification.success {
+  font-weight: 500;
+}
+.notification .close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  color: currentColor;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  backdrop-filter: blur(4px);
+}
+.notification .close-btn:active {
+  transform: scale(0.95);
+}
+.notification .close-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.25);
+}
+.notification.info {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  color: #ffffff;
+  border-left-color: #60a5fa;
+}
+.notification.error {
+  background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%);
+  color: #ffffff;
+  border-left-color: #f87171;
+}
+.notification.warning {
+  background: linear-gradient(135deg, #a16207 0%, #ca8a04 100%);
+  color: #ffffff;
+  border-left-color: #fbbf24;
+}
+.notification.success {
+  background: linear-gradient(135deg, #166534 0%, #16a34a 100%);
+  color: #ffffff;
+  border-left-color: #4ade80;
+}
+
+/* ===== ADVANCED NOTIFICATION ICONS & STACKING ===== */
+.notification-container {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 2000;
+  pointer-events: none;
+}
+.notification-container .notification {
+  position: relative;
+  top: 0;
+  right: 0;
+  margin-bottom: 12px;
+  pointer-events: auto;
+}
+.notification + .notification {
+  margin-top: 12px;
+}
+.notification::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  color: white;
+  font-weight: bold;
+}
+.notification.info::before {
+  content: "\2139";
+  background: #4da6ff;
+}
+.notification.error::before {
+  content: "\2715";
+  background: #ff4444;
+}
+.notification.warning::before {
+  content: "\26a0";
+  background: #ffaa00;
+}
+.notification.success::before {
+  content: "\2713";
+  background: #44cc44;
+}
+.notification.info .close-btn {
+  background: rgba(77, 166, 255, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(77, 166, 255, 0.3);
+  font-weight: bold;
+}
+.notification.info .close-btn:hover {
+  background: rgba(77, 166, 255, 0.3);
+  border-color: rgba(77, 166, 255, 0.5);
+}
+.notification.success .close-btn {
+  background: rgba(68, 204, 68, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(68, 204, 68, 0.3);
+  font-weight: bold;
+}
+.notification.success .close-btn:hover {
+  background: rgba(68, 204, 68, 0.3);
+  border-color: rgba(68, 204, 68, 0.5);
+}
+.notification.error .close-btn {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  font-weight: bold;
+}
+.notification.error .close-btn:hover {
+  background: rgba(255, 68, 68, 0.3);
+  border-color: rgba(255, 68, 68, 0.5);
+}
+.notification.warning .close-btn {
+  background: rgba(255, 170, 0, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  font-weight: bold;
+}
+.notification.warning .close-btn:hover {
+  background: rgba(255, 170, 0, 0.3);
+  border-color: rgba(255, 170, 0, 0.5);
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .notification {
+    max-width: 350px;
+    min-width: 260px;
+  }
+}
+@media (min-width: 1025px) {
+  .notification {
+    max-width: 380px;
+    min-width: 280px;
+  }
+}

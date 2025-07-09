@@ -1,0 +1,24 @@
+/* ===== CONTENT AREAS ===== */
+#schema-content,
+#data-content {
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+#schema-content:empty::before {
+  content: "\1F4CB\A Select a table to view its schema\A \A Choose a table from the sidebar to explore its structure, columns, and data types.";
+}
+
+#schema-content:has-text("Select a table to view its schema"),
+#data-content:has-text("Select a table to view its data") {
+  color: var(--vscode-descriptionForeground);
+  font-size: 1em;
+  text-align: center;
+  opacity: 0.7;
+  padding: 32px 0 0 0;
+}

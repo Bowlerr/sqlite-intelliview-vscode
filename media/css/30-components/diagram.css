@@ -1,0 +1,244 @@
+/* ===== ER DIAGRAM STYLES ===== */
+#diagram-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(
+    45deg,
+    var(--vscode-editor-background) 0%,
+    var(--vscode-sideBar-background) 100%
+  );
+}
+#diagram-container svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+.diagram-controls-overlay {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: none !important;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  background: rgba(var(--vscode-editor-background-rgb), 0.9);
+  border-radius: 8px;
+  padding: 8px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+#diagram-panel.active .diagram-controls-overlay {
+  display: flex !important;
+}
+
+/* ===== ADVANCED DIAGRAM ENHANCEMENTS (from vscode.css) ===== */
+.diagram-tooltip {
+  color: var(--vscode-foreground) !important;
+  font-family: var(--vscode-font-family) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  border-radius: 6px !important;
+  backdrop-filter: blur(10px);
+}
+.diagram-control-btn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  min-width: 40px;
+}
+.diagram-control-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+.diagram-control-btn:active {
+  transform: scale(0.95);
+}
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100%;
+  width: 100%;
+  min-height: 100%;
+  padding: 80px 2rem 2rem 2rem;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  text-align: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+}
+.error-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+  opacity: 0;
+  animation: errorBounce 0.6s ease-out forwards;
+}
+.error-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--vscode-errorForeground);
+  opacity: 0;
+  animation: fadeInUp 0.5s ease-out 0.2s forwards;
+}
+.error-message {
+  font-size: 0.9rem;
+  opacity: 0;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  max-width: 400px;
+  line-height: 1.5;
+  color: var(--vscode-descriptionForeground);
+  animation: fadeInUp 0.5s ease-out 0.4s forwards;
+}
+.error-actions {
+  display: flex;
+  gap: 1rem;
+  opacity: 0;
+  animation: fadeInUp 0.5s ease-out 0.6s forwards;
+  justify-content: center;
+}
+.retry-button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.retry-button:hover {
+  background: var(--vscode-button-hoverBackground);
+  transform: translateY(-1px);
+}
+@keyframes errorBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-20px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) translateY(-10px);
+  }
+  70% {
+    transform: scale(0.9) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ===== ADVANCED DIAGRAM PANEL/CONTAINER FEATURES ===== */
+.tab-panel:not(#diagram-panel) #diagram-container,
+.tab-panel:not(.active) #diagram-container {
+  display: none !important;
+}
+.tab-panel:not(#diagram-panel) .diagram-controls-overlay,
+.tab-panel:not(.active) .diagram-controls-overlay {
+  display: none !important;
+}
+body:not(.diagram-tab-active) .diagram-controls-overlay,
+#diagram-panel:not(.active) .diagram-controls-overlay {
+  display: none !important;
+  visibility: hidden !important;
+}
+#diagram-panel:not(.active) {
+  display: none !important;
+}
+#diagram-panel.active {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+#diagram-container .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100%;
+  text-align: center;
+  padding: 80px 2rem 2rem 2rem;
+}
+#diagram-container .empty-state .primary-button {
+  margin-top: 1rem;
+  padding: 12px 24px;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+#diagram-container .empty-state .primary-button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.loading-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.loading-description {
+  font-size: 14px;
+  opacity: 0.8;
+  text-align: center;
+}
+#diagram-container:active {
+  cursor: grabbing;
+}
+
+/* ===== RESPONSIVE DIAGRAM CONTAINER & ERROR STATE ===== */
+@media (max-width: 768px) {
+  .diagram-controls-overlay {
+    top: 10px;
+    right: 10px;
+    padding: 8px;
+  }
+  .diagram-control-btn {
+    padding: 6px 8px;
+    font-size: 12px;
+    min-width: 30px;
+  }
+}
+@media (max-height: 600px) {
+  .error-state {
+    padding: 40px 2rem 2rem 2rem;
+  }
+  .error-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+  }
+}
+@media (max-width: 768px) {
+  .error-state {
+    padding: 60px 1.5rem 1.5rem 1.5rem;
+  }
+  .error-icon {
+    font-size: 3.5rem;
+  }
+  .error-title {
+    font-size: 1.2rem;
+  }
+  .error-message {
+    font-size: 0.9rem;
+    max-width: 350px;
+  }
+}

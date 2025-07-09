@@ -1,0 +1,134 @@
+/* ===== CONNECTION STATUS ===== */
+.connection-status-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-width: 130px;
+  height: 32px;
+}
+.connection-status {
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 110px;
+  text-align: center;
+  white-space: nowrap;
+  position: relative;
+  will-change: opacity;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+.connection-status.connected {
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+  color: #ffffff;
+}
+.connection-status.disconnected {
+  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+.connection-status.connecting {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  color: #ffffff;
+}
+.connection-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 8px;
+  display: inline-block;
+  opacity: 0.9;
+}
+
+/* ===== CONNECTION SECTION ===== */
+.connection-section {
+  display: none;
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  position: relative;
+  backdrop-filter: blur(2px);
+}
+.connection-section.visible {
+  display: block;
+  animation: fadeInUp 0.3s ease-out;
+}
+.connection-section::before {
+  content: "🔐";
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 1.2em;
+  opacity: 0.5;
+}
+.connection-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connection-section h3::before {
+  content: "🔑";
+  font-size: 1em;
+}
+.connection-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.connection-controls input[type="password"] {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  transition: all 0.2s ease;
+}
+.connection-controls input[type="password"]:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.2);
+}
+.connection-controls input[type="password"]::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+  opacity: 0.8;
+}
+.help-button {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-button-border);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.help-button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}

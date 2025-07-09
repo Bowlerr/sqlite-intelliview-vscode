@@ -1,0 +1,28 @@
+/* ===== ROOT VARIABLES ===== */
+:root {
+  --vscode-font-family: var(--vscode-font-family);
+  --container-padding: 20px;
+  --input-padding-vertical: 6px;
+  --input-padding-horizontal: 4px;
+  --input-margin-vertical: 4px;
+  --input-margin-horizontal: 0;
+}
+
+/* Custom scrollbars for all platforms */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--vscode-scrollbar-shadow);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+::-webkit-scrollbar-corner {
+  background: var(--vscode-scrollbar-shadow);
+}

@@ -104,13 +104,39 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         // Local path to main script run in the webview
         const scriptPathOnDisk = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'main.js');
         const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
+        const cssFiles = [
+        'css/reset.css',
+        'css/00-variables.css',
+        'css/10-base.css',
+        'css/20-layout.css',
+        // core components
+        'css/30-components/buttons.css',
+        'css/30-components/confirm-dialog.css',
+        'css/30-components/connection.css',
+        'css/30-components/content-area.css',
+        'css/30-components/context-menu.css',
+        'css/30-components/diagram.css',
+        'css/30-components/empty-state.css',
+        'css/30-components/form-inputs.css',
+        'css/30-components/header.css',
+        'css/30-components/loading.css',
+        'css/30-components/modals.css',
+        'css/30-components/notifications.css',
+        'css/30-components/query-editor.css',
+        'css/30-components/section.css',
+        'css/30-components/sidebar.css',
+        'css/30-components/tables-list.css',
+        'css/30-components/tables.css',
+        'css/30-components/tabs.css',
+        ];
 
-        // Local path to css styles
-        const styleResetPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'reset.css');
-        const stylesPathMainPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'vscode.css');
-        const stylesMainUri = webview.asWebviewUri(stylesPathMainPath);
-        const styleResetUri = webview.asWebviewUri(styleResetPath);
-
+        const cssLinks = cssFiles.map(relPath => {
+        const uri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'media', relPath)
+        );
+        return `<link href="${uri}" rel="stylesheet">`;
+        }).join('');
+            
         // Use a nonce to only allow specific scripts to be run
         const nonce = getNonce();
 
@@ -120,8 +146,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <meta charset="UTF-8">
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; img-src ${webview.cspSource} data:; worker-src blob:; child-src blob:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link href="${styleResetUri}" rel="stylesheet">
-                <link href="${stylesMainUri}" rel="stylesheet">
+                ${cssLinks}
                 <title>SQLite IntelliView</title>
             </head>
             <body>

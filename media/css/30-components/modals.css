@@ -1,0 +1,153 @@
+/* ===== MODAL STYLES & ANIMATIONS ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+.modal-overlay.hidden {
+  display: none;
+}
+.modal {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  max-width: 90vw;
+  max-height: 80vh;
+  min-width: 320px;
+  min-height: 120px;
+  overflow: auto;
+  padding: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px 8px 24px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  border-radius: 8px 8px 0 0;
+}
+.modal-title {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.modal-close:hover {
+  opacity: 1;
+}
+.modal-body {
+  padding: 16px 24px 24px 24px;
+  overflow: auto;
+  flex: 1;
+}
+
+@keyframes modalOverlayFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(6px);
+  }
+}
+@keyframes modalOverlayFadeOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(6px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+@keyframes modalDialogPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(48px) scale(0.95);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.03);
+  }
+  80% {
+    transform: translateY(2px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes modalDialogPopOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+  }
+}
+@keyframes errorBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-20px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) translateY(-10px);
+  }
+  70% {
+    transform: scale(0.9) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-overlay {
+  animation: modalOverlayFadeIn 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    backdrop-filter 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(6px);
+}
+.modal-overlay.hidden {
+  animation: modalOverlayFadeOut 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.modal {
+  animation: modalDialogPopIn 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.38s, transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.modal-overlay.hidden .modal {
+  animation: modalDialogPopOut 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal,
+  .modal-overlay.hidden,
+  .modal-overlay.hidden .modal {
+    animation: none !important;
+    transition: none !important;
+  }
+}
