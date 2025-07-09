@@ -150,18 +150,7 @@ body.sidebar-resizing * {
   opacity: 0.5;
   font-size: 9px;
 }
-.sidebar.minimized::after {
-  content: "Selected";
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%) rotate(90deg);
-  font-size: 9px;
-  color: var(--vscode-descriptionForeground);
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0.4;
-}
+
 .sidebar.minimized .sidebar-header {
   flex-direction: column;
   align-items: center;
@@ -184,7 +173,6 @@ body.sidebar-resizing * {
   gap: 16px;
   padding: 20px 0;
   margin-top: 16px;
-  height: calc(100% - 80px);
 }
 .sidebar.minimized:hover {
   width: 280px;

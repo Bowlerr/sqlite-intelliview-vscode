@@ -54,59 +54,40 @@
 /* ===== CONNECTION SECTION ===== */
 .connection-section {
   display: none;
-  background: var(--vscode-editor-inactiveSelectionBackground);
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 8px;
-  padding: 20px;
+  background: var(--vscode-sideBar-background);
+  padding: 16px 12px;
   margin-bottom: 20px;
   position: relative;
-  backdrop-filter: blur(2px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: background 0.2s, border 0.2s;
 }
 .connection-section.visible {
   display: block;
   animation: fadeInUp 0.3s ease-out;
 }
 .connection-section::before {
-  content: "🔐";
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  font-size: 1.2em;
-  opacity: 0.5;
-}
-.connection-section h3 {
-  margin: 0 0 16px 0;
-  font-size: 1.1em;
-  font-weight: 600;
-  color: var(--vscode-foreground);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: none;
 }
 
-.connection-section h3::before {
-  content: "🔑";
-  font-size: 1em;
-}
 .connection-controls {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 .connection-controls input[type="password"] {
   font-family: var(--vscode-editor-font-family);
-  font-size: 0.9em;
-  padding: 12px 16px;
+  font-size: 0.95em;
+  padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid var(--vscode-input-border);
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 .connection-controls input[type="password"]:focus {
   outline: none;
   border-color: var(--vscode-focusBorder);
-  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.2);
+  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.12);
 }
 .connection-controls input[type="password"]::placeholder {
   color: var(--vscode-input-placeholderForeground);
@@ -131,4 +112,20 @@
   background: var(--vscode-button-secondaryHoverBackground);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.connection-controls .primary-button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: 1px solid var(--vscode-button-border);
+  border-radius: 6px;
+  padding: 8px 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  width: 100%; /* Make button fill the width */
+  margin-top: 0;
+}
+.connection-controls .primary-button:hover {
+  background: var(--vscode-button-hoverBackground);
 }

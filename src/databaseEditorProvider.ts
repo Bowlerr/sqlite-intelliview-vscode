@@ -179,14 +179,14 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                             <!-- Minimized sidebar content -->
                             <div class="minimized-content">
                                 <div class="selected-table-indicator empty" id="selected-table-indicator">
-                                    No Table
+                                    No Table Selected
                                 </div>
                             </div>
                             
                             <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
                             
                             <div class="section connection-section visible" id="connection-section">
-                                <h3>Connection</h3>
+                             <div class="minimized-content">🔒</div>
                                 <div class="connection-controls">
                                     <input type="password" id="encryption-key" placeholder="SQLCipher Key" />
                                     <button id="connect-btn" class="primary-button">Connect with Key</button>
@@ -196,7 +196,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                             <div class="section">
                                 <h3>Tables</h3>
                                 <div id="tables-list" class="tables-list">
-                                    <div class="loading">Connecting to database...</div>
+                                    <div class="loading">Disconnected from database...</div>
                                 </div>
                             </div>
                         </div>

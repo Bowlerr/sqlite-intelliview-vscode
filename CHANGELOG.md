@@ -4,6 +4,13 @@ All notable changes to the "SQLite IntelliView" extension will be documented in 
 
 ## [Unreleased]
 
+### ✨ UI/UX Improvements
+
+- Sidebar minimized mode now displays a lock icon (🔒) for encrypted/locked state, styled for visual consistency.
+- The connection section and controls have been visually unified with the rest of the sidebar, including button and input alignment.
+- Improved sidebar minimized content layout and removed unused sidebar label.
+- Updated placeholder and loading messages for disconnected state.
+
 ### 🛠️ Refactor: Modular CSS Architecture
 
 - Migrated from a single monolithic CSS file (`media/vscode.css`) to a modular CSS architecture under `media/css/`.
