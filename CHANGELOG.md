@@ -9,21 +9,6 @@
 - Improved sidebar minimized content layout and removed unused sidebar label.
 - Updated placeholder and loading messages for disconnected state.
 
-### 🛠️ Code & CSS Refactor
-
-- Refactored `connection.css` and `sidebar.css` for better modularity and maintainability.
-- Added `.connection-locked` CSS class for lock icon styling.
-- Updated `databaseEditorProvider.ts` to use a more robust minimized/locked state logic and markup.
-
-## [Unreleased]
-
-### ✨ UI/UX Improvements
-
-- Sidebar minimized mode now displays a lock icon (🔒) for encrypted/locked state, styled for visual consistency.
-- The connection section and controls have been visually unified with the rest of the sidebar, including button and input alignment.
-- Improved sidebar minimized content layout and removed unused sidebar label.
-- Updated placeholder and loading messages for disconnected state.
-
 ### 🛠️ Refactor: Modular CSS Architecture
 
 - Migrated from a single monolithic CSS file (`media/vscode.css`) to a modular CSS architecture under `media/css/`.
