@@ -4,6 +4,15 @@ All notable changes to the "SQLite IntelliView" extension will be documented in 
 
 ## [Unreleased]
 
+### 🛠️ Refactor: Modular CSS Architecture
+
+- Migrated from a single monolithic CSS file (`media/vscode.css`) to a modular CSS architecture under `media/css/`.
+  - Added new CSS files: `reset.css`, `00-variables.css`, `10-base.css`, `20-layout.css`, and all component-specific styles under `media/css/30-components/` (e.g., `buttons.css`, `modals.css`, `sidebar.css`, etc.).
+  - Each UI component or area now has its own dedicated CSS file for improved maintainability and scalability.
+  - **Removed:** The old `media/vscode.css` file has been deleted.
+- Updated the webview HTML generation in `src/databaseEditorProvider.ts` to dynamically include all modular CSS files instead of referencing the old monolithic CSS file.
+- This refactor improves code organization, makes it easier to update or extend styles, and reduces the risk of CSS conflicts.
+
 ## [0.2.12] - 2025-07-07
 
 ### 🐛 Bug Fixes
