@@ -217,6 +217,11 @@ function showConnectionHelp() {
   showNotification(helpMessage, "info", 15000);
 }
 
+// Make showNotification available globally for browser context
+if (typeof window !== "undefined") {
+  window.showNotification = showNotification;
+}
+
 // Export functions for use in other modules
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {

@@ -768,6 +768,13 @@ function handlePageSizeChange(tableWrapper, newPageSize) {
   // Update page size
   wrapper.dataset.pageSize = newPageSize.toString();
 
+  // Update global pagination state
+  /** @type {any} */
+  const win = window;
+  if (typeof win.updateState === "function") {
+    win.updateState({ currentPage: newCurrentPage, pageSize: newPageSize });
+  }
+
   // Update to new page
   updateTablePage(tableWrapper, newCurrentPage);
 }
@@ -794,12 +801,21 @@ function updateTablePage(tableWrapper, pageNumber) {
   // Update current page
   wrapper.dataset.currentPage = validPage.toString();
 
+  // Update global pagination state
+  /** @type {any} */
+  const win = window;
+  if (typeof win.updateState === "function") {
+    win.updateState({ currentPage: validPage, pageSize });
+  }
+
   // We need to get the full data and re-render the table
   // For now, we'll trigger a data reload from the extension
+  /** @type {any} */
+  const win2 = window;
   const currentState =
-    typeof getCurrentState !== "undefined" ? getCurrentState() : {};
-  if (currentState.selectedTable && typeof vscode !== "undefined") {
-    vscode.postMessage({
+    typeof win2.getCurrentState === "function" ? win2.getCurrentState() : {};
+  if (currentState.selectedTable && typeof win2.vscode !== "undefined") {
+    win2.vscode.postMessage({
       type: "getTableData",
       tableName: currentState.selectedTable,
       page: validPage,
@@ -889,6 +905,21 @@ function updatePaginationControls(tableWrapper, data, currentPage, pageSize) {
   if (pageInput) {
     /** @type {HTMLInputElement} */ (pageInput).value = currentPage.toString();
     /** @type {HTMLInputElement} */ (pageInput).max = totalPages.toString();
+    // Add event listener for Enter key and blur
+    pageInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        const val = parseInt(pageInput.value, 10);
+        if (!isNaN(val)) {
+          updateTablePage(tableWrapper, val);
+        }
+      }
+    });
+    pageInput.addEventListener("blur", function () {
+      const val = parseInt(pageInput.value, 10);
+      if (!isNaN(val)) {
+        updateTablePage(tableWrapper, val);
+      }
+    });
   }
 }
 

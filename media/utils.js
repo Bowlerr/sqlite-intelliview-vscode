@@ -226,6 +226,11 @@ function formatFileSize(bytes) {
   return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
 }
 
+// Make formatCellValue available globally for browser context
+if (typeof window !== "undefined") {
+  window.formatCellValue = formatCellValue;
+}
+
 // Export functions for use in other modules
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {

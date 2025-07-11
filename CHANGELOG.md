@@ -5,6 +5,22 @@
 ### Added
 
 - Sidebar now automatically maximizes to show the encryption key input when an encrypted database fails to open and a key is required. This improves the user experience for SQLCipher-protected databases and makes key entry more discoverable.
+- **Live Refresh:** The viewer now automatically refreshes table data and schema when the underlying database file changes externally. This includes:
+  - Real-time detection of changes to the database file (using a file watcher in the extension backend).
+  - Automatic refresh of the current table, schema, and tables list in the webview when a change is detected.
+  - User notification when a refresh occurs due to an external change.
+  - Pagination state is preserved across refreshes, and the UI updates without requiring a manual reload.
+  - Improved global state management for pagination and table selection.
+
+### Changed
+
+- Table pagination and state are now managed globally, ensuring consistent navigation and data display after refreshes or table switches.
+- Utility functions (such as `formatCellValue` and `showNotification`) are now available globally in the browser context for improved modularity and debugging.
+
+### Fixed
+
+- Fixed issues with pagination controls not updating state correctly when changing page size or navigating pages.
+- Fixed webview not always updating after an external database change.
 
 ## [0.2.13] - 2025-07-09
 

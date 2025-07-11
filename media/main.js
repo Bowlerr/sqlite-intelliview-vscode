@@ -32,6 +32,73 @@
     ) {
       maximizeSidebar();
     }
+    // --- Handle external database changes ---
+    if (message.type === "externalDatabaseChanged") {
+      // Show a notification instead of loading state
+      if (typeof showNotification === "function") {
+        showNotification(
+          "Database file changed externally. Data refreshed.",
+          "info"
+        );
+      }
+      // Refresh the current table if one is selected
+      const state =
+        typeof getCurrentState === "function" ? getCurrentState() : {};
+      if (state.selectedTable) {
+        // Use only global state for pagination (no DOM fallback)
+        let page = 1;
+        let pageSize = 100;
+        /** @type {any} */
+        const win = window;
+        if (typeof win.getCurrentState === "function") {
+          const stateObj = win.getCurrentState();
+          if (
+            typeof stateObj.currentPage === "number" &&
+            !isNaN(stateObj.currentPage)
+          ) {
+            page = stateObj.currentPage;
+          }
+          if (
+            typeof stateObj.pageSize === "number" &&
+            !isNaN(stateObj.pageSize)
+          ) {
+            pageSize = stateObj.pageSize;
+          }
+        }
+        // Re-request schema and data for the selected table
+        if (typeof requestTableSchema === "function") {
+          requestTableSchema(state.selectedTable);
+        }
+        if (typeof requestTableData === "function") {
+          requestTableData(state.selectedTable, page, pageSize);
+        }
+      }
+      // Optionally refresh the tables list or database info
+      if (typeof requestDatabaseInfo === "function") {
+        requestDatabaseInfo();
+      }
+    }
+    // --- Handle table data response ---
+    if (message.type === "tableData") {
+      // Update pagination state immediately on data receipt
+      /** @type {any} */
+      const win = window;
+      if (typeof win.updateState === "function") {
+        win.updateState({
+          currentPage: message.page,
+          pageSize: message.pageSize,
+        });
+      }
+      // Use backend-provided page, pageSize, totalRows for rendering
+      displayTableData(
+        message.data,
+        message.tableName,
+        message.page || 1,
+        message.pageSize || 100,
+        message.totalRows || (message.data ? message.data.length : 0)
+      );
+      return;
+    }
   });
 
   try {
@@ -40,7 +107,6 @@
 
     // Make vscode available globally for other modules
     /** @type {any} */ (window).vscode = vscode;
-
     // ============================================================================
     // MAIN APPLICATION LOGIC
     // ============================================================================
@@ -53,8 +119,8 @@
 
       try {
         // Initialize modules (functions from loaded JS files)
-        if (typeof initializeState === "function") {
-          initializeState();
+        if (typeof window.initializeState === "function") {
+          window.initializeState();
         }
 
         if (typeof initializeDOMElements === "function") {
@@ -128,7 +194,7 @@
      * Select a table and load its data
      * @param {string} tableName - Name of the table to select
      */
-    function selectTable(tableName) {
+    function selectTable(tableName, page = 1, pageSize = 100) {
       console.log(`Selecting table: ${tableName}`);
 
       if (typeof updateState === "function") {
@@ -153,7 +219,7 @@
 
       // Request table schema and data
       requestTableSchema(tableName);
-      requestTableData(tableName);
+      requestTableData(tableName, page, pageSize);
 
       // Switch to schema tab to show the table info
       if (typeof switchTab === "function") {
@@ -183,24 +249,19 @@
      * Request table data from extension
      * @param {string} tableName - Table name
      */
-    function requestTableData(tableName) {
+    function requestTableData(tableName, page = 1, pageSize = 100) {
       const state =
         typeof getCurrentState === "function" ? getCurrentState() : {};
       console.log(
         "Requesting table data with encryption key:",
         state.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
       );
-      // Always request first page with default page size
-      vscode.postMessage({
+      window.vscode.postMessage({
         type: "getTableData",
         tableName: tableName,
         key: state.encryptionKey,
-        page: 1,
-        pageSize:
-          typeof PAGINATION_CONFIG !== "undefined" &&
-          PAGINATION_CONFIG.defaultPageSize
-            ? PAGINATION_CONFIG.defaultPageSize
-            : 100,
+        page: page,
+        pageSize: pageSize,
       });
     }
 
@@ -323,7 +384,13 @@
      * @param {Array} data - Table data array
      * @param {string} tableName - Table name
      */
-    function displayTableData(data, tableName) {
+    function displayTableData(
+      data,
+      tableName,
+      page = 1,
+      pageSize = 100,
+      totalRows = 0
+    ) {
       const dataContent = document.getElementById("data-content");
       if (!dataContent) {
         return;
@@ -344,7 +411,17 @@
       let table = "";
 
       if (typeof createDataTable === "function") {
-        table = createDataTable(data, columns, tableName);
+        table = createDataTable(data, columns, tableName, {
+          page,
+          pageSize,
+          totalRows,
+        });
+        // Update pagination state globally
+        /** @type {any} */
+        const win = window;
+        if (typeof win.updateState === "function") {
+          win.updateState({ currentPage: page, pageSize });
+        }
       } else {
         // Fallback basic table
         table = createBasicTable(data, columns);
@@ -420,8 +497,8 @@
       if (value === null || value === undefined) {
         return '<span class="null-value">NULL</span>';
       }
-      if (typeof formatCellValue === "function") {
-        return formatCellValue(value);
+      if (typeof window.formatCellValue === "function") {
+        return window.formatCellValue(value);
       }
       return String(value);
     }
@@ -443,6 +520,20 @@
       document.addEventListener("DOMContentLoaded", initializeApp);
     } else {
       initializeApp();
+    }
+
+    // Import utility and state functions from other modules
+    // @ts-ignore
+    if (typeof window !== "undefined") {
+      // Attach formatCellValue and initializeState to window if available
+      // @ts-ignore
+      if (typeof formatCellValue !== "undefined") {
+        window.formatCellValue = formatCellValue;
+      }
+      // @ts-ignore
+      if (typeof initializeState !== "undefined") {
+        window.initializeState = initializeState;
+      }
     }
 
     // Export functions for debugging/testing

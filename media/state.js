@@ -14,6 +14,8 @@ let currentState = {
   connectionError: null,
   queryHistory: [],
   tableCache: new Map(),
+  currentPage: 1, // Track current page for pagination
+  pageSize: 100, // Track current page size for pagination
 };
 
 /**
@@ -70,12 +72,19 @@ function resetState() {
     connectionError: null,
     queryHistory: [],
     tableCache: new Map(),
+    currentPage: 1,
+    pageSize: 100,
   };
 
   if (typeof vscode !== "undefined") {
     vscode.setState(currentState);
   }
 }
+
+// Ensure vscode is available globally for state.js
+// @ts-ignore
+var vscode =
+  typeof window !== "undefined" && window.vscode ? window.vscode : undefined;
 
 // Export functions for use in other modules
 if (typeof module !== "undefined" && module.exports) {

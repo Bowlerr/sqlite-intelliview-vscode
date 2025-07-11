@@ -2,12 +2,14 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DatabaseService } from './databaseService';
+import { DatabaseWatcher } from './databaseWatcher';
 
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
-    
     private static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
     private activeConnections: Map<string, DatabaseService> = new Map();
-    
+    private databaseWatcher: DatabaseWatcher = new DatabaseWatcher();
+    private webviewPanels: Map<string, vscode.WebviewPanel> = new Map();
+
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
         const providerRegistration = vscode.window.registerCustomEditorProvider(
@@ -33,11 +35,25 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         openContext: vscode.CustomDocumentOpenContext,
         _token: vscode.CancellationToken
     ): Promise<vscode.CustomDocument> {
+        // Add file watcher for this database file using DatabaseWatcher
+        this.databaseWatcher.addWatcher(uri.fsPath, () => {
+            // On external change, close all in-memory connections for this file
+            this.handleExternalDatabaseChange(uri.fsPath);
+            // Notify the webview for this file if open
+            const panel = this.webviewPanels.get(uri.fsPath);
+            if (panel) {
+                panel.webview.postMessage({
+                    type: 'externalDatabaseChanged',
+                    databasePath: uri.fsPath
+                });
+            }
+        });
         return {
             uri,
             dispose: () => {
-                // Clean up resources for this document
                 this.closeConnection(uri.fsPath);
+                this.databaseWatcher.removeWatcher(uri.fsPath);
+                this.webviewPanels.delete(uri.fsPath);
             }
         };
     }
@@ -68,7 +84,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             // Post error to webview so it can react (e.g., maximize sidebar)
             webviewPanel.webview.postMessage({
                 type: 'databaseLoadError',
-                error: error && error.message ? error.message : String(error)
+                error: (error && typeof error === 'object' && 'message' in error) ? (error as any).message : String(error)
             });
         }
 
@@ -102,9 +118,13 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             }
         });
 
+        // Track the webview panel for this document
+        this.webviewPanels.set(document.uri.fsPath, webviewPanel);
+
         // Handle webview disposal
         webviewPanel.onDidDispose(() => {
             this.closeConnection(document.uri.fsPath);
+            this.webviewPanels.delete(document.uri.fsPath);
         });
     }
 
@@ -750,7 +770,16 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     // Add a global cleanup method for extension deactivation
     public dispose(): void {
+        this.databaseWatcher.disposeAll();
+        this.webviewPanels.clear();
         this.closeAllConnections();
+    }
+
+    public handleExternalDatabaseChange(databasePath: string) {
+        // Close all connections for this database path (all keys)
+        this.closeConnection(databasePath);
+        // Optionally, clear any other caches if needed
+        // The next request from the webview will re-open the database from disk
     }
 }
 
