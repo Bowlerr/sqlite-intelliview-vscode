@@ -1196,16 +1196,19 @@ function navigateToForeignKeyReference() {
     }
 
     // Request to switch to the referenced table
+    let pageSize = 100;
+    if (typeof window !== "undefined" && typeof window.getCurrentState === "function") {
+      const state = window.getCurrentState();
+      if (state && state.pageSize) {
+        pageSize = state.pageSize;
+      }
+    }
     vscode.postMessage({
       type: "getTableData",
       tableName: foreignKeyInfo.referencedTable,
       key: getCurrentEncryptionKey(),
       page: 1,
-      pageSize:
-        typeof PAGINATION_CONFIG !== "undefined" &&
-        PAGINATION_CONFIG.defaultPageSize
-          ? PAGINATION_CONFIG.defaultPageSize
-          : 100,
+      pageSize: pageSize, // Use persisted pageSize from state
     });
 
     // Switch to data tab to show the table

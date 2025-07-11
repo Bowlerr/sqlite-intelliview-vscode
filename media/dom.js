@@ -157,18 +157,24 @@ function switchTab(tabName) {
 
   // Load data for the data tab if a table is selected
   if (tabName === "data") {
-    const currentState = getCurrentState ? getCurrentState() : {};
+    const currentState =
+      typeof getCurrentState === "function" ? getCurrentState() : {};
     if (currentState.selectedTable && typeof vscode !== "undefined") {
+      // Use persisted pageSize from state if available
+      const pageSize =
+        typeof currentState.pageSize === "number" &&
+        !isNaN(currentState.pageSize)
+          ? currentState.pageSize
+          : typeof PAGINATION_CONFIG !== "undefined" &&
+            PAGINATION_CONFIG.defaultPageSize
+          ? PAGINATION_CONFIG.defaultPageSize
+          : 100;
       vscode.postMessage({
         type: "getTableData",
         tableName: currentState.selectedTable,
         key: currentState.encryptionKey || "",
         page: 1,
-        pageSize:
-          typeof PAGINATION_CONFIG !== "undefined" &&
-          PAGINATION_CONFIG.defaultPageSize
-            ? PAGINATION_CONFIG.defaultPageSize
-            : 100,
+        pageSize: pageSize,
       });
     }
   }

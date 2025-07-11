@@ -651,11 +651,18 @@ function displayTablesList(tables) {
             tableName: tableName,
           });
           // Also request table data to refresh the Data tab
+          let pageSize = 100;
+          if (typeof window !== "undefined" && typeof window.getCurrentState === "function") {
+            const state = window.getCurrentState();
+            if (state && state.pageSize) {
+              pageSize = state.pageSize;
+            }
+          }
           vscode.postMessage({
             type: "getTableData",
             tableName: tableName,
             page: 1,
-            pageSize: 100,
+            pageSize: pageSize, // Use persisted pageSize from state
           });
         }
       }
