@@ -8,6 +8,32 @@
 (function () {
   console.log("SQLite IntelliView: Starting main initialization...");
 
+  // --- Sidebar maximize logic ---
+  function maximizeSidebar() {
+    if (
+      window.resizableSidebar &&
+      typeof window.resizableSidebar.setMinimized === "function"
+    ) {
+      window.resizableSidebar.setMinimized(false);
+    }
+  }
+  // Listen for messages from extension/backend
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message) {
+      return;
+    }
+    if (
+      message.type === "maximizeSidebar" ||
+      message.type === "databaseLoadError" ||
+      (message.type === "error" &&
+        typeof message.message === "string" &&
+        message.message.includes("Database appears to be encrypted"))
+    ) {
+      maximizeSidebar();
+    }
+  });
+
   try {
     // @ts-ignore - acquireVsCodeApi is provided by VS Code webview runtime
     const vscode = acquireVsCodeApi();
@@ -85,9 +111,6 @@
         if (typeof initializeQueryEditorVisibility === "function") {
           initializeQueryEditorVisibility();
         }
-
-        // Set up message handling from extension (delegated to events.js)
-        // The events.js module will handle window.addEventListener("message", handleExtensionMessage)
 
         console.log("SQLite IntelliView initialized successfully");
 

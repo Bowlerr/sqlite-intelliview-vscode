@@ -62,7 +62,15 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         }
 
         // Set the initial content
-        updateWebview();
+        try {
+            updateWebview();
+        } catch (error) {
+            // Post error to webview so it can react (e.g., maximize sidebar)
+            webviewPanel.webview.postMessage({
+                type: 'databaseLoadError',
+                error: error && error.message ? error.message : String(error)
+            });
+        }
 
         // Handle messages from the webview
         webviewPanel.webview.onDidReceiveMessage(e => {

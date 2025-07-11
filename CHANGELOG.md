@@ -1,5 +1,11 @@
 # Change Log
 
+## [Unreleased] - 2025-07-11
+
+### Added
+
+- Sidebar now automatically maximizes to show the encryption key input when an encrypted database fails to open and a key is required. This improves the user experience for SQLCipher-protected databases and makes key entry more discoverable.
+
 ## [0.2.13] - 2025-07-09
 
 ### ✨ UI/UX Improvements

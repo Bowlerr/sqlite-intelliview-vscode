@@ -1,13 +1,6 @@
-````instructions
-# Copilot Instructions
+## applyTo: "\*\*"
 
----
-
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
-
----
-applyTo: '**'
----
+Whenever I ask a question, search the entire codebase (all files and symbols), not just the current file, and use that context to form your answer.
 
 # Claude Sonnet 4 Style
 
@@ -1059,4 +1052,3 @@ test_with_relationships.db # Foreign key relationship testing
 ```
 
 ```
-````
