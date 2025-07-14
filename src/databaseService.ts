@@ -321,7 +321,7 @@ export class DatabaseService {
 
     public async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<QueryResult> {
         const offset = (page - 1) * pageSize;
-        const query = `SELECT rowid, * FROM "${tableName}" LIMIT ${pageSize} OFFSET ${offset}`;
+        const query = `SELECT * FROM "${tableName}" LIMIT ${pageSize} OFFSET ${offset}`;
         return this.executeQuery(query);
     }
 
@@ -649,7 +649,7 @@ export class DatabaseService {
         if (!rowids.length) { return []; }
         const cases = rowids.map((id, i) => `WHEN rowid=${id} THEN ${i}`).join(' ');
         const sql = `
-            SELECT rowid, * 
+            SELECT * 
               FROM "${tableName}"
              WHERE rowid IN (${rowids.join(',')})
           ORDER BY CASE ${cases} END
