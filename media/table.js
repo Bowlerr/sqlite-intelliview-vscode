@@ -65,7 +65,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   }
 
   return `
-    <div class="enhanced-table-wrapper" data-table-id="${tableId}" data-total-rows="${totalRows}" data-page-size="${pageSize}" data-current-page="${currentPage}">
+    <div class="enhanced-table-wrapper" data-table="${tableName}" data-table-id="${tableId}" data-total-rows="${totalRows}" data-page-size="${pageSize}" data-current-page="${currentPage}">
       <div class="table-controls">
         <div class="table-search">
           <input type="text" class="search-input" placeholder="Search table..." />
@@ -128,7 +128,8 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                     title="${fkTitle || `Column ${col}, sortable`}"
                     aria-label="Column ${col}, sortable${
                     isForeignKey ? ", foreign key" : ""
-                  }">
+                  }"
+                  data-column-name="${col}">
                   <div class="column-header">
                     <span class="column-name">${col}</span>
                     ${
@@ -471,12 +472,14 @@ function toggleColumnPin(table, columnIndex) {
   const isPinned = header.classList.contains("pinned");
 
   if (isPinned) {
-    // Unpin column
+    // Unpin column: remove .pinned, add .unpinned
     header.classList.remove("pinned");
+    header.classList.add("unpinned");
     table
       .querySelectorAll(`td[data-column="${columnIndex}"]`)
       .forEach((cell) => {
         cell.classList.remove("pinned");
+        cell.classList.add("unpinned");
       });
 
     // Update pin button with accessibility
@@ -503,11 +506,13 @@ function toggleColumnPin(table, columnIndex) {
       showSuccess(`Column unpinned`);
     }
   } else {
-    // Pin column
+    // Pin column: remove .unpinned, add .pinned
+    header.classList.remove("unpinned");
     header.classList.add("pinned");
     table
       .querySelectorAll(`td[data-column="${columnIndex}"]`)
       .forEach((cell) => {
+        cell.classList.remove("unpinned");
         cell.classList.add("pinned");
       });
 

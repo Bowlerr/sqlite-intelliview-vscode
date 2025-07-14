@@ -59,12 +59,12 @@
   font-size: 0.9em;
 }
 .data-table th {
-  background: var(--vscode-list-headerBackground);
-  color: var(--vscode-list-headerForeground);
-  font-weight: 600;
   position: sticky;
   top: 0;
   z-index: 10;
+  background: var(--vscode-list-headerBackground) !important;
+  background-color: var(--vscode-list-headerBackground, #2d2d2d) !important;
+  font-weight: 600;
   font-size: 0.85em;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -97,10 +97,6 @@
   font-style: italic;
 }
 
-.table-container {
-  scroll-behavior: smooth;
-}
-
 .enhanced-table-wrapper {
   border: 1px solid var(--vscode-panel-border);
   border-radius: 6px;
@@ -113,10 +109,14 @@
   min-height: 0;
 }
 .table-scroll-container {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
   overflow: auto;
   position: relative;
   isolation: isolate;
+  flex-direction: column;
   z-index: 1;
   scroll-behavior: smooth;
   scrollbar-width: thin;
@@ -549,12 +549,7 @@
   position: relative;
   isolation: isolate;
 }
-.table-scroll-container {
-  position: relative;
-  overflow: auto;
-  isolation: isolate;
-  z-index: 1;
-}
+
 .data-table thead {
   position: relative;
   z-index: 10;
@@ -574,6 +569,46 @@
   box-sizing: border-box;
   max-width: none;
   min-width: 0;
+}
+.data-table th.unpinned {
+  /* Fully reset all sticky/pinned styles for unpinned headers */
+  left: auto !important;
+  z-index: 10 !important;
+  box-shadow: none !important;
+  color: var(--vscode-list-headerForeground) !important;
+  background: var(--vscode-list-headerBackground) !important;
+  background-color: var(--vscode-list-headerBackground, #2d2d2d) !important;
+  position: sticky !important;
+  top: 0;
+  /* Remove any transform or pinned-specific styles */
+  transform: none !important;
+  will-change: auto !important;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-height: 100%;
+  display: table-cell;
+  vertical-align: middle;
+  /* Add more resets if future pinned styles are added */
+}
+.data-table td.unpinned {
+  left: auto !important;
+  z-index: 10 !important;
+  box-shadow: none !important;
+  color: var(--vscode-foreground) !important;
+  background: var(--vscode-editor-background) !important;
+  background-color: var(--vscode-editor-background, #1e1e1e) !important;
+  position: static !important;
+  /* Remove any transform or pinned-specific styles */
+  transform: none !important;
+  will-change: auto !important;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-height: 100%;
+  display: table-cell;
+  vertical-align: middle;
+  /* Add more resets if future pinned styles are added */
 }
 
 /* ===== COLUMN RESIZE HANDLES & FEEDBACK ===== */
@@ -922,11 +957,15 @@ body.resizing {
     box-shadow: 0 0 10px rgba(0, 86, 179, 0.5);
   }
 }
-
-/* ===== TABLE CONTAINER & ENHANCED WRAPPER ===== */
 .table-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   scroll-behavior: smooth;
 }
+
 .enhanced-table-wrapper {
   scroll-behavior: smooth;
 }

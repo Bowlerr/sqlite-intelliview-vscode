@@ -32,52 +32,6 @@
     ) {
       maximizeSidebar();
     }
-    // --- Handle external database changes ---
-    if (message.type === "externalDatabaseChanged") {
-      // Show a notification instead of loading state
-      if (typeof showNotification === "function") {
-        showNotification(
-          "Database file changed externally. Data refreshed.",
-          "info"
-        );
-      }
-      // Refresh the current table if one is selected
-      const state =
-        typeof getCurrentState === "function" ? getCurrentState() : {};
-      if (state.selectedTable) {
-        // Use only global state for pagination (no DOM fallback)
-        let page = 1;
-        let pageSize = 100;
-        /** @type {any} */
-        const win = window;
-        if (typeof win.getCurrentState === "function") {
-          const stateObj = win.getCurrentState();
-          if (
-            typeof stateObj.currentPage === "number" &&
-            !isNaN(stateObj.currentPage)
-          ) {
-            page = stateObj.currentPage;
-          }
-          if (
-            typeof stateObj.pageSize === "number" &&
-            !isNaN(stateObj.pageSize)
-          ) {
-            pageSize = stateObj.pageSize;
-          }
-        }
-        // Re-request schema and data for the selected table
-        if (typeof requestTableSchema === "function") {
-          requestTableSchema(state.selectedTable);
-        }
-        if (typeof requestTableData === "function") {
-          requestTableData(state.selectedTable, page, pageSize);
-        }
-      }
-      // Optionally refresh the tables list or database info
-      if (typeof requestDatabaseInfo === "function") {
-        requestDatabaseInfo();
-      }
-    }
     // --- Handle table data response ---
     if (message.type === "tableData") {
       // Update pagination state immediately on data receipt
@@ -89,13 +43,14 @@
           pageSize: message.pageSize,
         });
       }
-      // Use backend-provided page, pageSize, totalRows for rendering
+      // Use backend-provided page, pageSize, totalRows, and columns for rendering
       displayTableData(
         message.data,
         message.tableName,
         message.page || 1,
         message.pageSize || 100,
-        message.totalRows || (message.data ? message.data.length : 0)
+        message.totalRows || (message.data ? message.data.length : 0),
+        message.columns // pass columns from backend
       );
       return;
     }
@@ -389,7 +344,8 @@
       tableName,
       page = 1,
       pageSize = 100,
-      totalRows = 0
+      totalRows = 0,
+      columns = null
     ) {
       const dataContent = document.getElementById("data-content");
       if (!dataContent) {
@@ -406,8 +362,8 @@
         return;
       }
 
-      // Create table with advanced features using table.js functions
-      const columns = Object.keys(data[0] || {});
+      // Use columns from backend if provided, else fallback
+      columns = columns || Object.keys(data[0] || {});
       let table = "";
 
       if (typeof createDataTable === "function") {

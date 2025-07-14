@@ -26,9 +26,33 @@ function handleError(message) {
 }
 
 /**
+ * Used to guard against duplicate global event listener registration.
+ * @type {boolean|undefined}
+ */
+window._eventListenersInitialized;
+
+/**
  * Initialize all event listeners
  */
 function initializeEventListeners() {
+  // Enhanced diagnostic: log each call, guard state, and stack trace
+  console.log(
+    "[events.js] initializeEventListeners called. Guard:",
+    window["_eventListenersInitialized"],
+    "Stack:",
+    new Error().stack
+  );
+  /** @type {any} */
+  if (window["_eventListenersInitialized"]) {
+    console.log(
+      "[events.js] initializeEventListeners: Guard true, skipping registration."
+    );
+    return;
+  }
+  // Register global event listeners only once per webview lifecycle
+  window.addEventListener("message", handleExtensionMessage);
+  document.addEventListener("keydown", handleGlobalKeyboard);
+
   const elements = getAllDOMElements ? getAllDOMElements() : {};
 
   // Connect button
@@ -67,12 +91,6 @@ function initializeEventListeners() {
     });
   }
 
-  // Global keyboard shortcuts
-  document.addEventListener("keydown", handleGlobalKeyboard);
-
-  // Handle messages from the extension
-  window.addEventListener("message", handleExtensionMessage);
-
   // Connection help button
   const connectionHelpBtn = document.getElementById("connection-help-btn");
   if (connectionHelpBtn) {
@@ -92,6 +110,9 @@ function initializeEventListeners() {
       }
     });
   }
+
+  window["_eventListenersInitialized"] = true;
+  console.log("[events.js] Event listeners registered. Guard set to true.");
 }
 
 /**
@@ -147,14 +168,14 @@ function handleExtensionMessage(event) {
     case "databaseInfo":
       handleDatabaseInfo(message);
       break;
+    case "tableDataDelta":
+      handleTableDataDelta(message);
+      break;
     case "queryResult":
       handleQueryResult(message);
       break;
     case "tableSchema":
       handleTableSchema(message);
-      break;
-    case "tableData":
-      handleTableData(message);
       break;
     case "erDiagram":
       handleERDiagram(message);
@@ -652,7 +673,10 @@ function displayTablesList(tables) {
           });
           // Also request table data to refresh the Data tab
           let pageSize = 100;
-          if (typeof window !== "undefined" && typeof window.getCurrentState === "function") {
+          if (
+            typeof window !== "undefined" &&
+            typeof window.getCurrentState === "function"
+          ) {
             const state = window.getCurrentState();
             if (state && state.pageSize) {
               pageSize = state.pageSize;
@@ -835,181 +859,187 @@ function initializeTableEvents(tableWrapper) {
     return;
   }
 
-  // Initialize resizing functionality
-  if (typeof initializeResizing === "function") {
-    initializeResizing(tableWrapper);
-  }
+  // Guard only static elements (search, pagination, etc)
+  if (tableWrapper.getAttribute("data-table-events-initialized") === "true") {
+    console.log(
+      "[events.js] Table static events already initialized for this wrapper, skipping static attach.",
+      tableWrapper
+    );
+  } else {
+    // Mark as initialized
+    tableWrapper.setAttribute("data-table-events-initialized", "true");
+    console.log(
+      "[events.js] Initializing static table events for wrapper:",
+      tableWrapper
+    );
 
-  // Initialize table layout if available
-  if (typeof initializeTableLayout === "function") {
-    initializeTableLayout(tableWrapper);
-  }
-
-  // Add resize observer for dynamic adjustments
-  if (typeof addResizeObserver === "function") {
-    addResizeObserver(tableWrapper);
-  }
-
-  const searchInput = tableWrapper.querySelector(".search-input");
-  const clearBtn = tableWrapper.querySelector(".search-clear");
-
-  // Search functionality
-  if (searchInput) {
-    searchInput.addEventListener("input", (e) => {
-      const searchTerm = e.target.value;
-      if (typeof filterTable !== "undefined") {
-        filterTable(tableWrapper, searchTerm);
-      }
-    });
-  }
-
-  // Clear search
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      if (searchInput) {
-        searchInput.value = "";
+    // Initialize resizing functionality
+    if (typeof initializeResizing === "function") {
+      initializeResizing(tableWrapper);
+    }
+    if (typeof initializeTableLayout === "function") {
+      initializeTableLayout(tableWrapper);
+    }
+    if (typeof addResizeObserver === "function") {
+      addResizeObserver(tableWrapper);
+    }
+    const searchInput = tableWrapper.querySelector(".search-input");
+    const clearBtn = tableWrapper.querySelector(".search-clear");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        const searchTerm = e.target.value;
         if (typeof filterTable !== "undefined") {
-          filterTable(tableWrapper, "");
+          filterTable(tableWrapper, searchTerm);
         }
-      }
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        if (searchInput) {
+          searchInput.value = "";
+          if (typeof filterTable !== "undefined") {
+            filterTable(tableWrapper, "");
+          }
+        }
+      });
+    }
+    // Column header clicks for sorting
+    const headers = tableWrapper.querySelectorAll(".sortable-header");
+    headers.forEach((header) => {
+      header.addEventListener("click", (e) => {
+        if (
+          e.target.classList.contains("column-action-btn") ||
+          e.target.classList.contains("pin-btn") ||
+          e.target.classList.contains("column-resize-handle")
+        ) {
+          return;
+        }
+        const column = parseInt(header.dataset.column);
+        const table = header.closest(".data-table");
+        if (typeof sortTableByColumn !== "undefined") {
+          sortTableByColumn(table, column);
+        }
+      });
     });
+    // Column action buttons (including pin buttons)
+    const actionBtns = tableWrapper.querySelectorAll(
+      ".column-action-btn, .pin-btn"
+    );
+    actionBtns.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const column = btn.dataset.column;
+        const table = btn.closest(".data-table");
+        if (action === "pin" && typeof toggleColumnPin !== "undefined") {
+          toggleColumnPin(table, parseInt(column));
+        }
+      });
+    });
+    // Pagination controls
+    const paginationBtns = tableWrapper.querySelectorAll(".pagination-btn");
+    paginationBtns.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const tableWrapper = btn.closest(".enhanced-table-wrapper");
+        const action = btn.dataset.action;
+        if (typeof handlePagination !== "undefined") {
+          handlePagination(tableWrapper, action);
+        }
+      });
+    });
+    // Page size selector
+    const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
+    if (pageSizeSelect) {
+      pageSizeSelect.addEventListener("change", (e) => {
+        const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+        if (typeof handlePageSizeChange !== "undefined") {
+          handlePageSizeChange(tableWrapper, parseInt(e.target.value));
+        }
+      });
+    }
+    // Export button
+    const exportBtn = tableWrapper.querySelector('[data-action="export"]');
+    if (exportBtn) {
+      exportBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+        if (typeof exportTableData !== "undefined") {
+          exportTableData(tableWrapper);
+        }
+      });
+    }
   }
 
-  // Column header clicks for sorting
-  const headers = tableWrapper.querySelectorAll(".sortable-header");
-  headers.forEach((header) => {
-    header.addEventListener("click", (e) => {
-      // Don't sort if clicking on action buttons or resize handles
-      if (
-        e.target.classList.contains("column-action-btn") ||
-        e.target.classList.contains("pin-btn") ||
-        e.target.classList.contains("column-resize-handle")
-      ) {
-        return;
-      }
-
-      const column = parseInt(header.dataset.column);
-      const table = header.closest(".data-table");
-      if (typeof sortTableByColumn !== "undefined") {
-        sortTableByColumn(table, column);
-      }
-    });
-  });
-
-  // Column action buttons (including pin buttons)
-  const actionBtns = tableWrapper.querySelectorAll(
-    ".column-action-btn, .pin-btn"
-  );
-  actionBtns.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const action = btn.dataset.action;
-      const column = btn.dataset.column;
-      const table = btn.closest(".data-table");
-
-      if (action === "pin" && typeof toggleColumnPin !== "undefined") {
-        toggleColumnPin(table, parseInt(column));
-      }
-    });
-  });
-
-  // Cell editing functionality - only for editable cells
-  const dataCells = tableWrapper.querySelectorAll(
-    ".data-cell[data-editable='true']"
-  );
-  dataCells.forEach((cell) => {
-    cell.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      startCellEditing(cell);
-    });
-
-    cell.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === "F2") {
-        e.preventDefault();
+  // Always (re-)attach row/cell listeners to new/uninitialized rows
+  const dataRows = tableWrapper.querySelectorAll("tr[data-row-index]");
+  dataRows.forEach((row) => {
+    if (row.getAttribute("data-row-events-initialized") === "true") {
+      return;
+    }
+    row.setAttribute("data-row-events-initialized", "true");
+    // Cell editing functionality - only for editable cells
+    const dataCells = row.querySelectorAll(".data-cell[data-editable='true']");
+    dataCells.forEach((cell) => {
+      cell.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
         startCellEditing(cell);
-      }
-    });
-  });
-
-  // Cell editing controls
-  const saveButtons = tableWrapper.querySelectorAll(".cell-save-btn");
-  const cancelButtons = tableWrapper.querySelectorAll(".cell-cancel-btn");
-  const cellInputs = tableWrapper.querySelectorAll(".cell-input");
-
-  saveButtons.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const cell = btn.closest(".data-cell");
-      saveCellEdit(cell);
-    });
-  });
-
-  cancelButtons.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const cell = btn.closest(".data-cell");
-      cancelCellEdit(cell);
-    });
-  });
-
-  cellInputs.forEach((input) => {
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        const cell = input.closest(".data-cell");
-        saveCellEdit(cell);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        const cell = input.closest(".data-cell");
-        cancelCellEdit(cell);
-      }
-    });
-
-    input.addEventListener("blur", (e) => {
-      // Small delay to allow button clicks to register
-      setTimeout(() => {
-        const cell = input.closest(".data-cell");
-        if (cell && cell.classList.contains("editing")) {
-          saveCellEdit(cell);
+      });
+      cell.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === "F2") {
+          e.preventDefault();
+          startCellEditing(cell);
         }
-      }, 150);
+      });
     });
+    // Cell editing controls
+    const saveButtons = row.querySelectorAll(".cell-save-btn");
+    const cancelButtons = row.querySelectorAll(".cell-cancel-btn");
+    const cellInputs = row.querySelectorAll(".cell-input");
+    saveButtons.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const cell = btn.closest(".data-cell");
+        saveCellEdit(cell);
+      });
+    });
+    cancelButtons.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const cell = btn.closest(".data-cell");
+        cancelCellEdit(cell);
+      });
+    });
+    cellInputs.forEach((input) => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          const cell = input.closest(".data-cell");
+          saveCellEdit(cell);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          const cell = input.closest(".data-cell");
+          cancelCellEdit(cell);
+        }
+      });
+      input.addEventListener("blur", (e) => {
+        setTimeout(() => {
+          const cell = input.closest(".data-cell");
+          if (cell && cell.classList.contains("editing")) {
+            saveCellEdit(cell);
+          }
+        }, 150);
+      });
+    });
+    console.log("[events.js] Row/cell events initialized for row:", row);
   });
 
-  // Pagination controls
-  const paginationBtns = tableWrapper.querySelectorAll(".pagination-btn");
-  paginationBtns.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      const tableWrapper = btn.closest(".enhanced-table-wrapper");
-      const action = btn.dataset.action;
-      if (typeof handlePagination !== "undefined") {
-        handlePagination(tableWrapper, action);
-      }
-    });
-  });
-
-  // Page size selector
-  const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
-  if (pageSizeSelect) {
-    pageSizeSelect.addEventListener("change", (e) => {
-      const tableWrapper = e.target.closest(".enhanced-table-wrapper");
-      if (typeof handlePageSizeChange !== "undefined") {
-        handlePageSizeChange(tableWrapper, parseInt(e.target.value));
-      }
-    });
-  }
-
-  // Export button
-  const exportBtn = tableWrapper.querySelector('[data-action="export"]');
-  if (exportBtn) {
-    exportBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      const tableWrapper = e.target.closest(".enhanced-table-wrapper");
-      if (typeof exportTableData !== "undefined") {
-        exportTableData(tableWrapper);
-      }
-    });
+  // After initializing row/cell events for new rows, ensure resizing is re-initialized
+  if (typeof initializeResizing === "function" && tableWrapper) {
+    console.log(
+      "[events.js] Re-initializing resizing after row/cell event attachment"
+    );
+    initializeResizing(tableWrapper);
   }
 }
 
@@ -1341,28 +1371,192 @@ function initializeQueryEditorVisibility() {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// Export functions for use in other modules
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    initializeEventListeners,
-    handleGlobalKeyboard,
-    handleExtensionMessage,
-    handleConnect,
-    handleExecuteQuery,
-    handleDatabaseInfo,
-    handleError,
-    displayTablesList,
-    displayQueryResults,
-    displayTableSchema,
-    displayTableData,
-    initializeTableEvents,
-    initializeQueryEditorVisibility,
-    enforceQueryEditorVisibility,
-    showConnectionSection,
-    hideConnectionSection,
-    tryInitialConnection,
-  };
+/**
+ * Apply inserts, updates and deletes directly to the visible <tbody>
+ * without disturbing your existing pagination/sizing/pinning
+ */
+function handleTableDataDelta({
+  tableName,
+  inserts = [],
+  updates = [],
+  deletes = [],
+}) {
+  console.log("[events.js] handleTableDataDelta called", {
+    tableName,
+    inserts,
+    updates,
+    deletes,
+  });
+  // Show notification about the update
+  const ins = inserts.length;
+  const upd = updates.length;
+  const del = deletes.length;
+  const noChanges = ins === 0 && upd === 0 && del === 0;
+
+  const summary =
+    `Table updated externally: ` +
+    (noChanges
+      ? `no changes detected in ${tableName} Table.`
+      : "" +
+        (ins > 0 ? `${ins} row${ins === 1 ? "" : "s"} inserted. ` : "") +
+        (upd > 0 ? `${upd} row${upd === 1 ? "" : "s"} updated. ` : "") +
+        (del > 0 ? `${del} row${del === 1 ? "" : "s"} deleted.` : ""));
+
+  if (typeof window.showNotification === "function") {
+    window.showNotification(summary, "info", 6000);
+  }
+
+  const wrapper = document.querySelector(
+    `.enhanced-table-wrapper[data-table="${tableName}"]`
+  );
+  if (!wrapper) {
+    console.warn("[events.js] No wrapper found for table", tableName);
+    return;
+  }
+  const tbody = wrapper.querySelector("tbody");
+  if (!tbody) {
+    console.warn("[events.js] No tbody found for table", tableName);
+    return;
+  }
+
+  //–– 1) APPLY UPDATES ––
+  updates.forEach(({ rowIndex, rowData }) => {
+    const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
+    if (!row) {
+      console.warn("[events.js] No row found for update", rowIndex);
+      return;
+    }
+    rowData.forEach((val, colIdx) => {
+      const cell = row.children[colIdx];
+      if (cell) {
+        const cc = cell.querySelector(".cell-content");
+        if (cc) {
+          cc.textContent = val == null ? "" : String(val);
+        }
+      }
+    });
+  });
+
+  //–– 2) APPLY INSERTS –– (in reverse so indices stay valid)
+  inserts
+    .sort((a, b) => b.rowIndex - a.rowIndex)
+    .forEach(({ rowIndex, rowData }) => {
+      // bump all existing ≥ rowIndex
+      Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
+        const idxAttr = r.getAttribute("data-row-index");
+        if (idxAttr !== null) {
+          const idx = +idxAttr;
+          if (idx >= rowIndex) {
+            r.setAttribute("data-row-index", String(idx + 1));
+          }
+        }
+      });
+      // Use renderTableRows to generate the new row HTML
+      let columns = Array.from(wrapper.querySelectorAll("thead th")).map((th) =>
+        th.getAttribute("data-column-name")
+      );
+      // Fallback: if any column name is missing, try to get from global schema
+      if (columns.some((c) => !c)) {
+        if (
+          window &&
+          window.currentTableSchema &&
+          Array.isArray(window.currentTableSchema[tableName])
+        ) {
+          columns = window.currentTableSchema[tableName].map((col) => col.name);
+          if (!columns || columns.length === 0) {
+            console.warn(
+              "[events.js] No columns found in global schema for table",
+              tableName
+            );
+          }
+        } else {
+          console.warn(
+            "[events.js] Some column names missing in <th> for table",
+            tableName,
+            columns
+          );
+        }
+      }
+      // Final fallback: replace any null/undefined with placeholder
+      columns = columns.map((c, i) => c || `col_${i}`);
+      const rowHtml = window.renderTableRows([rowData], rowIndex, columns);
+      // Parse the HTML string into a DOM node
+      const temp = document.createElement("tbody");
+      temp.innerHTML = rowHtml.trim();
+      const newRow = temp.firstElementChild;
+      if (newRow) {
+        // insert at correct spot
+        const ref = tbody.querySelector(`tr[data-row-index="${rowIndex + 1}"]`);
+        if (ref) {
+          tbody.insertBefore(newRow, ref);
+        } else {
+          tbody.appendChild(newRow);
+        }
+      } else {
+        console.warn(
+          "[events.js] Failed to create new row for insert",
+          rowIndex,
+          rowData
+        );
+      }
+    });
+
+  // After all inserts, re-initialize table events for the wrapper
+  if (typeof initializeTableEvents === "function") {
+    initializeTableEvents(wrapper);
+  }
+
+  //–– 3) APPLY DELETES –– (also in reverse)
+  deletes
+    .sort((a, b) => b - a)
+    .forEach((rowIndex) => {
+      const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
+      if (!row) {
+        console.warn("[events.js] No row found for delete", rowIndex);
+        return;
+      }
+      row.remove();
+      // decrement all > rowIndex
+      Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
+        const idx = +r.getAttribute("data-row-index");
+        if (idx > rowIndex) {
+          r.setAttribute("data-row-index", String(idx - 1));
+        }
+      });
+    });
+
+  // After all new rows are inserted via delta, re-initialize table events for the wrapper
+  // Diagnostic: log new rows and wrapper state before and after initialization
+  const newRows = wrapper.querySelectorAll(
+    "tr[data-rowid]:not([data-initialized])"
+  );
+  console.log("[Delta Debug] New rows before init:", newRows);
+  console.log("[Delta Debug] Wrapper before init:", wrapper);
+  console.log(
+    "[Delta Debug] Guard before table event init:",
+    window["_eventListenersInitialized"],
+    "Stack:",
+    new Error().stack
+  );
+  // Only initialize table events, never global events here
+  initializeTableEvents(wrapper);
+  // After initialization, mark new rows and log again
+  newRows.forEach((row) => row.setAttribute("data-initialized", "true"));
+  console.log("[Delta Debug] New rows after init:", newRows);
+  console.log("[Delta Debug] Wrapper after init:", wrapper);
+  console.log(
+    "[Delta Debug] Guard after table event init:",
+    window["_eventListenersInitialized"],
+    "Stack:",
+    new Error().stack
+  );
 }
+
+// Remove all export statements for browser compatibility
+// Functions that need to be global can be attached to window if needed
+
+// Example:
+// window.initializeEventListeners = initializeEventListeners;
 
 // Make functions available globally for cross-module access
 if (typeof window !== "undefined") {

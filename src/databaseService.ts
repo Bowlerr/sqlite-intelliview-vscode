@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { markInternalUpdate } from './databaseWatcher';
 
 const execAsync = promisify(exec);
 
@@ -37,6 +38,17 @@ export interface ForeignKeyInfo {
 export interface QueryResult {
     columns: string[];
     values: any[][];
+}
+
+/** 
+ * A single change in a table since our last sync.
+ */
+export interface Change {
+  rowid: any;
+  changeType: 'INSERT' | 'UPDATE' | 'DELETE';
+  /** these two will be filled in by the editor‐provider */
+  rowIndex?: number;
+  rowData?: any[];
 }
 
 export class DatabaseService {
@@ -307,9 +319,9 @@ export class DatabaseService {
         return this.executeQuery(query);
     }
 
-    async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<QueryResult> {
+    public async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<QueryResult> {
         const offset = (page - 1) * pageSize;
-        const query = `SELECT * FROM "${tableName}" LIMIT ${pageSize} OFFSET ${offset}`;
+        const query = `SELECT rowid, * FROM "${tableName}" LIMIT ${pageSize} OFFSET ${offset}`;
         return this.executeQuery(query);
     }
 
@@ -363,6 +375,10 @@ export class DatabaseService {
             
             // CRITICAL: Save changes back to the database file
             await this.saveChangesToFile();
+            // Mark as internal update so watcher ignores this event
+            if (this.currentDatabasePath) {
+                markInternalUpdate(this.currentDatabasePath);
+            }
             
             console.log(`[updateCellData] Cell update completed successfully`);
             
@@ -441,6 +457,10 @@ export class DatabaseService {
             
             // CRITICAL: Save changes back to the database file
             await this.saveChangesToFile();
+            // Mark as internal update so watcher ignores this event
+            if (this.currentDatabasePath) {
+                markInternalUpdate(this.currentDatabasePath);
+            }
             
             console.log(`[deleteRow] Row deletion completed successfully`);
             
@@ -598,6 +618,44 @@ export class DatabaseService {
         stmt.free();
 
         return foreignKeys;
+    }
+
+    /**
+     * Return all rowids that have been inserted/updated/deleted since `sinceIso`.
+     * (we only emit INSERT for now; UPDATE/DELETE detection requires WAL or
+     * triggers or a real diffing engine)
+     */
+    public async getTableChangesSince(tableName: string, sinceIso: string): Promise<Change[]> {
+        // simple implementation: just re-emit every current row as "INSERT"
+        const all = await this.executeQuery(`SELECT rowid FROM "${tableName}"`);
+        return all.values.map(r => ({ rowid: r[0], changeType: 'INSERT' as const }));
+    }
+
+    /**
+     * Given a rowid, find its zero-based position in the current table scan
+     */
+    public async getRowIndex(tableName: string, rowid: any): Promise<number> {
+        const r = await this.executeQuery(
+            `SELECT COUNT(*) FROM "${tableName}" WHERE rowid <= ${rowid}`
+        );
+        // subtract one because COUNT<= gives a 1-based rank
+        return (r.values[0][0] as number) - 1;
+    }
+
+    /**
+     * Fetch the full row data for a set of rowids, keeping the same order.
+     */
+    public async getRowsByRowid(tableName: string, rowids: any[]): Promise<any[][]> {
+        if (!rowids.length) { return []; }
+        const cases = rowids.map((id, i) => `WHEN rowid=${id} THEN ${i}`).join(' ');
+        const sql = `
+            SELECT rowid, * 
+              FROM "${tableName}"
+             WHERE rowid IN (${rowids.join(',')})
+          ORDER BY CASE ${cases} END
+        `;
+        const r = await this.executeQuery(sql);
+        return r.values;
     }
 
     closeDatabase(): void {

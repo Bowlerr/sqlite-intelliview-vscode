@@ -7,8 +7,12 @@ import { DatabaseWatcher } from './databaseWatcher';
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
     private static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
     private activeConnections: Map<string, DatabaseService> = new Map();
+    /** Track last sync state per database for delta updates */
+    private lastSync: Map<string, { table: string; since: string; page: number; pageSize: number; lastPageData?: any[][] }> = new Map();
     private databaseWatcher: DatabaseWatcher = new DatabaseWatcher();
     private webviewPanels: Map<string, vscode.WebviewPanel> = new Map();
+    /** cache full pages keyed by `${db}:${table}:${page}:${pageSize}` → QueryResult.values */
+    private lastPageCache = new Map<string, any[][]>();
 
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
@@ -103,7 +107,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     this.handleTableSchemaRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key);
                     return;
                 case 'getTableData':
-                    this.handleTableDataRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key, e.page, e.pageSize);
+                    this.handleTableDataRequest(webviewPanel, document.uri.fsPath, e.tableName, e.key, e.page, e.pageSize, true);
                     return;
                 case 'updateCellData':
                     this.handleCellUpdateRequest(webviewPanel, document.uri.fsPath, e.tableName, e.rowIndex, e.columnName, e.newValue, e.key);
@@ -386,7 +390,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         }
     }
 
-    private async handleTableDataRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string, page?: number, pageSize?: number) {
+    private async handleTableDataRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string, page?: number, pageSize?: number, setSync: boolean = true) {
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
             
@@ -407,17 +411,45 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             // Get foreign key information for the table
             const foreignKeys = await dbService.getForeignKeys(tableName);
 
+            // Fix column headers: alias rowid as _rowid and remove duplicate id columns
+            let columns = result.columns;
+            let data = result.values;
+            // If first column is rowid and second is id, remove the second if they are identical for all rows
+            if (columns.length > 1 && columns[0].toLowerCase() === 'rowid' && columns[1].toLowerCase() === 'id') {
+                const allMatch = data.every(row => row[0] === row[1]);
+                if (allMatch) {
+                    // Remove the second column (id)
+                    columns = [columns[0], ...columns.slice(2)];
+                    data = data.map(row => [row[0], ...row.slice(2)]);
+                }
+            }
+            // Always alias rowid as _rowid for clarity
+            if (columns[0].toLowerCase() === 'rowid') {
+                columns = ['_rowid', ...columns.slice(1)];
+            }
+
             webviewPanel.webview.postMessage({
                 type: 'tableData',
                 success: true,
-                tableName: tableName,
-                data: result.values,
-                columns: result.columns,
+                tableName,
+                data: data,
+                columns: columns,
                 foreignKeys: foreignKeys,
                 page: page,
                 pageSize: pageSize,
                 totalRows: totalRowCount
             });
+            // cache this page for future diffs ONLY if this is a user-initiated load
+            if (setSync) {
+                this.lastSync.set(databasePath, {
+                    table: tableName!,
+                    since: '',
+                    page: page!,
+                    pageSize: pageSize!,
+                    lastPageData: data // <--- store the actual rows
+                });
+                console.log('[getTableDataPaginated] lastSync set for', databasePath, { table: tableName, page, pageSize, lastPageData: data });
+            }
         } catch (error) {
             webviewPanel.webview.postMessage({
                 type: 'error',
@@ -751,6 +783,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 }
             }
             keysToDelete.forEach(key => this.activeConnections.delete(key));
+            // Only clear sync state if the panel is closed
+            if (!this.webviewPanels.has(databasePath)) {
+                this.lastSync.delete(databasePath);
+            } else {
+                console.log(`[closeConnection] Panel still open for ${databasePath}, retaining lastSync`);
+            }
         }
     }
     
@@ -759,6 +797,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             connection.closeDatabase();
         }
         this.activeConnections.clear();
+        this.lastSync.clear();
     }
 
     private debugLogConnections(): void {
@@ -775,11 +814,71 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         this.closeAllConnections();
     }
 
-    public handleExternalDatabaseChange(databasePath: string) {
-        // Close all connections for this database path (all keys)
+    public async handleExternalDatabaseChange(databasePath: string) {
+        // Close and reopen the connection to ensure SQLite sees external changes
         this.closeConnection(databasePath);
-        // Optionally, clear any other caches if needed
-        // The next request from the webview will re-open the database from disk
+        const panel = this.webviewPanels.get(databasePath);
+        const sync = this.lastSync.get(databasePath);
+        console.log('[handleExternalDatabaseChange] Triggered for', databasePath, { hasPanel: !!panel, hasSync: !!sync });
+        if (!panel || !sync) {
+            console.warn('[handleExternalDatabaseChange] No panel or sync found for', databasePath, { panel, sync });
+            return;
+        }
+        // fetch old & new page
+        const { table, page, pageSize, lastPageData } = sync;
+        console.log('[handleExternalDatabaseChange] Using sync state', { table, page, pageSize, lastPageData });
+        // Reopen the connection
+        const db = await this.getOrCreateConnection(databasePath);
+        // Fetch new page data WITHOUT updating lastSync
+        const newResult = await db.getTableDataPaginated(table, page, pageSize);
+        console.log('[handleExternalDatabaseChange] New page data fetched', { newResult });
+        const oldRows = lastPageData || [];
+        const newRows = newResult.values;
+        console.log('[handleExternalDatabaseChange] oldRows:', JSON.stringify(oldRows));
+        console.log('[handleExternalDatabaseChange] newRows:', JSON.stringify(newRows));
+        const baseIndex = (page - 1) * pageSize;
+        // Build maps of rowid → localIndex
+        const oldMap = new Map();
+        oldRows.forEach((r, i) => oldMap.set(r[0], JSON.stringify(r)));
+        const newMap = new Map();
+        newRows.forEach((r, i) => newMap.set(r[0], JSON.stringify(r)));
+        // DELETES
+        const deletes: number[] = [];
+        for (const [rowid, _] of oldMap) {
+            if (!newMap.has(rowid)) {
+                const localIdx = oldRows.findIndex(r => r[0] === rowid);
+                deletes.push(baseIndex + localIdx);
+            }
+        }
+        // INSERTS
+        const inserts: { rowIndex: number; rowData: any[] }[] = [];
+        newRows.forEach((r, i) => {
+            if (!oldMap.has(r[0])) {
+                inserts.push({ rowIndex: baseIndex + i, rowData: r });
+            }
+        });
+        // UPDATES
+        const updates: { rowIndex: number; rowData: any[] }[] = [];
+        newRows.forEach((r, i) => {
+            const rowid = r[0], payload = JSON.stringify(r);
+            if (oldMap.has(rowid) && oldMap.get(rowid) !== payload) {
+                updates.push({ rowIndex: baseIndex + i, rowData: r });
+            }
+        });
+        console.log('[handleExternalDatabaseChange] Delta computed', { inserts, updates, deletes });
+        // send them back to the webview
+        panel.webview.postMessage({
+            type: 'tableDataDelta',
+            tableName: table,
+            inserts,
+            updates,
+            deletes
+        });
+        console.log('[handleExternalDatabaseChange] tableDataDelta sent to webview', { table, inserts, updates, deletes });
+        // update our lastPageData snapshot
+        sync.lastPageData = newRows;
+        this.lastSync.set(databasePath, sync);
+        console.log('[handleExternalDatabaseChange] lastPageData updated in lastSync', { databasePath, lastPageData: sync.lastPageData });
     }
 }
 
