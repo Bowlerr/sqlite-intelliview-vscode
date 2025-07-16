@@ -1140,21 +1140,13 @@ function getForeignKeyInfoForCell(cell) {
     return null;
   }
 
-  // Get foreign key information from the cell's title attribute
-  const title = cell.getAttribute("title");
-  if (!title || !title.includes("Foreign Key: References ")) {
+  const referencedTable = cell.dataset.fkTable;
+  const referencedColumn = cell.dataset.fkColumn;
+
+  // Only return info if both referencedTable and referencedColumn are present
+  if (!columnName || !referencedTable || !referencedColumn) {
     return null;
   }
-
-  // Parse the title to extract referenced table and column
-  // Format: "Foreign Key: References table_name.column_name"
-  const match = title.match(/Foreign Key: References ([^.]+)\.(.+)/);
-  if (!match) {
-    return null;
-  }
-
-  const referencedTable = match[1];
-  const referencedColumn = match[2];
 
   return {
     columnName: columnName,
@@ -1174,7 +1166,13 @@ function navigateToForeignKeyReference() {
 
   const foreignKeyInfo = getForeignKeyInfoForCell(currentCell);
   if (!foreignKeyInfo) {
-    console.warn("No foreign key information found for cell");
+    if (typeof showError === "function") {
+      showError(
+        "Cannot navigate: Foreign key information is missing or incomplete for this cell."
+      );
+    } else {
+      console.warn("No foreign key information found for cell");
+    }
     return;
   }
 
@@ -1197,7 +1195,10 @@ function navigateToForeignKeyReference() {
 
     // Request to switch to the referenced table
     let pageSize = 100;
-    if (typeof window !== "undefined" && typeof window.getCurrentState === "function") {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.getCurrentState === "function"
+    ) {
       const state = window.getCurrentState();
       if (state && state.pageSize) {
         pageSize = state.pageSize;

@@ -29,9 +29,24 @@ function createDataTable(data, columns, tableName = "", options = {}) {
 
   // Create foreign key lookup map
   const foreignKeyMap = new Map();
-  foreignKeys.forEach((fk) => {
-    foreignKeyMap.set(fk.column, fk);
-  });
+  if (Array.isArray(foreignKeys) && foreignKeys.length > 0) {
+    foreignKeys.forEach((fk) => {
+      if (fk && fk.column && fk.referencedTable && fk.referencedColumn) {
+        foreignKeyMap.set(fk.column, fk);
+      }
+    });
+  } else if (Array.isArray(options.columns)) {
+    // Fallback: detect FKs from columns metadata
+    options.columns.forEach((col) => {
+      if (col && col.isForeignKey && col.refTable && col.refColumn) {
+        foreignKeyMap.set(col.name, {
+          column: col.name,
+          referencedTable: col.refTable,
+          referencedColumn: col.refColumn,
+        });
+      }
+    });
+  }
 
   const tableId = generateTableId
     ? generateTableId(tableName)
@@ -112,12 +127,22 @@ function createDataTable(data, columns, tableName = "", options = {}) {
             <tr role="row">
               ${columns
                 .map((col, index) => {
-                  const fkInfo = foreignKeyMap.get(col);
-                  const isForeignKey = !!fkInfo;
-                  const fkClass = isForeignKey ? " fk-column" : "";
-                  const fkTitle = isForeignKey
-                    ? `Foreign Key: References ${fkInfo.referencedTable}.${fkInfo.referencedColumn}`
-                    : "";
+                  let fkInfo = foreignKeyMap.get(col);
+                  let isForeignKey = !!fkInfo;
+                  let fkClass = isForeignKey ? " fk-column" : "";
+                  // Fallback: try to extract FK info from column metadata if not present
+                  if (!isForeignKey && options.columns) {
+                    const colMeta = options.columns.find((c) => c.name === col);
+                    if (
+                      colMeta &&
+                      colMeta.isForeignKey &&
+                      colMeta.refTable &&
+                      colMeta.refColumn
+                    ) {
+                      isForeignKey = true;
+                      fkClass = " fk-column";
+                    }
+                  }
                   return `
                 <th class="sortable-header resizable-header${fkClass}" 
                     data-column="${index}" 
@@ -125,7 +150,6 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                     role="columnheader" 
                     tabindex="0"
                     aria-sort="none"
-                    title="${fkTitle || `Column ${col}, sortable`}"
                     aria-label="Column ${col}, sortable${
                     isForeignKey ? ", foreign key" : ""
                   }"
@@ -133,9 +157,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                   <div class="column-header">
                     <span class="column-name">${col}</span>
                     ${
-                      isForeignKey
-                        ? `<span class="fk-indicator" title="${fkTitle}">🔗</span>`
-                        : ""
+                      isForeignKey ? `<span class="fk-indicator">🔗</span>` : ""
                     }
                     <button class="pin-btn" 
                             title="Pin column ${col}" 
@@ -162,7 +184,8 @@ function createDataTable(data, columns, tableName = "", options = {}) {
               startIndex,
               columns,
               isSchemaTable,
-              foreignKeyMap
+              foreignKeyMap,
+              options
             )}
           </tbody>
         </table>
@@ -195,7 +218,8 @@ function renderTableRows(
   startIndex = 0,
   columns = [],
   isSchemaTable = false,
-  foreignKeyMap = new Map()
+  foreignKeyMap = new Map(),
+  options = {}
 ) {
   return data
     .map((row, localIndex) => {
@@ -205,12 +229,43 @@ function renderTableRows(
           ${row
             .map((cell, cellIndex) => {
               const columnName = columns[cellIndex];
-              const isForeignKey = foreignKeyMap.has(columnName);
-              const fkClass = isForeignKey ? " fk-cell" : "";
-              const fkInfo = foreignKeyMap.get(columnName);
-              const fkTitle = isForeignKey
-                ? `Foreign Key: References ${fkInfo.referencedTable}.${fkInfo.referencedColumn}`
-                : "";
+              let isForeignKey = foreignKeyMap.has(columnName);
+              let fkClass = isForeignKey ? " fk-cell" : "";
+              let fkInfo = foreignKeyMap.get(columnName);
+              let fkTable = null;
+              let fkColumn = null;
+              // Fallback: try to extract FK info from column metadata if not present
+              if (
+                !isForeignKey &&
+                Array.isArray(columns) &&
+                options &&
+                options.columns
+              ) {
+                const colMeta = options.columns.find(
+                  (c) => c.name === columnName
+                );
+                if (
+                  colMeta &&
+                  colMeta.isForeignKey &&
+                  colMeta.refTable &&
+                  colMeta.refColumn
+                ) {
+                  isForeignKey = true;
+                  fkClass = " fk-cell";
+                  fkTable = colMeta.refTable;
+                  fkColumn = colMeta.refColumn;
+                }
+              }
+              if (
+                isForeignKey &&
+                !fkTable &&
+                fkInfo &&
+                fkInfo.referencedTable &&
+                fkInfo.referencedColumn
+              ) {
+                fkTable = fkInfo.referencedTable;
+                fkColumn = fkInfo.referencedColumn;
+              }
 
               return `
             <td data-column="${cellIndex}" 
@@ -226,7 +281,11 @@ function renderTableRows(
                       }"`
                     : ""
                 }
-                ${fkTitle ? `title="${fkTitle}"` : ""}
+                ${
+                  isForeignKey && fkTable && fkColumn
+                    ? `data-fk-table="${fkTable}" data-fk-column="${fkColumn}"`
+                    : ""
+                }
                 aria-label="Row ${globalIndex + 1}, Column ${cellIndex + 1}: ${
                 cell !== null ? String(cell).substring(0, 50) : "null"
               }${isForeignKey ? " (Foreign Key)" : ""}">

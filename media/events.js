@@ -168,6 +168,9 @@ function handleExtensionMessage(event) {
     case "databaseInfo":
       handleDatabaseInfo(message);
       break;
+    case "tableData":
+      handleTableData(message);
+      break;
     case "tableDataDelta":
       handleTableDataDelta(message);
       break;
@@ -487,6 +490,8 @@ function handleQueryResult(message) {
         if (window.queryEditor.refreshEditor) {
           window.queryEditor.refreshEditor();
         }
+        handleTableData(message);
+        return;
       }
     }
   }, 100);
