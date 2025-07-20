@@ -2,7 +2,7 @@
   "name": "sqlite-intelliview-vscode",
   "displayName": "SQLite IntelliView",
   "description": "Modern SQLite/SQLCipher database viewer and editor for VS Code: Monaco-powered queries, ER diagrams, cell editing, encryption, and more.",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "publisher": "bowlerr",
   "author": {
     "name": "Bowlerr",

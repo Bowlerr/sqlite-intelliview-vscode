@@ -1,6 +1,18 @@
 # Change Log
 
+
 ## [Unreleased]
+
+### Added
+
+
+### Changed
+
+
+### Fixed
+
+
+## [0.2.15] - 2025-07-20
 
 ### Added
 
