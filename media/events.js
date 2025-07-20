@@ -490,7 +490,10 @@ function handleQueryResult(message) {
         if (window.queryEditor.refreshEditor) {
           window.queryEditor.refreshEditor();
         }
-        handleTableData(message);
+        // Only call handleTableData if the query result has table-specific data
+        if (message.tableName && message.columnInfo) {
+          handleTableData(message);
+        }
         return;
       }
     }
