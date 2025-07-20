@@ -363,8 +363,7 @@
     var(--vscode-list-headerBackground) 0%,
     rgba(100, 149, 237, 0.15) 100%
   );
-  border-left: 3px solid #6495ed;
-  position: relative;
+ 
 }
 .data-table th.fk-column::before {
   content: "";
@@ -375,6 +374,23 @@
   height: 2px;
   background: linear-gradient(90deg, #6495ed, #4169e1);
   z-index: 1;
+}
+
+.data-table th.fk-column::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: #6495ed;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.data-table th.fk-column.pinned::after {
+  background: #4169e1;
+}
 }
 .fk-indicator {
   color: #6495ed;
