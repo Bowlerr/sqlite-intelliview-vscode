@@ -160,6 +160,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         'css/30-components/tables-list.css',
         'css/30-components/tables.css',
         'css/30-components/tabs.css',
+        'css/30-components/table-picker-dropdown.css',
         ];
 
         const cssLinks = cssFiles.map(relPath => {
@@ -172,6 +173,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         // Use a nonce to only allow specific scripts to be run
         const nonce = getNonce();
 
+        // Patch: Add table-tabs.js before main.js and add table-tabs-bar above data-content in data-panel
+        const tableTabsScriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'table-tabs.js'));
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -275,6 +278,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                                 </div>
                                 
                                 <div id="data-panel" class="tab-panel">
+                                    <!-- Table Tabs Bar for Data Tab -->
+                                    <div id="table-tabs-bar"></div>
                                     <div id="data-content">
                                         <div class="empty-state">
                                             <div class="empty-state-icon">📊</div>
@@ -320,7 +325,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'enhanced-diagram.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'query-editor-enhanced.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'events.js'))}"></script>
-                
+                <!-- Table Tabs UI must be loaded before main.js -->
+                <script nonce="${nonce}" src="${tableTabsScriptUri}"></script>
                 <!-- Main application script - loads last and uses functions from modules above -->
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>

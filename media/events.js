@@ -662,55 +662,34 @@ function displayTablesList(tables) {
   // Add click handlers for table items
   elements.tablesListElement.querySelectorAll(".table-item").forEach((item) => {
     item.addEventListener("click", (e) => {
-      console.log("Table item clicked:", item.dataset.table);
       const tableName = item.dataset.table;
-      if (tableName) {
-        // Highlight selected table
-        elements.tablesListElement
-          .querySelectorAll(".table-item")
-          .forEach((el) => {
-            el.classList.remove("selected");
-          });
-        item.classList.add("selected");
-
-        if (typeof updateState !== "undefined") {
-          updateState({ selectedTable: tableName });
-        }
-
-        // Update minimized sidebar with selected table
-        if (window.updateSelectedTableSafe) {
-          window.updateSelectedTableSafe(tableName);
-        } else if (window.resizableSidebar) {
-          window.resizableSidebar.updateSelectedTable(tableName);
-        }
-
-        // Request table schema by default when clicking on table name
-        if (typeof vscode !== "undefined") {
-          vscode.postMessage({
-            type: "getTableSchema",
-            tableName: tableName,
-          });
-          // Also request table data to refresh the Data tab
-          let pageSize = 100;
-          if (
-            typeof window !== "undefined" &&
-            typeof window.getCurrentState === "function"
-          ) {
-            const state = window.getCurrentState();
-            if (state && state.pageSize) {
-              pageSize = state.pageSize;
-            }
-          }
-          vscode.postMessage({
-            type: "getTableData",
-            tableName: tableName,
-            page: 1,
-            pageSize: pageSize, // Use persisted pageSize from state
-          });
-        }
+      if (tableName && typeof window.selectTable === "function") {
+        window.selectTable(tableName);
       }
     });
   });
+
+  // On first load, if there are tables and no openTables, initialize state
+  if (
+    Array.isArray(tables) &&
+    tables.length > 0 &&
+    typeof window.getCurrentState === "function" &&
+    typeof window.updateState === "function"
+  ) {
+    const state = window.getCurrentState();
+    let openTables = Array.isArray(state.openTables) ? state.openTables : [];
+    if (openTables.length === 0) {
+      // Map to string names if needed
+      const tableNames = tables.map((t) =>
+        typeof t === "string" ? t : t.name
+      );
+      window.updateState({
+        openTables: [tableNames[0]],
+        activeTable: tableNames[0],
+        selectedTable: tableNames[0],
+      });
+    }
+  }
 
   console.log("Event listeners added to", tables.length, "tables");
 }

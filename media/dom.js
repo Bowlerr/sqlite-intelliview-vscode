@@ -1,3 +1,4 @@
+// Table tabs UI is now in media/table-tabs.js
 // @ts-check
 
 /**

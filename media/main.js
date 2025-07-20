@@ -1,11 +1,59 @@
-// @ts-check
+// Utility: Attach sidebar table item click handlers to call window.selectTable
+function attachSidebarTableHandlers() {
+  const items = document.querySelectorAll(".table-item[data-table]");
+  items.forEach((item) => {
+    item.onclick = (e) => {
+      const tableName = item.dataset.table;
+      if (tableName && typeof window.selectTable === "function") {
+        window.selectTable(tableName);
+      }
+    };
+  });
+}
+// Observe state changes to update table tabs UI
+function updateTableTabsUI() {
+  if (
+    typeof window.getCurrentState === "function" &&
+    typeof window.renderTableTabs === "function"
+  ) {
+    const state = window.getCurrentState();
+    window.renderTableTabs(state.openTables || [], state.activeTable || null);
+  }
+}
 
-/**
- * Main entry point for SQLite IntelliView webview
- * Uses functions from modular files loaded before this script
- */
+// Patch updateState to also update tabs UI
+if (typeof window.updateState === "function") {
+  const origUpdateState = window.updateState;
+  window.updateState = function (newState) {
+    origUpdateState(newState);
+    updateTableTabsUI();
+  };
+}
+
+// Initial render on load
+document.addEventListener("DOMContentLoaded", updateTableTabsUI);
+// Polyfill state functions for compatibility
+if (
+  typeof window.getCurrentState !== "function" &&
+  typeof getCurrentState === "function"
+) {
+  window.getCurrentState = getCurrentState;
+}
+if (
+  typeof window.updateState !== "function" &&
+  typeof updateState === "function"
+) {
+  window.updateState = updateState;
+}
 
 (function () {
+  // @ts-check
+
+  /**
+   * Main entry point for SQLite IntelliView webview
+   * Uses functions from modular files loaded before this script
+   */
+
   console.log("SQLite IntelliView: Starting main initialization...");
 
   // --- Sidebar maximize logic ---
@@ -32,6 +80,14 @@
     ) {
       maximizeSidebar();
     }
+
+    // --- Handle database info (list of tables) ---
+    if (message.type === "databaseInfo" && Array.isArray(message.tables)) {
+      if (typeof window.updateState === "function") {
+        window.updateState({ allTables: message.tables });
+      }
+    }
+
     // --- Handle table data response ---
     if (message.type === "tableData") {
       // Update pagination state immediately on data receipt
@@ -55,6 +111,19 @@
       return;
     }
   });
+
+  // Export tab functions globally for table-tabs.js and other modules
+
+  // Defer global assignments and sidebar handler attachment to after all scripts are loaded
+  setTimeout(() => {
+    if (typeof window !== "undefined") {
+      window.openTableTab = openTableTab;
+      window.switchTableTab = switchTableTab;
+      window.closeTableTab = closeTableTab;
+      window.selectTable = selectTable;
+      attachSidebarTableHandlers();
+    }
+  }, 0);
 
   try {
     // @ts-ignore - acquireVsCodeApi is provided by VS Code webview runtime
@@ -137,6 +206,9 @@
 
         // Load initial data
         loadInitialData();
+
+        // Attach sidebar table handlers after all scripts loaded
+        setTimeout(attachSidebarTableHandlers, 300);
       } catch (error) {
         console.error("Error during initialization:", error);
         if (typeof showError === "function") {
@@ -149,12 +221,89 @@
      * Select a table and load its data
      * @param {string} tableName - Name of the table to select
      */
-    function selectTable(tableName, page = 1, pageSize = 100) {
-      console.log(`Selecting table: ${tableName}`);
-
-      if (typeof updateState === "function") {
-        updateState({ selectedTable: tableName });
+    // --- Multi-table tabs logic ---
+    /**
+     * Add a table to open tabs (if not already open) and make it active
+     */
+    function openTableTab(tableName, page = 1, pageSize = 100) {
+      console.log("[openTableTab] called with:", tableName, { page, pageSize });
+      const state =
+        typeof window.getCurrentState === "function"
+          ? window.getCurrentState()
+          : {};
+      let openTables = Array.isArray(state.openTables)
+        ? [...state.openTables]
+        : [];
+      if (!openTables.includes(tableName)) {
+        openTables.push(tableName);
       }
+      if (typeof window.updateState === "function") {
+        window.updateState({
+          openTables,
+          activeTable: tableName,
+          selectedTable: tableName,
+        });
+      }
+      selectTableInternal(tableName, page, pageSize);
+    }
+
+    /**
+     * Remove a table from open tabs
+     */
+    function closeTableTab(tableName) {
+      const state =
+        typeof window.getCurrentState === "function"
+          ? window.getCurrentState()
+          : {};
+      let openTables = Array.isArray(state.openTables)
+        ? [...state.openTables]
+        : [];
+      openTables = openTables.filter((t) => t !== tableName);
+      let newActive = state.activeTable;
+      if (state.activeTable === tableName) {
+        newActive =
+          openTables.length > 0 ? openTables[openTables.length - 1] : null;
+      }
+      if (typeof window.updateState === "function") {
+        window.updateState({
+          openTables,
+          activeTable: newActive,
+          selectedTable: newActive,
+        });
+      }
+      if (newActive) {
+        selectTableInternal(newActive);
+      } else {
+        // Optionally clear data view if no tabs open
+        const dataContent = document.getElementById("data-content");
+        if (dataContent) {
+          dataContent.innerHTML = "";
+        }
+      }
+    }
+
+    /**
+     * Switch to an already open table tab
+     */
+    function switchTableTab(tableName) {
+      if (typeof window.updateState === "function") {
+        window.updateState({
+          activeTable: tableName,
+          selectedTable: tableName,
+        });
+      }
+      selectTableInternal(tableName);
+    }
+
+    /**
+     * Internal: select table and load data (does not update tab state)
+     */
+    function selectTableInternal(tableName, page = 1, pageSize = 100) {
+      console.log("[selectTableInternal] called with:", tableName, {
+        page,
+        pageSize,
+      });
+      console.log(`Selecting table: ${tableName}`);
 
       // Update minimized sidebar with selected table
       if (window.updateSelectedTableSafe) {
@@ -176,9 +325,34 @@
       requestTableSchema(tableName);
       requestTableData(tableName, page, pageSize);
 
-      // Switch to schema tab to show the table info
-      if (typeof switchTab === "function") {
-        switchTab("schema");
+      // Do not switch main tab; stay on the user's current tab
+    }
+
+    // For compatibility: selectTable now opens a tab
+    function selectTable(tableName, page = 1, pageSize = 100) {
+      // Always add to openTables and set as active
+      if (typeof window.openTableTab === "function") {
+        window.openTableTab(tableName, page, pageSize);
+      } else {
+        // fallback: update state directly
+        const state =
+          typeof window.getCurrentState === "function"
+            ? window.getCurrentState()
+            : {};
+        let openTables = Array.isArray(state.openTables)
+          ? [...state.openTables]
+          : [];
+        if (!openTables.includes(tableName)) {
+          openTables.push(tableName);
+        }
+        if (typeof window.updateState === "function") {
+          window.updateState({
+            openTables,
+            activeTable: tableName,
+            selectedTable: tableName,
+          });
+        }
+        selectTableInternal(tableName, page, pageSize);
       }
     }
 
@@ -349,6 +523,18 @@
     ) {
       const dataContent = document.getElementById("data-content");
       if (!dataContent) {
+        return;
+      }
+
+      // Only render if this table is the active tab
+      let activeTable = null;
+      if (typeof window.getCurrentState === "function") {
+        const state = window.getCurrentState();
+        activeTable = state.activeTable || state.selectedTable;
+      }
+      if (activeTable && tableName !== activeTable) {
+        // Not the active tab, clear content
+        dataContent.innerHTML = "";
         return;
       }
 

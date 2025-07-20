@@ -8,6 +8,10 @@
 let currentState = {
   databasePath: "",
   encryptionKey: "",
+  // Multi-table tabs state
+  openTables: [], // Array of open table names
+  activeTable: null, // Currently active table in tabs
+  // Legacy single-table selection (for backward compatibility)
   selectedTable: null,
   activeTab: "schema",
   isConnected: false,
@@ -16,6 +20,7 @@ let currentState = {
   tableCache: new Map(),
   currentPage: 1, // Track current page for pagination
   pageSize: 100, // Track current page size for pagination
+  allTables: [], // List of all table names in the database
 };
 
 /**
@@ -62,10 +67,13 @@ function initializeState() {
 /**
  * Reset state to initial values
  */
+
 function resetState() {
   currentState = {
     databasePath: "",
     encryptionKey: "",
+    openTables: [],
+    activeTable: null,
     selectedTable: null,
     activeTab: "schema",
     isConnected: false,
@@ -74,6 +82,7 @@ function resetState() {
     tableCache: new Map(),
     currentPage: 1,
     pageSize: 100,
+    allTables: [],
   };
 
   if (typeof vscode !== "undefined") {

@@ -1,3 +1,118 @@
+/* Ensure table picker dropdown appears above table data */
+#table-picker-dropdown {
+  z-index: 1000;
+}
+/* ===== DATA TAB TABLE TABS BAR ===== */
+/* Force horizontal layout for table tabs bar */
+/* Force horizontal layout for table tabs bar and prevent wrapping */
+.table-tabs-bar {
+  display: flex;
+  flex-direction: row; /* Explicitly set horizontal direction */
+  flex-wrap: nowrap; /* Prevent tabs from wrapping to a new line */
+  align-items: flex-end;
+  background: var(--vscode-tab-unfocusedInactiveBackground, #23272e);
+  border-bottom: 2.5px solid var(--vscode-tab-activeBorder, #007acc);
+  padding: 0 8px;
+  min-height: 40px;
+  user-select: none;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  margin-bottom: 2px;
+}
+/* Prevent tabs from stretching to fill the row */
+/* Use inline-flex to prevent stacking due to whitespace or block context */
+.table-tab {
+  display: inline-flex;
+  align-items: center;
+  background: var(--vscode-tab-inactiveBackground, #23272e);
+  color: var(--vscode-tab-inactiveForeground, #bbb);
+  border: 1.5px solid transparent;
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  margin-right: 2px;
+  padding: 0 18px;
+  height: 34px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.13s, color 0.13s, border 0.13s;
+  position: relative;
+  flex: 0 0 auto;
+}
+.table-tab.active {
+  background: var(--vscode-tab-activeBackground, #1e90ff);
+  color: var(--vscode-tab-activeForeground, #fff);
+  border: 1.5px solid var(--vscode-tab-activeBorder, #007acc);
+  border-bottom: 2.5px solid var(--vscode-tab-activeBackground, #1e90ff);
+  font-weight: bold;
+  z-index: 3;
+  box-shadow: 0 6px 18px rgba(30, 144, 255, 0.13);
+}
+.table-tab {
+  transition: background 0.15s, color 0.15s, border-bottom 0.15s;
+}
+.table-tab .tab-label {
+  margin-right: 8px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table-tab .close-tab-btn {
+  background: none;
+  border: none;
+  color: var(--vscode-tab-inactiveForeground, #bbb);
+  font-size: 16px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  transition: background 0.13s, color 0.13s;
+  cursor: pointer;
+}
+.table-tab .close-tab-btn:hover {
+  background: var(--vscode-button-secondaryBackground, #333);
+  color: var(--vscode-button-secondaryForeground, #fff);
+}
+/* Make add-tab visually match other tabs for alignment and sit inline */
+.table-tab.add-tab {
+  display: inline-flex;
+  font-weight: bold;
+  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-button-background, #007acc);
+  border: 1.5px solid var(--vscode-tab-activeBorder, #007acc);
+  font-size: 14px;
+  padding: 0 18px;
+  margin-left: 0;
+  margin-right: 2px; /* match .table-tab */
+  border-radius: 7px 7px 0 0;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.13s, color 0.13s, border 0.13s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex: 0 0 auto;
+}
+.table-tab.add-tab.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+  background: var(--vscode-editorWidget-background, #f3f3f3);
+  color: var(--vscode-disabledForeground, #888);
+  border: 1px dashed var(--vscode-disabledForeground, #888);
+  box-shadow: none;
+}
+
+.table-tab.add-tab.disabled:focus {
+  outline: none;
+}
+
+.table-tab.add-tab:hover {
+  background: var(--vscode-button-hoverBackground, #005fa3);
+  color: var(--vscode-button-foreground, #fff);
+}
 /* ===== TABS ===== */
 .tabs {
   display: flex;
