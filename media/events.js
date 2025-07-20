@@ -168,6 +168,9 @@ function handleExtensionMessage(event) {
     case "databaseInfo":
       handleDatabaseInfo(message);
       break;
+    case "tableData":
+      handleTableData(message);
+      break;
     case "tableDataDelta":
       handleTableDataDelta(message);
       break;
@@ -487,6 +490,11 @@ function handleQueryResult(message) {
         if (window.queryEditor.refreshEditor) {
           window.queryEditor.refreshEditor();
         }
+        // Only call handleTableData if the query result has table-specific data
+        if (message.tableName && message.columnInfo) {
+          handleTableData(message);
+        }
+        return;
       }
     }
   }, 100);
@@ -516,6 +524,17 @@ function handleTableSchema(message) {
  */
 function handleTableData(message) {
   if (message.success) {
+    // Store full column info (with fk metadata) for robust FK patching
+    if (
+      message.columnInfo &&
+      Array.isArray(message.columnInfo) &&
+      message.tableName
+    ) {
+      if (!window.currentTableSchema) {
+        window.currentTableSchema = {};
+      }
+      window.currentTableSchema[message.tableName] = message.columnInfo;
+    }
     displayTableData(message.data, message.columns, message.tableName, {
       page: message.page,
       pageSize: message.pageSize,
@@ -1431,7 +1450,7 @@ function handleTableDataDelta({
       if (cell) {
         const cc = cell.querySelector(".cell-content");
         if (cc) {
-          cc.textContent = val == null ? "" : String(val);
+          cc.textContent = val === null ? "" : String(val);
         }
       }
     });
@@ -1444,25 +1463,27 @@ function handleTableDataDelta({
       // bump all existing ≥ rowIndex
       Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
         const idxAttr = r.getAttribute("data-row-index");
-        if (idxAttr !== null) {
+        if (idxAttr !== null && !isNaN(+idxAttr)) {
           const idx = +idxAttr;
           if (idx >= rowIndex) {
             r.setAttribute("data-row-index", String(idx + 1));
           }
         }
       });
-      // Use renderTableRows to generate the new row HTML
+      // Use renderTableRows to generate the new row HTML, but robustly patch FK cells after creation
       let columns = Array.from(wrapper.querySelectorAll("thead th")).map((th) =>
         th.getAttribute("data-column-name")
       );
-      // Fallback: if any column name is missing, try to get from global schema
+      // Fallback: if any column name is missing, try to get from global schema (handle window typing)
+      /** @type {any} */ const win =
+        typeof window !== "undefined" ? window : {};
       if (columns.some((c) => !c)) {
         if (
-          window &&
-          window.currentTableSchema &&
-          Array.isArray(window.currentTableSchema[tableName])
+          win.currentTableSchema &&
+          win.currentTableSchema[tableName] &&
+          Array.isArray(win.currentTableSchema[tableName])
         ) {
-          columns = window.currentTableSchema[tableName].map((col) => col.name);
+          columns = win.currentTableSchema[tableName].map((col) => col.name);
           if (!columns || columns.length === 0) {
             console.warn(
               "[events.js] No columns found in global schema for table",
@@ -1479,11 +1500,87 @@ function handleTableDataDelta({
       }
       // Final fallback: replace any null/undefined with placeholder
       columns = columns.map((c, i) => c || `col_${i}`);
-      const rowHtml = window.renderTableRows([rowData], rowIndex, columns);
+      const rowHtml = win.renderTableRows
+        ? win.renderTableRows([rowData], rowIndex, columns)
+        : "";
       // Parse the HTML string into a DOM node
       const temp = document.createElement("tbody");
       temp.innerHTML = rowHtml.trim();
       const newRow = temp.firstElementChild;
+      // --- PATCH: Add FK cell attributes if foreign key info is available ---
+      // Robustly detect FK metadata from all available sources
+      let fkMeta = {};
+      // 1. Try currentTableSchema[tableName] (preferred)
+      if (
+        win.currentTableSchema &&
+        win.currentTableSchema[tableName] &&
+        Array.isArray(win.currentTableSchema[tableName])
+      ) {
+        win.currentTableSchema[tableName].forEach((col) => {
+          if (col && col.name && col.fk) {
+            fkMeta[col.name] = col.fk;
+          }
+        });
+      }
+      // 2. Try options.foreignKeys if available (from displayTableData)
+      if (
+        fkMeta &&
+        Object.keys(fkMeta).length === 0 &&
+        wrapper &&
+        wrapper.dataset &&
+        wrapper.dataset.foreignKeys
+      ) {
+        try {
+          const parsed = JSON.parse(wrapper.dataset.foreignKeys);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((fk) => {
+              if (fk && fk.from && fk.to && fk.table) {
+                fkMeta[fk.from] = {
+                  referencedTable: fk.table,
+                  referencedColumn: fk.to,
+                };
+              }
+            });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      // 3. Try columns with _id suffix as a last resort (convention)
+      if (Object.keys(fkMeta).length === 0) {
+        columns.forEach((col) => {
+          if (col && /(_id|Id|ID)$/.test(col)) {
+            // Heuristic: treat as FK, but no referenced table/column
+            fkMeta[col] = { referencedTable: "", referencedColumn: "id" };
+          }
+        });
+      }
+      // Patch each cell in the new row
+      if (newRow) {
+        Array.from(newRow.children).forEach((cell, idx) => {
+          const colName = columns[idx];
+          // Always set data-column-name for robust context menu detection
+          if (colName) {
+            cell.setAttribute("data-column-name", colName);
+          }
+          if (fkMeta[colName]) {
+            cell.classList.add("fk-cell");
+            // Always set both attributes, even if empty string (for debug)
+            const fkTable = fkMeta[colName].referencedTable || "";
+            const fkColumn = fkMeta[colName].referencedColumn || "";
+            cell.setAttribute("data-fk-table", fkTable);
+            cell.setAttribute("data-fk-column", fkColumn);
+          }
+          // --- PATCH: Attach context menu event to every cell ---
+          if (typeof window.showContextMenu === "function") {
+            cell.addEventListener("contextmenu", function (e) {
+              e.preventDefault();
+              // Ensure MouseEvent is passed (cast for linting)
+              window.showContextMenu(/** @type {MouseEvent} */ (e), cell);
+            });
+          }
+        });
+      }
       if (newRow) {
         // insert at correct spot
         const ref = tbody.querySelector(`tr[data-row-index="${rowIndex + 1}"]`);
@@ -1518,9 +1615,12 @@ function handleTableDataDelta({
       row.remove();
       // decrement all > rowIndex
       Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
-        const idx = +r.getAttribute("data-row-index");
-        if (idx > rowIndex) {
-          r.setAttribute("data-row-index", String(idx - 1));
+        const idxAttr = r.getAttribute("data-row-index");
+        if (idxAttr !== null && !isNaN(+idxAttr)) {
+          const idx = +idxAttr;
+          if (idx > rowIndex) {
+            r.setAttribute("data-row-index", String(idx - 1));
+          }
         }
       });
     });

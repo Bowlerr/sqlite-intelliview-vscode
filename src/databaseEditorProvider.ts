@@ -410,6 +410,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
             // Get foreign key information for the table
             const foreignKeys = await dbService.getForeignKeys(tableName);
+            // Get full column info (with fk metadata)
+            const columnInfo = await dbService.getTableInfo(tableName);
 
             // Fix column headers: alias rowid as _rowid and remove duplicate id columns
             let columns = result.columns;
@@ -435,6 +437,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 data: data,
                 columns: columns,
                 foreignKeys: foreignKeys,
+                columnInfo: columnInfo,
                 page: page,
                 pageSize: pageSize,
                 totalRows: totalRowCount
@@ -470,15 +473,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
-            
             // First, get the rowid for the row we want to update
             console.log(`[handleCellUpdateRequest] Getting rowid for row index ${rowIndex}`);
             const rowId = await dbService.getCellRowId(tableName, rowIndex);
-            
             // Update the cell data
             console.log(`[handleCellUpdateRequest] Updating cell data with rowid ${rowId}`);
             await dbService.updateCellData(tableName, rowId, columnName, newValue);
-            
             // Send success response
             webviewPanel.webview.postMessage({
                 type: 'cellUpdateSuccess',

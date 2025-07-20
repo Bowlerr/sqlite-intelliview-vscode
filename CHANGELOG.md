@@ -1,5 +1,44 @@
 # Change Log
 
+
+## [Unreleased]
+
+### Added
+
+
+### Changed
+
+
+### Fixed
+
+
+## [0.2.15] - 2025-07-20
+
+### Added
+
+- Foreign key navigation and accessibility improvements:
+  - Table cells with foreign key references now use `data-fk-table` and `data-fk-column` attributes instead of parsing the `title` attribute, improving reliability and accessibility for assistive technologies.
+  - Foreign key navigation now shows a clear error if information is missing, instead of silently failing.
+- Table row highlighting and focus improvements:
+  - Foreign key target rows now have improved outline and box-shadow for accessibility and high-contrast themes.
+  - Foreign key cells now support keyboard focus with visible outline and background for accessibility.
+- Table pagination and data refresh:
+  - Table data is now refreshed in-place after query execution, ensuring the latest data is always shown without a full reload.
+- Table rendering:
+  - Foreign key detection and rendering is more robust, supporting both explicit foreign key metadata and fallback detection from column definitions.
+
+### Changed
+
+- Table and cell rendering now use `data-fk-table` and `data-fk-column` for foreign key info, not the `title` attribute.
+- Improved accessibility and keyboard navigation for foreign key cells and target rows.
+- Table data refresh logic is now triggered after query execution for more accurate results.
+
+### Fixed
+
+- Fixed duplicate box-shadow on foreign key target row cells.
+- Fixed foreign key navigation error handling for missing info.
+- Fixed high-contrast mode styles for foreign key cells and target rows.
+
 ## [0.2.14] - 2025-07-14
 
 ### Added
