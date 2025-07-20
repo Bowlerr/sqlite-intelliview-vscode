@@ -363,8 +363,8 @@
     var(--vscode-list-headerBackground) 0%,
     rgba(100, 149, 237, 0.15) 100%
   );
- 
 }
+
 .data-table th.fk-column::before {
   content: "";
   position: absolute;
@@ -391,7 +391,7 @@
 .data-table th.fk-column.pinned::after {
   background: #4169e1;
 }
-}
+
 .fk-indicator {
   color: #6495ed;
   font-size: 0.9em;
