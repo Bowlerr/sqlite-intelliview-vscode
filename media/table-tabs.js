@@ -4,12 +4,16 @@
  * Handles rendering, switching, adding, and closing table tabs
  */
 
+// Track which tab is being renamed and its value
+let renamingTabKey = null;
+let renamingValue = "";
+
 /**
  * Render the table tabs bar above the data table area
- * @param {Array<string>} openTables - Array of open table names
- * @param {string} activeTable - Currently active table
+ * @param {Array<{key: string, label: string}>} openTables - Array of open table objects
+ * @param {string} activeTableKey - Currently active table key
  */
-function renderTableTabs(openTables, activeTable) {
+function renderTableTabs(openTables, activeTableKey) {
   let tabsBar = document.getElementById("table-tabs-bar");
   if (!tabsBar) {
     tabsBar = document.createElement("div");
@@ -21,41 +25,71 @@ function renderTableTabs(openTables, activeTable) {
       dataContent.parentNode.insertBefore(tabsBar, dataContent);
     }
   }
+  // Filter out invalid tab objects (missing key or label)
+  const validTabs = Array.isArray(openTables)
+    ? openTables.filter((tab) => tab && tab.key && tab.label)
+    : [];
   // Build tabs HTML
-  let html = openTables
-    .map(
-      (table) => `
-        <div class=\"table-tab${
-          table === activeTable ? " active" : ""
-        }\" data-table=\"${escapeHtml(
-        table
-      )}\">\n          <span class=\"tab-label\">${escapeHtml(
-        table
-      )}</span>\n          <button class=\"close-tab-btn\" title=\"Close\">&times;</button>\n        </div>\n      `
-    )
+  let html = validTabs
+    .map((tab) => {
+      const { key, label, isResultTab } = tab;
+      const isRenaming = renamingTabKey === key;
+      return `
+        <div class="table-tab${
+          key === activeTableKey ? " active" : ""
+        }" data-table-key="${key}"${
+        isResultTab ? ' data-result-tab="true"' : ""
+      }>
+          ${
+            isResultTab && isRenaming
+              ? `<input type="text" class="tab-rename-input" value="${escapeHtml(
+                  renamingValue
+                )}" autofocus style="min-width:100px;" />`
+              : `<span class="tab-label"${
+                  isResultTab ? ' data-rename="true"' : ""
+                }>${
+                  isResultTab
+                    ? '<span class="tab-icon" title="Query Result">🧮</span> '
+                    : ""
+                }${escapeHtml(label)}</span>`
+          }
+          <button class="close-tab-btn" title="Close">&times;</button>
+        </div>
+      `;
+    })
     .join("");
   // Determine if there are more tables to open
   let allTables = [];
   if (typeof window.getAllTableNames === "function") {
     allTables = window.getAllTableNames();
     allTables = Array.isArray(allTables)
-      ? allTables.map((t) => (typeof t === "string" ? t : t.name)).filter(Boolean)
+      ? allTables
+          .map((t) => (typeof t === "string" ? t : t.name))
+          .filter(Boolean)
       : [];
   }
-  const available = allTables.filter((t) => !openTables.includes(t));
+  // Only consider non-result tabs for add
+  const openTableKeys = openTables.map((t) => t.key);
+  const available = allTables.filter((t) => !openTableKeys.includes(t));
   const addTabDisabled = available.length === 0;
   // Add "+" button, disabled if no more tables
-  html += `<div class="table-tab add-tab${addTabDisabled ? ' disabled' : ''}" id="add-table-tab" title="Add table"${addTabDisabled ? ' tabindex="-1" aria-disabled="true"' : ''}>+</div>`;
+  html += `<div class="table-tab add-tab${
+    addTabDisabled ? " disabled" : ""
+  }" id="add-table-tab" title="Add table"${
+    addTabDisabled ? ' tabindex="-1" aria-disabled="true"' : ""
+  }>+</div>`;
   // Add a hidden dropdown for table picker
   html += `<select id="table-picker-dropdown" style="display:none; position:absolute;"></select>`;
   tabsBar.innerHTML = html;
 
   // Add event listeners
   tabsBar.querySelectorAll(".table-tab").forEach((tabEl) => {
-    const table = tabEl.getAttribute("data-table");
     if (tabEl.classList.contains("add-tab")) {
       if (tabEl.classList.contains("disabled")) {
-        tabEl.onclick = (e) => { e.preventDefault(); e.stopPropagation(); };
+        tabEl.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
         tabEl.setAttribute("aria-disabled", "true");
         tabEl.setAttribute("tabindex", "-1");
       } else {
@@ -64,9 +98,16 @@ function renderTableTabs(openTables, activeTable) {
           if (typeof window.getAllTableNames === "function") {
             let allTables = window.getAllTableNames();
             allTables = Array.isArray(allTables)
-              ? allTables.map((t) => (typeof t === "string" ? t : t.name)).filter(Boolean)
+              ? allTables
+                  .map((t) => (typeof t === "string" ? t : t.name))
+                  .filter(Boolean)
               : [];
-            const available = allTables.filter((t) => !openTables.includes(t));
+            const openTableKeys = Array.isArray(openTables)
+              ? openTables.map((t) => t.key)
+              : [];
+            const available = allTables.filter(
+              (t) => !openTableKeys.includes(t)
+            );
             if (available.length === 1) {
               if (typeof window.openTableTab === "function") {
                 window.openTableTab(available[0], 1, 100);
@@ -161,31 +202,113 @@ function renderTableTabs(openTables, activeTable) {
           }
         };
       }
-    } else {
-      // Tab click: switch
-      // @ts-ignore
-      tabEl.onclick = (e) => {
-        if (e.target.classList.contains("close-tab-btn")) {
-          return;
-        }
-        // @ts-ignore
-        if (typeof window.switchTableTab === "function") {
-          // @ts-ignore
-          window.switchTableTab(table);
+      return;
+    }
+    // Real table tabs only below
+    const key = tabEl.getAttribute("data-table-key");
+    const tabObj = openTables.find((t) => t.key === key);
+    if (!tabObj) {
+      return;
+    }
+    const label = tabObj.label;
+    // Tab click: switch
+    tabEl.onclick = (e) => {
+      if (e.target.classList.contains("close-tab-btn")) {
+        return;
+      }
+      if (typeof window.switchTableTab === "function") {
+        window.switchTableTab(key);
+      }
+    };
+    // Close button
+    const closeBtn = tabEl.querySelector(".close-tab-btn");
+    if (closeBtn) {
+      closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (typeof window.closeTableTab === "function") {
+          window.closeTableTab(key);
         }
       };
-      // Close button
-      const closeBtn = tabEl.querySelector(".close-tab-btn");
-      if (closeBtn) {
-        // @ts-ignore
-        closeBtn.onclick = (e) => {
-          e.stopPropagation();
-          // @ts-ignore
-          if (typeof window.closeTableTab === "function") {
-            // @ts-ignore
-            window.closeTableTab(table);
+    }
+    // Inline rename for Results tabs
+    const labelEl = tabEl.querySelector(".tab-label");
+    const input = tabEl.querySelector(".tab-rename-input");
+    if (input) {
+      // If this is the renaming input, attach handlers
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 0);
+      input.onblur = finishRename;
+      input.onkeydown = function (ev) {
+        if (ev.key === "Enter") {
+          finishRename();
+        } else if (ev.key === "Escape") {
+          cancelRename();
+        } else {
+          renamingValue = input.value;
+        }
+      };
+      function finishRename() {
+        let newLabel = input.value.trim();
+        if (!newLabel) {
+          newLabel = label;
+        }
+        if (
+          typeof window["getCurrentState"] === "function" &&
+          typeof window["updateState"] === "function"
+        ) {
+          const state = window["getCurrentState"]();
+          let openTables = Array.isArray(state.openTables)
+            ? state.openTables.map((t) => ({ ...t }))
+            : [];
+          const idx = openTables.findIndex((t) => t.key === key);
+          if (idx !== -1) {
+            openTables[idx].label = newLabel;
           }
-        };
+          window["updateState"]({
+            openTables,
+            activeTable: key,
+            selectedTable: key,
+            tableCache: state.tableCache,
+          });
+          // Also update the sidebar immediately if available
+          if (
+            typeof window.displayTablesList === "function" &&
+            Array.isArray(state.allTables)
+          ) {
+            window.displayTablesList(state.allTables);
+          }
+          renamingTabKey = null;
+          renamingValue = "";
+        }
+      }
+      function cancelRename() {
+        renamingTabKey = null;
+        renamingValue = "";
+        renderTableTabs(openTables, activeTableKey);
+      }
+    } else if (labelEl && labelEl.getAttribute("data-rename") === "true") {
+      // Cast to HTMLElement for style/title
+      labelEl.style.cursor = "pointer";
+      labelEl.title = "Double-click to rename";
+      labelEl.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        renamingTabKey = key;
+        renamingValue = label;
+        renderTableTabs(openTables, activeTableKey);
+      });
+      const icon = labelEl.querySelector(".tab-icon");
+      if (icon) {
+        const iconEl = /** @type {HTMLElement} */ (icon);
+        iconEl.style.cursor = "pointer";
+        iconEl.title = "Double-click to rename";
+        iconEl.addEventListener("dblclick", (e) => {
+          e.stopPropagation();
+          renamingTabKey = key;
+          renamingValue = label;
+          renderTableTabs(openTables, activeTableKey);
+        });
       }
     }
   });

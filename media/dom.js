@@ -5,7 +5,28 @@
  * DOM utilities and element references
  */
 
-// DOM elements cache
+/**
+ * @typedef {Object} DomElements
+ * @property {HTMLElement|null} connectBtn
+ * @property {HTMLElement|null} encryptionKeyInput
+ * @property {HTMLElement|null} tablesListElement
+ * @property {HTMLElement|null} executeQueryBtn
+ * @property {HTMLElement|null} clearQueryBtn
+ * @property {NodeListOf<Element>|null} tabs
+ * @property {NodeListOf<Element>|null} tabPanels
+ * @property {HTMLElement|null} schemaContent
+ * @property {HTMLElement|null} queryResults
+ * @property {HTMLElement|null} dataContent
+ * @property {HTMLElement|null} connectionSection
+ * @property {HTMLElement|null} connectionStatus
+ * @property {HTMLElement|null} diagramContent
+ * @property {HTMLElement|null} generateDiagramBtn
+ * @property {HTMLElement|null} exportDiagramBtn
+ * @property {HTMLElement|null} diagramContainer
+ * @property {HTMLElement|null} testConnectionBtn
+ */
+
+/** @type {DomElements} */
 const domElements = {
   connectBtn: null,
   encryptionKeyInput: null,
@@ -23,6 +44,7 @@ const domElements = {
   generateDiagramBtn: null,
   exportDiagramBtn: null,
   diagramContainer: null,
+  testConnectionBtn: null,
 };
 
 /**
@@ -34,6 +56,7 @@ function initializeDOMElements() {
   domElements.tablesListElement = document.getElementById("tables-list");
   domElements.executeQueryBtn = document.getElementById("execute-query");
   domElements.clearQueryBtn = document.getElementById("clear-query");
+  // NodeList assignments (can be empty NodeList if not found)
   domElements.tabs = document.querySelectorAll(".tab");
   domElements.tabPanels = document.querySelectorAll(".tab-panel");
   domElements.schemaContent = document.getElementById("schema-content");
@@ -77,8 +100,11 @@ function autoResizeTextarea() {
     return;
   }
 
-  textarea.style.height = "auto";
-  textarea.style.height = textarea.scrollHeight + "px";
+  if (textarea instanceof HTMLElement) {
+    textarea.style.height = "auto";
+    // @ts-ignore
+    textarea.style.height = textarea.scrollHeight + "px";
+  }
 }
 
 /**
@@ -143,16 +169,21 @@ function switchTab(tabName) {
   const tabPanels = getDOMElement("tabPanels");
 
   // Update active tab
-  if (tabs) {
+  // Only use forEach if tabs is a NodeList (not a single Element)
+  if (tabs && NodeList.prototype.isPrototypeOf(tabs)) {
     tabs.forEach((tab) => {
-      tab.classList.toggle("active", tab.dataset.tab === tabName);
+      if (tab instanceof HTMLElement) {
+        tab.classList.toggle("active", tab.dataset.tab === tabName);
+      }
     });
   }
 
   // Update active panel
-  if (tabPanels) {
+  if (tabPanels && NodeList.prototype.isPrototypeOf(tabPanels)) {
     tabPanels.forEach((panel) => {
-      panel.classList.toggle("active", panel.id === `${tabName}-panel`);
+      if (panel instanceof HTMLElement) {
+        panel.classList.toggle("active", panel.id === `${tabName}-panel`);
+      }
     });
   }
 
@@ -160,7 +191,48 @@ function switchTab(tabName) {
   if (tabName === "data") {
     const currentState =
       typeof getCurrentState === "function" ? getCurrentState() : {};
-    if (currentState.selectedTable && typeof vscode !== "undefined") {
+    let isResultTab = false;
+    let selectedTabObj = null;
+    if (currentState.selectedTable && Array.isArray(currentState.openTables)) {
+      selectedTabObj = currentState.openTables.find(
+        (t) => t.key === currentState.selectedTable
+      );
+      if (selectedTabObj && selectedTabObj.isResultTab) {
+        isResultTab = true;
+      }
+    }
+    if (currentState.selectedTable && isResultTab) {
+      // Render cached results immediately
+      if (typeof window.getCurrentState === "function") {
+        const state = window.getCurrentState();
+        let result = null;
+        if (
+          state.tableCache instanceof Map &&
+          state.tableCache.has(currentState.selectedTable)
+        ) {
+          result = state.tableCache.get(currentState.selectedTable);
+        } else if (
+          typeof state.tableCache === "object" &&
+          state.tableCache[currentState.selectedTable]
+        ) {
+          result = state.tableCache[currentState.selectedTable];
+        }
+        if (result && result.data && result.columns) {
+          const createDataTableFn =
+            typeof window.createDataTable === "function"
+              ? window.createDataTable
+              : null;
+          const dataContent = document.getElementById("data-content");
+          if (dataContent) {
+            const tableHtml =
+              result.data.length > 0 && createDataTableFn
+                ? createDataTableFn(result.data, result.columns, "query-result")
+                : `<div class=\"no-results\"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
+            dataContent.innerHTML = `<div class=\"table-container\">${tableHtml}</div>`;
+          }
+        }
+      }
+    } else if (currentState.selectedTable && typeof vscode !== "undefined") {
       // Use persisted pageSize from state if available
       const pageSize =
         typeof currentState.pageSize === "number" &&
@@ -226,60 +298,12 @@ function checkConnectionSectionVisibility() {
   }
 }
 
-// Add modal container to DOM on load
-function addResultsModalToDOM() {
-  if (document.getElementById("results-modal-overlay")) {
-    return;
-  }
-  const overlay = document.createElement("div");
-  overlay.id = "results-modal-overlay";
-  overlay.className = "modal-overlay hidden";
-  overlay.innerHTML = `
-    <div class="modal" id="results-modal">
-      <div class="modal-header">
-        <span class="modal-title">Query Results</span>
-        <button class="modal-close" id="close-results-modal" title="Close">&times;</button>
-      </div>
-      <div class="modal-body" id="results-modal-body"></div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  // Close on click outside modal or on close button
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) {
-      hideResultsModal();
-    }
-  });
-  document.getElementById("close-results-modal").onclick = hideResultsModal;
-}
-
-function showResultsModal(html) {
-  addResultsModalToDOM();
-  const overlay = document.getElementById("results-modal-overlay");
-  const body = document.getElementById("results-modal-body");
-  if (body) {
-    body.innerHTML = html;
-  }
-  if (overlay) {
-    overlay.classList.remove("hidden");
-  }
-}
-
-function hideResultsModal() {
-  const overlay = document.getElementById("results-modal-overlay");
-  if (overlay) {
-    overlay.classList.add("hidden");
-  }
-}
-
 // Make this function available globally
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).forceHideConnectionSection =
     forceHideConnectionSection;
   /** @type {any} */ (window).checkConnectionSectionVisibility =
     checkConnectionSectionVisibility;
-  window.showResultsModal = showResultsModal;
-  window.hideResultsModal = hideResultsModal;
 }
 
 // Export functions for use in other modules

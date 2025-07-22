@@ -64,3 +64,56 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== RESULT TABS IN SIDEBAR ===== */
+.result-tab-item {
+  /* Inherit all .table-item styles */
+  padding: 12px 16px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 11;
+  background: var(--vscode-sideBar-background);
+}
+.result-tab-item:hover {
+  background: var(--vscode-list-hoverBackground);
+  color: var(--vscode-list-hoverForeground);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  border-color: var(--vscode-focusBorder);
+  overflow: visible;
+  clip-path: none;
+  position: relative;
+}
+.result-tab-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  border-color: var(--vscode-focusBorder);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.result-tab-item:active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  transform: translateY(0);
+}
+
+/* Sidebar separator for Query Results section */
+.sidebar-separator {
+  margin: 16px 0 8px 0;
+  padding: 4px 16px 2px 16px;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-top: 1px solid var(--vscode-panel-border, #e0e0e0);
+  background: transparent;
+}

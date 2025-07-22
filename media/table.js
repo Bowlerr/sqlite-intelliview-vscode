@@ -878,13 +878,22 @@ function updateTablePage(tableWrapper, pageNumber) {
   const win2 = window;
   const currentState =
     typeof win2.getCurrentState === "function" ? win2.getCurrentState() : {};
-  if (currentState.selectedTable && typeof win2.vscode !== "undefined") {
-    win2.vscode.postMessage({
-      type: "getTableData",
-      tableName: currentState.selectedTable,
-      page: validPage,
-      pageSize: pageSize,
-    });
+  if (
+    currentState.selectedTable &&
+    typeof win2.vscode !== "undefined" &&
+    Array.isArray(currentState.openTables)
+  ) {
+    const tabObj = currentState.openTables.find(
+      (t) => t.key === currentState.selectedTable
+    );
+    if (!tabObj || !tabObj.isResultTab) {
+      win2.vscode.postMessage({
+        type: "getTableData",
+        tableName: currentState.selectedTable,
+        page: validPage,
+        pageSize: pageSize,
+      });
+    }
   }
 }
 

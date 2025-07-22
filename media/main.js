@@ -232,43 +232,65 @@ if (
           ? window.getCurrentState()
           : {};
       let openTables = Array.isArray(state.openTables)
-        ? [...state.openTables]
+        ? state.openTables.map((t) => ({ ...t }))
         : [];
-      if (!openTables.includes(tableName)) {
-        openTables.push(tableName);
+      // If already open, just activate
+      let tabObj = openTables.find((t) => t.key === tableName);
+      if (!tabObj) {
+        // Use tableName as label for normal tables, or prettify for results
+        let label = tableName;
+        let isResultTab = false;
+        if (/^results \(\d{4}-\d{2}-\d{2}/i.test(tableName)) {
+          label = tableName;
+          isResultTab = true;
+        }
+        tabObj = { key: tableName, label, isResultTab };
+        openTables.push(tabObj);
       }
       if (typeof window.updateState === "function") {
         window.updateState({
           openTables,
-          activeTable: tableName,
-          selectedTable: tableName,
+          activeTable: tabObj.key,
+          selectedTable: tabObj.key,
         });
       }
-      selectTableInternal(tableName, page, pageSize);
+      selectTableInternal(tabObj.key, page, pageSize);
     }
 
     /**
      * Remove a table from open tabs
      */
-    function closeTableTab(tableName) {
+    function closeTableTab(tableKey) {
       const state =
         typeof window.getCurrentState === "function"
           ? window.getCurrentState()
           : {};
       let openTables = Array.isArray(state.openTables)
-        ? [...state.openTables]
+        ? state.openTables.map((t) => ({ ...t }))
         : [];
-      openTables = openTables.filter((t) => t !== tableName);
+      openTables = openTables.filter((t) => t.key !== tableKey);
       let newActive = state.activeTable;
-      if (state.activeTable === tableName) {
+      if (state.activeTable === tableKey) {
         newActive =
-          openTables.length > 0 ? openTables[openTables.length - 1] : null;
+          openTables.length > 0 ? openTables[openTables.length - 1].key : null;
+      }
+      // Remove query result data from cache if this is a result tab
+      if (tableKey && tableKey.startsWith("Results (")) {
+        if (state.tableCache instanceof Map && state.tableCache.has(tableKey)) {
+          state.tableCache.delete(tableKey);
+        } else if (
+          typeof state.tableCache === "object" &&
+          state.tableCache[tableKey]
+        ) {
+          delete state.tableCache[tableKey];
+        }
       }
       if (typeof window.updateState === "function") {
         window.updateState({
           openTables,
           activeTable: newActive,
           selectedTable: newActive,
+          tableCache: state.tableCache,
         });
       }
       if (newActive) {
@@ -285,46 +307,84 @@ if (
     /**
      * Switch to an already open table tab
      */
-    function switchTableTab(tableName) {
+    function switchTableTab(tableKey) {
       if (typeof window.updateState === "function") {
         window.updateState({
-          activeTable: tableName,
-          selectedTable: tableName,
+          activeTable: tableKey,
+          selectedTable: tableKey,
         });
       }
-      selectTableInternal(tableName);
+      selectTableInternal(tableKey);
     }
 
     /**
      * Internal: select table and load data (does not update tab state)
      */
-    function selectTableInternal(tableName, page = 1, pageSize = 100) {
-      console.log("[selectTableInternal] called with:", tableName, {
+    function selectTableInternal(tableKey, page = 1, pageSize = 100) {
+      console.log("[selectTableInternal] called with:", tableKey, {
         page,
         pageSize,
       });
-      console.log(`Selecting table: ${tableName}`);
+      console.log(`Selecting table: ${tableKey}`);
 
       // Update minimized sidebar with selected table
       if (window.updateSelectedTableSafe) {
-        window.updateSelectedTableSafe(tableName);
+        window.updateSelectedTableSafe(tableKey);
       } else if (window.resizableSidebar) {
-        window.resizableSidebar.updateSelectedTable(tableName);
+        window.resizableSidebar.updateSelectedTable(tableKey);
       }
 
       // Highlight selected table
       const tableElements = document.querySelectorAll(".table-item");
       tableElements.forEach((el) => {
         el.classList.remove("selected");
-        if (el.textContent && el.textContent.includes(tableName)) {
+        if (el.textContent && el.textContent.includes(tableKey)) {
           el.classList.add("selected");
         }
       });
 
-      // Request table schema and data
-      requestTableSchema(tableName);
-      requestTableData(tableName, page, pageSize);
+      // If this is a query result tab, render from cache
+      if (tableKey && tableKey.startsWith("Results (")) {
+        if (typeof window.getCurrentState === "function") {
+          const state = window.getCurrentState();
+          let result = null;
+          if (
+            state.tableCache instanceof Map &&
+            state.tableCache.has(tableKey)
+          ) {
+            result = state.tableCache.get(tableKey);
+          } else if (
+            typeof state.tableCache === "object" &&
+            state.tableCache[tableKey]
+          ) {
+            result = state.tableCache[tableKey];
+          }
+          if (result && result.data && result.columns) {
+            // Use createDataTable if available
+            const createDataTableFn =
+              typeof window.createDataTable === "function"
+                ? window.createDataTable
+                : null;
+            const dataContent = document.getElementById("data-content");
+            if (dataContent) {
+              const tableHtml =
+                result.data.length > 0 && createDataTableFn
+                  ? createDataTableFn(
+                      result.data,
+                      result.columns,
+                      "query-result"
+                    )
+                  : `<div class=\"no-results\"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
+              dataContent.innerHTML = `<div class=\"table-container\">${tableHtml}</div>`;
+            }
+            return;
+          }
+        }
+      }
 
+      // Otherwise, request table schema and data from backend
+      requestTableSchema(tableKey);
+      requestTableData(tableKey, page, pageSize);
       // Do not switch main tab; stay on the user's current tab
     }
 
@@ -340,19 +400,27 @@ if (
             ? window.getCurrentState()
             : {};
         let openTables = Array.isArray(state.openTables)
-          ? [...state.openTables]
+          ? state.openTables.map((t) => ({ ...t }))
           : [];
-        if (!openTables.includes(tableName)) {
-          openTables.push(tableName);
+        let tabObj = openTables.find((t) => t.key === tableName);
+        if (!tabObj) {
+          let label = tableName;
+          let isResultTab = false;
+          if (/^results \(\d{4}-\d{2}-\d{2}/i.test(tableName)) {
+            label = tableName;
+            isResultTab = true;
+          }
+          tabObj = { key: tableName, label, isResultTab };
+          openTables.push(tabObj);
         }
         if (typeof window.updateState === "function") {
           window.updateState({
             openTables,
-            activeTable: tableName,
-            selectedTable: tableName,
+            activeTable: tabObj.key,
+            selectedTable: tabObj.key,
           });
         }
-        selectTableInternal(tableName, page, pageSize);
+        selectTableInternal(tabObj.key, page, pageSize);
       }
     }
 
@@ -412,51 +480,7 @@ if (
      */
     function displayQueryResult(result) {
       let html = "";
-      if (result.error) {
-        html = `
-          <div class="error-message">
-            <h3>Query Error</h3>
-            <p>${result.error}</p>
-          </div>
-        `;
-        window.showResultsModal(html);
-        return;
-      }
-      if (!result.data || result.data.length === 0) {
-        html = `
-          <div class="no-results">
-            <h3>No Results</h3>
-            <p>Query executed successfully but returned no data.</p>
-          </div>
-        `;
-        window.showResultsModal(html);
-        return;
-      }
-      const columns = result.columns || Object.keys(result.data[0] || {});
-      let table = "";
-      if (typeof createDataTable === "function") {
-        table = createDataTable(result.data, columns, "query-result");
-      } else {
-        table = createBasicTable(result.data, columns);
-      }
-      html = `
-        <div class="query-result-info">
-          <div class="result-stats">
-            <div class="stat-item">
-              <div class="stat-label">Rows</div>
-              <div class="stat-value">${result.data.length}</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">Columns</div>
-              <div class="stat-value">${columns.length}</div>
-            </div>
-          </div>
-        </div>
-        <div class="table-container">
-          ${table}
-        </div>
-      `;
-      window.showResultsModal(html);
+      // Modal logic removed: query results are now shown as tabs in the data area.
     }
 
     /**

@@ -1,3 +1,22 @@
+/* Style for inline rename input in table tabs */
+.tab-rename-input {
+  font-size: 14px;
+  padding: 3px 8px;
+  border: 1.5px solid var(--vscode-input-border, #007acc);
+  border-radius: 5px;
+  outline: none;
+  background: var(--vscode-input-background, #fff);
+  color: var(--vscode-input-foreground, #222);
+  margin-right: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 100px;
+  /* Remove max-width so input can expand */
+}
+.tab-rename-input:focus {
+  border-color: var(--vscode-focusBorder, #1e90ff);
+  background: var(--vscode-input-background, #fff);
+}
 /* Ensure table picker dropdown appears above table data */
 #table-picker-dropdown {
   z-index: 1000;
@@ -56,9 +75,7 @@
 .table-tab .tab-label {
   margin-right: 8px;
   white-space: nowrap;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Remove max-width and overflow so input is not clipped */
 }
 .table-tab .close-tab-btn {
   background: none;

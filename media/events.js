@@ -407,26 +407,8 @@ function handleDatabaseInfo(message) {
  */
 function handleQueryResult(message) {
   if (message.success) {
-    // Replace displayQueryResults to use modal
-    function displayQueryResults(data, columns) {
-      let html = "";
-      if (!data || data.length === 0) {
-        html = `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
-        window.showResultsModal(html);
-        return;
-      }
-      let table = "";
-      if (typeof createDataTable === "function") {
-        table = createDataTable(data, columns, "query-result");
-      } else {
-        table = "<div>Table rendering unavailable</div>";
-      }
-      html = `<div class="table-container">${table}</div>`;
-      window.showResultsModal(html);
-    }
-
+    // Show query results as a new Results tab in the data area
     displayQueryResults(message.data, message.columns);
-
     const rowCount = message.data.length;
     const rowText = rowCount === 1 ? "row" : "rows";
     if (typeof showSuccess !== "undefined") {
@@ -647,7 +629,8 @@ function displayTablesList(tables) {
     return;
   }
 
-  elements.tablesListElement.innerHTML = tables
+  // Render normal tables
+  let html = tables
     .map(
       (table) => `
         <div class="table-item" data-table="${table.name}">
@@ -657,14 +640,56 @@ function displayTablesList(tables) {
     )
     .join("");
 
+  // Render query result tabs under a separator
+  if (typeof window.getCurrentState === "function") {
+    const state = window.getCurrentState();
+    const resultTabs = Array.isArray(state.openTables)
+      ? state.openTables.filter((t) => t.isResultTab)
+      : [];
+    if (resultTabs.length > 0) {
+      html += '<div class="sidebar-separator">Query Results</div>';
+      const selectedTable = state.selectedTable;
+      html += resultTabs
+        .map((tab) => {
+          const isSelected = tab.key === selectedTable;
+          return `
+              <div class="table-item result-tab-item${
+                isSelected ? " selected" : ""
+              }" data-table="${tab.key}">
+                <span class="table-name">${tab.label || tab.key}</span>
+                <span class="tab-icon" title="Query Result">🧮</span>
+              </div>
+            `;
+        })
+        .join("");
+    }
+  }
+  elements.tablesListElement.innerHTML = html;
+
   console.log("Tables HTML generated, adding event listeners...");
 
-  // Add click handlers for table items
+  // Add click handlers for table items (normal tables and result tabs)
   elements.tablesListElement.querySelectorAll(".table-item").forEach((item) => {
     item.addEventListener("click", (e) => {
       const tableName = item.dataset.table;
       if (tableName && typeof window.selectTable === "function") {
         window.selectTable(tableName);
+        // If this is a result tab, also switch to the Data tab
+        if (item.classList.contains("result-tab-item")) {
+          const dataTab = document.querySelector('[data-tab="data"]');
+          if (dataTab && !dataTab.classList.contains("active")) {
+            // Cast to HTMLElement for click support
+            var dataTabEl = dataTab instanceof HTMLElement ? dataTab : null;
+            if (dataTabEl) {
+              dataTabEl.click();
+            } else {
+              // fallback for non-HTMLElement
+              var evt = document.createEvent("MouseEvents");
+              evt.initEvent("click", true, true);
+              dataTab.dispatchEvent(evt);
+            }
+          }
+        }
       }
     });
   });
@@ -701,20 +726,63 @@ function displayTablesList(tables) {
  */
 // Replace displayQueryResults to use modal
 function displayQueryResults(data, columns) {
-  let html = "";
-  if (!data || data.length === 0) {
-    html = `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
-    window.showResultsModal(html);
-    return;
+  // Generate a unique tab key: Results (DATE TIME)
+  const now = new Date();
+  const pad = (n) => n.toString().padStart(2, "0");
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
+    now.getDate()
+  )} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  let tabKey = `Results (${dateStr})`;
+  let tabLabel = tabKey;
+  // Store the result data in state.tableCache under the tab key
+  if (
+    typeof window["getCurrentState"] === "function" &&
+    typeof window["updateState"] === "function"
+  ) {
+    const state = window["getCurrentState"]();
+    // Use window.createDataTable if available
+    const createDataTableFn =
+      typeof window["createDataTable"] === "function"
+        ? window["createDataTable"]
+        : null;
+    if (state && state.tableCache instanceof Map) {
+      state.tableCache.set(tabKey, { data, columns, isQueryResult: true });
+    } else if (state && typeof state.tableCache === "object") {
+      state.tableCache[tabKey] = { data, columns, isQueryResult: true };
+    }
+    let openTables = Array.isArray(state.openTables)
+      ? state.openTables.map((t) => ({ ...t }))
+      : [];
+    // Only add if not already present
+    if (!openTables.find((t) => t.key === tabKey)) {
+      openTables.push({ key: tabKey, label: tabLabel, isResultTab: true });
+    }
+    window["updateState"]({
+      openTables,
+      activeTable: tabKey,
+      selectedTable: tabKey,
+      tableCache: state.tableCache,
+    });
+    if (typeof window["renderTableTabs"] === "function") {
+      window["renderTableTabs"](openTables, tabKey);
+    }
+    // Switch to the Data tab if not already active
+    const dataTab = document.querySelector('[data-tab="data"]');
+    if (dataTab && !dataTab.classList.contains("active")) {
+      dataTab.click();
+    }
+    // Render the data in the data-content area
+    if (createDataTableFn) {
+      const tableHtml =
+        data && data.length > 0
+          ? createDataTableFn(data, columns, "query-result")
+          : `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
+      const dataContent = document.getElementById("data-content");
+      if (dataContent) {
+        dataContent.innerHTML = `<div class="table-container">${tableHtml}</div>`;
+      }
+    }
   }
-  let table = "";
-  if (typeof createDataTable === "function") {
-    table = createDataTable(data, columns, "query-result");
-  } else {
-    table = "<div>Table rendering unavailable</div>";
-  }
-  html = `<div class="table-container">${table}</div>`;
-  window.showResultsModal(html);
 }
 
 /**
@@ -1082,6 +1150,29 @@ function startCellEditing(cell) {
     setTimeout(() => {
       /** @type {HTMLInputElement} */ (input).focus();
       /** @type {HTMLInputElement} */ (input).select();
+      if (
+        Array.isArray(tables) &&
+        tables.length > 0 &&
+        typeof window.getCurrentState === "function" &&
+        typeof window.updateState === "function"
+      ) {
+        const state = window.getCurrentState();
+        let openTables = Array.isArray(state.openTables)
+          ? state.openTables
+          : [];
+        if (openTables.length === 0) {
+          // Map to {key, label} objects
+          const tableObjs = tables.map((t) => {
+            const name = typeof t === "string" ? t : t.name;
+            return { key: name, label: name };
+          });
+          window.updateState({
+            openTables: [tableObjs[0]],
+            activeTable: tableObjs[0].key,
+            selectedTable: tableObjs[0].key,
+          });
+        }
+      }
     }, 10);
   } else {
     console.error("Cell input not found!", cell);

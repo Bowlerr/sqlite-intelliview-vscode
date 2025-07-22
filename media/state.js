@@ -9,8 +9,8 @@ let currentState = {
   databasePath: "",
   encryptionKey: "",
   // Multi-table tabs state
-  openTables: [], // Array of open table names
-  activeTable: null, // Currently active table in tabs
+  openTables: [], // Array of {key, label} objects
+  activeTable: null, // Currently active table in tabs (key)
   // Legacy single-table selection (for backward compatibility)
   selectedTable: null,
   activeTab: "schema",
@@ -72,7 +72,7 @@ function resetState() {
   currentState = {
     databasePath: "",
     encryptionKey: "",
-    openTables: [],
+    openTables: [], // Array of {key, label}
     activeTable: null,
     selectedTable: null,
     activeTab: "schema",
