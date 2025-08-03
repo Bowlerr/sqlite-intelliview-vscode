@@ -309,6 +309,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <!-- Load D3.js for enhanced diagrams -->
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'd3.min.js'))}"></script>
                 
+                <!-- Load SortableJS for drag-and-drop functionality -->
+                <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+                
                 <!-- Load Monaco Editor -->
                 <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
                 

@@ -223,6 +223,16 @@ if (
           initializeContextMenu();
         }
 
+        // Initialize SortableJS for table tabs
+        if (typeof window.initializeSortableJS === "function") {
+          console.log("Initializing SortableJS for table tabs...");
+          // Delay initialization to ensure DOM is ready
+          setTimeout(() => {
+            console.log("Delayed SortableJS initialization");
+            window.initializeSortableJS();
+          }, 500);
+        }
+
         // Show connection section initially - will be hidden after successful connection
         if (typeof showConnectionSection !== "undefined") {
           showConnectionSection();

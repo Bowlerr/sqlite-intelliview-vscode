@@ -1,13 +1,18 @@
 // @ts-check
 /**
  * Table Tabs UI for multi-table support in Data tab
- * Handles rendering, switching, adding, and closing table tabs
+ * Handles rendering, switching, adding, closing, and reordering table tabs
+ * Includes SortableJS integration for drag-and-drop functionality
  */
 
 // Track which tab is being renamed and its value
 let renamingTabKey = null;
 let renamingValue = "";
 let currentRenameValue = null;
+
+// SortableJS instance and state
+let sortableInstance = null;
+let sortableJS = null; // Will hold the SortableJS class once loaded
 
 /**
  * Render the table tabs bar above the data table area
@@ -373,6 +378,146 @@ function renderTableTabs(openTables, activeTableKey) {
       }
     }
   });
+
+  // Initialize SortableJS for drag-and-drop functionality
+  // Only initialize if not already done to prevent conflicts during re-renders
+  if (!sortableInstance) {
+    console.log("Table tabs: Initializing SortableJS for first time");
+    initializeSortableJS();
+  } else {
+    console.log("Table tabs: SortableJS already initialized, skipping");
+  }
+}
+
+/**
+ * SortableJS Integration Functions
+ */
+
+/**
+ * Initialize SortableJS for drag-and-drop functionality
+ */
+function initializeSortableJS() {
+  const tabsBar = document.getElementById("table-tabs-bar");
+  if (!tabsBar) {
+    console.log("SortableJS: No tabs bar found, skipping initialization");
+    return; // Exit if no tabs bar
+  }
+
+  if (sortableInstance) {
+    console.log("SortableJS: Instance already exists, destroying first");
+    sortableInstance.destroy();
+    sortableInstance = null;
+  }
+
+  // Wait for SortableJS to be available globally
+  if (typeof window.Sortable === "undefined") {
+    console.log("SortableJS: Library not loaded yet, retrying in 100ms");
+    // SortableJS not yet loaded, try again later
+    setTimeout(initializeSortableJS, 100);
+    return;
+  }
+
+  console.log("SortableJS: Initializing new instance");
+  sortableJS = window.Sortable;
+
+  sortableInstance = sortableJS.create(tabsBar, {
+    // Core configuration - keep it simple!
+    animation: 150,
+    easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+
+    // Visual feedback classes
+    ghostClass: "sortable-ghost",
+    chosenClass: "sortable-chosen",
+    dragClass: "sortable-drag",
+
+    // Drag constraints
+    draggable: ".table-tab:not(.add-tab)",
+    filter: ".close-tab-btn, .tick-tab-btn, .tab-rename-input",
+
+    // Simple event handling
+    onStart: function (evt) {
+      console.log("SortableJS: Drag started from index", evt.oldIndex);
+      // Just add visual feedback - no complex state tracking needed
+      tabsBar.classList.add("sortable-drag-active");
+    },
+
+    onEnd: function (evt) {
+      console.log("SortableJS: Drag ended", evt.oldIndex, "->", evt.newIndex);
+
+      // Remove visual feedback
+      tabsBar.classList.remove("sortable-drag-active");
+
+      // Only update state if position actually changed
+      if (evt.oldIndex !== evt.newIndex) {
+        console.log("SortableJS: Reordering tabs");
+        reorderTabsWrapper(evt.oldIndex, evt.newIndex);
+      } else {
+        console.log("SortableJS: No position change, skipping reorder");
+      }
+    },
+
+    onMove: function (evt) {
+      // Only prevent dropping on add-tab button
+      // Let SortableJS handle everything else naturally!
+      if (evt.related.classList.contains("add-tab")) {
+        console.log("SortableJS: Preventing drop on add-tab button");
+        return false;
+      }
+
+      // Allow all other moves - trust SortableJS's UX patterns
+      return true;
+    },
+  });
+}
+
+/**
+ * Destroy the current SortableJS instance
+ */
+function destroySortableJS() {
+  if (sortableInstance) {
+    sortableInstance.destroy();
+    sortableInstance = null;
+  }
+}
+
+/**
+ * Refresh the SortableJS instance with new configuration
+ */
+function refreshSortableInstance() {
+  console.log("SortableJS: Refreshing instance");
+  destroySortableJS();
+  // Small delay to ensure DOM is settled
+  setTimeout(initializeSortableJS, 10);
+}
+
+/**
+ * Force reinitialize SortableJS after DOM changes
+ */
+function forceSortableReinit() {
+  console.log("SortableJS: Force reinitializing");
+  destroySortableJS();
+  initializeSortableJS();
+}
+
+/**
+ * Update SortableJS options
+ * @param {object} options - Options to update
+ */
+function updateSortableOptions(options) {
+  if (sortableInstance && typeof sortableInstance.option === "function") {
+    Object.keys(options).forEach((key) => {
+      sortableInstance.option(key, options[key]);
+    });
+  }
+}
+
+/**
+ * Wrapper functions to safely call state management functions
+ */
+function reorderTabsWrapper(fromIndex, toIndex) {
+  if (typeof window.reorderTabs === "function") {
+    window.reorderTabs(fromIndex, toIndex);
+  }
 }
 
 /**
@@ -389,6 +534,12 @@ function escapeHtml(text) {
 // Export globally for main.js
 if (typeof window !== "undefined") {
   window.renderTableTabs = renderTableTabs;
+  // SortableJS integration exports
+  window.initializeSortableJS = initializeSortableJS;
+  window.destroySortableJS = destroySortableJS;
+  window.refreshSortableInstance = refreshSortableInstance;
+  window.forceSortableReinit = forceSortableReinit;
+  window.updateSortableOptions = updateSortableOptions;
 }
 
 // Helper: get all table names from state (for table picker)

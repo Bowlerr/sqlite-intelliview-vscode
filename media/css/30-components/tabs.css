@@ -147,6 +147,137 @@
   background: var(--vscode-button-hoverBackground, #005fa3);
   color: var(--vscode-button-foreground, #fff);
 }
+
+/* ===== SORTABLEJS INTEGRATION STYLES ===== */
+/* Simplified approach: Trust SortableJS's proven UX patterns */
+
+/* SortableJS Visual States */
+.table-tab.sortable-chosen {
+  transform: scale(1.02);
+  z-index: 1000;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  background: var(--vscode-tab-hoverBackground);
+}
+
+.table-tab.sortable-ghost {
+  opacity: 0.3;
+  background: var(--vscode-list-dropBackground, rgba(0, 122, 255, 0.1));
+  border: 2px dashed var(--vscode-focusBorder, #007acc);
+  color: transparent;
+  position: relative;
+}
+
+.table-tab.sortable-ghost {
+  opacity: 0.3;
+  background: var(--vscode-list-dropBackground, rgba(0, 122, 255, 0.1));
+  border: 2px dashed var(--vscode-focusBorder, #007acc);
+  color: transparent;
+  position: relative;
+  transform: scale(0.95);
+}
+
+/* Clear insertion indicator for logical positioning */
+.table-tab.sortable-ghost::before {
+  content: "⬇";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--vscode-focusBorder, #007acc);
+  font-size: 14px;
+  font-weight: bold;
+  opacity: 1;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.table-tab.sortable-drag {
+  opacity: 0.8;
+  transform: rotate(3deg);
+  z-index: 999;
+  transition: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Enhanced Transitions for SortableJS */
+.table-tab {
+  transition: transform 0.2s ease, background 0.15s ease, color 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.table-tab:not(.sortable-chosen):not(.sortable-ghost):not(.sortable-drag) {
+  transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Improved Hover Effects */
+.table-tab:hover:not(.sortable-chosen):not(.sortable-ghost) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Drag Handle Cursor */
+.table-tab {
+  cursor: grab;
+}
+
+.table-tab:active {
+  cursor: grabbing;
+}
+
+.table-tab.sortable-chosen {
+  cursor: grabbing;
+}
+
+/* Prevent text selection during drag */
+.table-tabs-bar.sortable-drag-active {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Preserve existing tab functionality during drag */
+.table-tab.sortable-chosen .close-tab-btn,
+.table-tab.sortable-ghost .close-tab-btn,
+.table-tab.sortable-drag .close-tab-btn {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.table-tab.sortable-chosen .tab-rename-input,
+.table-tab.sortable-ghost .tab-rename-input,
+.table-tab.sortable-drag .tab-rename-input {
+  pointer-events: none;
+}
+
+/* Ensure add-tab button is not draggable */
+.table-tab.add-tab {
+  cursor: pointer !important;
+}
+
+.table-tab.add-tab:active {
+  cursor: pointer !important;
+}
+
 /* ===== TABS ===== */
 .tabs {
   display: flex;
