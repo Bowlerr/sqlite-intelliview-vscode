@@ -714,6 +714,83 @@ function displayTablesList(tables) {
 }
 
 /**
+ * Detect foreign keys in query result columns by matching with known table schemas
+ * @param {string[]} columns - Column names from query result
+ * @param {Object} state - Current application state with table cache and schemas
+ * @returns {Array} Array of foreign key information for detected columns
+ */
+function detectQueryResultForeignKeys(columns, state) {
+  const foreignKeys = [];
+  
+  if (!columns || !Array.isArray(columns) || !state || !state.tableCache) {
+    return foreignKeys;
+  }
+
+  // Get all tables from the cache
+  const tableCache = state.tableCache instanceof Map ? state.tableCache : new Map(Object.entries(state.tableCache || {}));
+  
+  // Track already found foreign keys to avoid duplicates
+  const foundForeignKeys = new Set();
+  
+  // For each query result column, check if it matches a foreign key column in any table
+  columns.forEach((columnName, columnIndex) => {
+    if (!columnName || typeof columnName !== 'string') {
+      return;
+    }
+
+    // Try different column name variations (original, without table prefix, etc.)
+    const columnVariations = [
+      columnName.trim(),
+      columnName.split('.').pop()?.trim(), // Remove table prefix if present (e.g., "users.id" -> "id")
+      columnName.toLowerCase().trim(),
+      columnName.split('.').pop()?.toLowerCase().trim()
+    ].filter(Boolean).filter(v => v && v.length > 0);
+
+    // Check each table in the cache for matching foreign key columns
+    for (const [tableName, tableData] of tableCache) {
+      if (!tableData || typeof tableData !== 'object' || tableName === 'schema' || tableData.isQueryResult) {
+        continue;
+      }
+
+      // Get foreign key information for this table if available
+      const tableForeignKeys = Array.isArray(tableData.foreignKeys) ? tableData.foreignKeys : [];
+      
+      for (const fk of tableForeignKeys) {
+        if (!fk || !fk.column || !fk.referencedTable || !fk.referencedColumn) {
+          continue;
+        }
+
+        // Check if any column variation matches this foreign key column
+        for (const variation of columnVariations) {
+          const fkColumnVariations = [
+            fk.column,
+            fk.column.toLowerCase()
+          ].filter(Boolean);
+
+          if (fkColumnVariations.includes(variation)) {
+            // Create a unique key to avoid duplicates
+            const fkKey = `${columnName}:${fk.referencedTable}:${fk.referencedColumn}`;
+            
+            if (!foundForeignKeys.has(fkKey)) {
+              foundForeignKeys.add(fkKey);
+              foreignKeys.push({
+                column: columnName, // Use original column name from query result
+                referencedTable: fk.referencedTable,
+                referencedColumn: fk.referencedColumn,
+                sourceTable: tableName // Track which table this FK came from
+              });
+            }
+            break; // Found a match, no need to check other variations
+          }
+        }
+      }
+    }
+  });
+
+  return foreignKeys;
+}
+
+/**
  * Display query results
  * @param {Array} data - Query result data
  * @param {Array} columns - Column names
@@ -741,12 +818,16 @@ function displayQueryResults(data, columns, query = null) {
         ? window["createDataTable"]
         : null;
 
-    // Store the result data WITH the original query
+    // Try to detect foreign keys in query result columns
+    const detectedForeignKeys = detectQueryResultForeignKeys(columns, state);
+
+    // Store the result data WITH the original query and detected foreign keys
     const cacheData = {
       data,
       columns,
       isQueryResult: true,
       query: query, // Store the original query
+      foreignKeys: detectedForeignKeys, // Store detected foreign keys for tab restoration
     };
 
     if (state && state.tableCache instanceof Map) {
@@ -790,11 +871,25 @@ function displayQueryResults(data, columns, query = null) {
     if (createDataTableFn) {
       const tableHtml =
         data && data.length > 0
-          ? createDataTableFn(data, columns, "query-result")
+          ? createDataTableFn(data, columns, tabKey, {
+              isQueryResult: true,
+              query: query,
+              currentPage: 1,
+              totalRows: data.length,
+              pageSize: Math.min(data.length, 100),
+              foreignKeys: detectedForeignKeys,
+              allowEditing: false // Query results are typically read-only for data integrity
+            })
           : `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
       const dataContent = document.getElementById("data-content");
       if (dataContent) {
         dataContent.innerHTML = `<div class="table-container">${tableHtml}</div>`;
+        
+        // Initialize table interactive features
+        const tableWrapper = dataContent.querySelector('.table-container');
+        if (tableWrapper && typeof initializeTableEvents === "function") {
+          initializeTableEvents(tableWrapper);
+        }
       }
     }
   }
@@ -900,6 +995,30 @@ function displayTableData(data, columns, tableName, options = {}) {
 
   if (!elements.dataContent) {
     return;
+  }
+
+  // Cache table data including foreign keys for later FK detection
+  if (tableName && typeof window["getCurrentState"] === "function" && typeof window["updateState"] === "function") {
+    const state = window["getCurrentState"]();
+    if (state && state.tableCache) {
+      const cacheData = {
+        data,
+        columns,
+        tableName,
+        foreignKeys: options.foreignKeys || [],
+        isQueryResult: false,
+        ...options
+      };
+
+      if (state.tableCache instanceof Map) {
+        state.tableCache.set(tableName, cacheData);
+      } else if (typeof state.tableCache === "object") {
+        state.tableCache[tableName] = cacheData;
+      }
+      
+      // Update state to persist the cache
+      window["updateState"]({ tableCache: state.tableCache });
+    }
   }
 
   if (!data || data.length === 0) {

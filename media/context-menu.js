@@ -100,13 +100,13 @@ function handleContextMenu(e) {
     return;
   }
 
-  // Don't show context menu on schema or query result tables (read-only)
+  // Don't show context menu on schema tables (read-only), but allow for query results
   const table = cell.closest(".data-table");
   const tableWrapper = table?.closest(".enhanced-table-wrapper");
   const tableId = table?.id;
 
-  if (tableId && (tableId.includes("schema") || tableId.includes("query"))) {
-    // Allow default context menu for read-only tables
+  if (tableId && tableId.includes("schema")) {
+    // Allow default context menu for schema tables only
     return;
   }
 
@@ -138,6 +138,21 @@ function showContextMenu(x, y) {
   // Check if current cell is a foreign key cell
   const isForeignKeyCell =
     currentCell && currentCell.classList.contains("fk-cell");
+
+  // Check if current table is a query result (read-only)
+  const table = currentCell?.closest(".data-table");
+  const tableId = table?.id;
+  const isQueryResultTable = tableId && tableId.includes("query");
+
+  // Show/hide delete-row option for read-only tables
+  const deleteMenuItem = contextMenu.querySelector('[data-action="delete-row"]');
+  if (deleteMenuItem) {
+    if (isQueryResultTable) {
+      deleteMenuItem.style.display = "none";
+    } else {
+      deleteMenuItem.style.display = "block";
+    }
+  }
 
   // Show/hide foreign key navigation option
   const fkMenuItem = contextMenu.querySelector(

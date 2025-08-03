@@ -25,6 +25,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     pageSize = PAGINATION_CONFIG.defaultPageSize,
     totalRows = data.length,
     foreignKeys = [], // Add foreign keys to options
+    isQueryResult = false, // Whether this is a query result
+    query = null, // Original SQL query for result tabs
+    allowEditing = null, // Override editing permission
   } = options;
 
   // Create foreign key lookup map
@@ -56,10 +59,13 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   const totalPages = Math.ceil(totalRows / pageSize);
 
   // Check if this is a schema table (not editable)
-  const isSchemaTable =
-    tableName === "schema" ||
-    tableName === "query-result" ||
-    tableName === "query";
+  // Note: Query results should have most table features enabled
+  const isSchemaTable = tableName === "schema";
+  
+  // Determine if editing should be allowed
+  const isEditable = allowEditing !== null 
+    ? allowEditing 
+    : !isSchemaTable && !isQueryResult; // Query results default to read-only for data integrity
 
   // When we have totalRows from backend, data is already paginated
   // When we don't have totalRows, we need to paginate the data locally
@@ -101,8 +107,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         </div>
         <div class="table-actions">
           ${
-            !isSchemaTable
+            isEditable
               ? `<span class="table-editable-indicator" title="Double-click cells to edit">✏️ Editable</span>`
+              : isQueryResult
+              ? `<span class="table-readonly-indicator" title="Query results are read-only">🧮 Query Result</span>`
               : `<span class="table-readonly-indicator" title="Schema data is read-only">🔒 Read-only</span>`
           }
           <div class="page-size-selector">
@@ -184,6 +192,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
               startIndex,
               columns,
               isSchemaTable,
+              isEditable,
               foreignKeyMap,
               options
             )}
@@ -210,7 +219,8 @@ function createDataTable(data, columns, tableName = "", options = {}) {
  * @param {Array} data - Row data to render
  * @param {number} startIndex - Starting row index for global numbering
  * @param {Array} columns - Column names for data attributes
- * @param {boolean} isSchemaTable - Whether this is a schema table (not editable)
+ * @param {boolean} isSchemaTable - Whether this is a schema table 
+ * @param {boolean} isEditable - Whether cells should be editable
  * @returns {string} HTML string for table rows
  */
 function renderTableRows(
@@ -218,6 +228,7 @@ function renderTableRows(
   startIndex = 0,
   columns = [],
   isSchemaTable = false,
+  isEditable = true,
   foreignKeyMap = new Map(),
   options = {}
 ) {
@@ -272,15 +283,11 @@ function renderTableRows(
                 class="data-cell${fkClass}" 
                 role="gridcell"
                 tabindex="0"
-                ${!isSchemaTable ? `data-editable="true"` : ""}
-                ${!isSchemaTable ? `data-row-index="${globalIndex}"` : ""}
-                ${
-                  !isSchemaTable
-                    ? `data-column-name="${
-                        columns ? columns[cellIndex] : `col_${cellIndex}`
-                      }"`
-                    : ""
-                }
+                ${isEditable ? `data-editable="true"` : ""}
+                ${isEditable ? `data-row-index="${globalIndex}"` : ""}
+                data-column-name="${
+                  columns ? columns[cellIndex] : `col_${cellIndex}`
+                }"
                 ${
                   isForeignKey && fkTable && fkColumn
                     ? `data-fk-table="${fkTable}" data-fk-column="${fkColumn}"`
@@ -304,7 +311,7 @@ function renderTableRows(
                 }
               </div>
               ${
-                !isSchemaTable
+                isEditable
                   ? `<div class="cell-editing-controls" style="display: none;">
                 <input type="text" class="cell-input" />
                 <button class="cell-save-btn" title="Save changes">✓</button>

@@ -457,10 +457,25 @@ if (
                   ? createDataTableFn(
                       result.data,
                       result.columns,
-                      "query-result"
+                      tableKey,
+                      {
+                        isQueryResult: true,
+                        query: result.query,
+                        currentPage: 1,
+                        totalRows: result.data.length,
+                        pageSize: Math.min(result.data.length, 100),
+                        foreignKeys: result.foreignKeys || [],
+                        allowEditing: false
+                      }
                     )
                   : `<div class=\"no-results\"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
               dataContent.innerHTML = `<div class=\"table-container\">${tableHtml}</div>`;
+              
+              // Initialize table interactive features after restoring content
+              const tableWrapper = dataContent.querySelector('.table-container');
+              if (tableWrapper && typeof initializeTableEvents === "function") {
+                initializeTableEvents(tableWrapper);
+              }
             }
             return;
           }
