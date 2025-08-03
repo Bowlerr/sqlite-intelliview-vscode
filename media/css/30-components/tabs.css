@@ -45,7 +45,7 @@
   display: flex;
   flex-direction: row; /* Explicitly set horizontal direction */
   flex-wrap: nowrap; /* Prevent tabs from wrapping to a new line */
-  align-items: flex-end;
+  align-items: center; /* Center align all tabs on the same horizontal level */
   background: var(--vscode-tab-unfocusedInactiveBackground, #23272e);
   border-bottom: 2.5px solid var(--vscode-tab-activeBorder, #007acc);
   padding: 0 8px;
@@ -57,6 +57,38 @@
   z-index: 20;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   margin-bottom: 2px;
+
+  /* Add horizontal scrolling when tabs overflow */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar styling for table tabs */
+.table-tabs-bar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.table-tabs-bar::-webkit-scrollbar-track {
+  background: var(
+    --vscode-scrollbarSlider-background,
+    rgba(255, 255, 255, 0.1)
+  );
+}
+
+.table-tabs-bar::-webkit-scrollbar-thumb {
+  background: var(
+    --vscode-scrollbarSlider-hoverBackground,
+    rgba(255, 255, 255, 0.3)
+  );
+  border-radius: 2px;
+}
+
+.table-tabs-bar::-webkit-scrollbar-thumb:hover {
+  background: var(
+    --vscode-scrollbarSlider-activeBackground,
+    rgba(255, 255, 255, 0.5)
+  );
 }
 /* Prevent tabs from stretching to fill the row */
 /* Use inline-flex to prevent stacking due to whitespace or block context */
@@ -75,7 +107,9 @@
   cursor: pointer;
   transition: background 0.13s, color 0.13s, border 0.13s;
   position: relative;
-  flex: 0 0 auto;
+  flex: 0 0 auto; /* Prevent shrinking and stretching */
+  min-width: 0; /* Allow text to shrink */
+  white-space: nowrap; /* Prevent text wrapping */
 }
 .table-tab.active {
   background: var(--vscode-tab-activeBackground, #1e90ff);
@@ -92,7 +126,11 @@
 .table-tab .tab-label {
   margin-right: 8px;
   white-space: nowrap;
-  /* Remove max-width and overflow so input is not clipped */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Allow label to shrink if needed but prevent complete collapse */
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .table-tab .close-tab-btn {
   background: none;
@@ -118,7 +156,7 @@
   border: 1.5px solid var(--vscode-tab-activeBorder, #007acc);
   font-size: 14px;
   padding: 0 18px;
-  margin-left: 0;
+  margin-left: 0; /* No left margin since it's at the start */
   margin-right: 2px; /* match .table-tab */
   border-radius: 7px 7px 0 0;
   height: 34px;
@@ -127,7 +165,8 @@
   cursor: pointer;
   transition: background 0.13s, color 0.13s, border 0.13s;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  flex: 0 0 auto;
+  flex: 0 0 auto; /* Prevent shrinking */
+  order: -1; /* Ensure it appears first even if DOM order changes */
 }
 .table-tab.add-tab.disabled {
   opacity: 0.5;

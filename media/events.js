@@ -408,12 +408,13 @@ function handleDatabaseInfo(message) {
 function handleQueryResult(message) {
   if (message.success) {
     // Show query results as a new Results tab in the data area
-    displayQueryResults(message.data, message.columns);
+    // Pass the query to displayQueryResults if available
+    displayQueryResults(message.data, message.columns, message.query);
     const rowCount = message.data.length;
     const rowText = rowCount === 1 ? "row" : "rows";
     if (typeof showSuccess !== "undefined") {
       showSuccess(
-        `Query executed successfully. ${rowCount} ${rowText} returned.`
+        `Query executed successfully. ${rowCount} ${rowText} returned. Results are available in the Data tab.`
       );
     }
   } else {
@@ -431,55 +432,49 @@ function handleQueryResult(message) {
   });
   document.dispatchEvent(event);
 
-  // Additional direct focus restoration for Monaco editor
+  // Improved focus restoration for Monaco editor - since we're not switching tabs,
+  // the editor should remain interactive, but let's ensure it stays responsive
   setTimeout(() => {
     if (window.queryEditor && window.queryEditor.editor) {
       const editor = window.queryEditor.editor;
 
-      // Force the editor to regain focus and responsiveness
       try {
-        console.log("handleQueryResult: Restoring Monaco editor focus");
+        console.log("handleQueryResult: Ensuring Monaco editor responsiveness");
 
         // Check if editor is still responsive
         const model = editor.getModel();
         if (model) {
-          // Force layout recalculation
+          // Force layout recalculation to ensure proper sizing
           editor.layout();
 
-          // Ensure editor has focus
-          if (!editor.hasTextFocus()) {
-            editor.focus();
-          }
+          // Only focus if the query tab is currently active
+          const queryTab = document.querySelector('[data-tab="query"]');
+          const queryPanel = document.getElementById("query-panel");
 
-          // Make sure the editor's DOM is interactive
-          const editorDom = editor.getDomNode();
-          if (editorDom) {
-            const textarea = editorDom.querySelector("textarea");
-            if (textarea) {
-              // Briefly focus the internal textarea to ensure it's active
-              textarea.focus();
-              textarea.blur();
+          if (
+            queryTab &&
+            queryTab.classList.contains("active") &&
+            queryPanel &&
+            queryPanel.classList.contains("active")
+          ) {
+            // Restore focus to editor if needed
+            if (!editor.hasTextFocus()) {
               editor.focus();
             }
           }
         }
       } catch (error) {
         console.error(
-          "handleQueryResult: Error restoring editor focus:",
+          "handleQueryResult: Error ensuring editor responsiveness:",
           error
         );
-        // If restoration fails, trigger a refresh
+        // If there's an issue, try refreshing the editor
         if (window.queryEditor.refreshEditor) {
           window.queryEditor.refreshEditor();
         }
-        // Only call handleTableData if the query result has table-specific data
-        if (message.tableName && message.columnInfo) {
-          handleTableData(message);
-        }
-        return;
       }
     }
-  }, 100);
+  }, 50); // Reduced timeout since we're not switching tabs
 }
 
 /**
@@ -722,9 +717,10 @@ function displayTablesList(tables) {
  * Display query results
  * @param {Array} data - Query result data
  * @param {Array} columns - Column names
+ * @param {string|null} query - The SQL query that generated these results
  */
 // Replace displayQueryResults to use modal
-function displayQueryResults(data, columns) {
+function displayQueryResults(data, columns, query = null) {
   // Generate a unique tab key: Results (DATE TIME)
   const now = new Date();
   const pad = (n) => n.toString().padStart(2, "0");
@@ -744,17 +740,32 @@ function displayQueryResults(data, columns) {
       typeof window["createDataTable"] === "function"
         ? window["createDataTable"]
         : null;
+
+    // Store the result data WITH the original query
+    const cacheData = {
+      data,
+      columns,
+      isQueryResult: true,
+      query: query, // Store the original query
+    };
+
     if (state && state.tableCache instanceof Map) {
-      state.tableCache.set(tabKey, { data, columns, isQueryResult: true });
+      state.tableCache.set(tabKey, cacheData);
     } else if (state && typeof state.tableCache === "object") {
-      state.tableCache[tabKey] = { data, columns, isQueryResult: true };
+      state.tableCache[tabKey] = cacheData;
     }
     let openTables = Array.isArray(state.openTables)
       ? state.openTables.map((t) => ({ ...t }))
       : [];
     // Only add if not already present
     if (!openTables.find((t) => t.key === tabKey)) {
-      openTables.push({ key: tabKey, label: tabLabel, isResultTab: true });
+      // Also store the query in the tab object for easy access
+      openTables.push({
+        key: tabKey,
+        label: tabLabel,
+        isResultTab: true,
+        query: query, // Store query here too for convenience
+      });
     }
     window["updateState"]({
       openTables,
@@ -772,11 +783,9 @@ function displayQueryResults(data, columns) {
     ) {
       window["displayTablesList"](state.allTables);
     }
-    // Switch to the Data tab if not already active
-    const dataTab = document.querySelector('[data-tab="data"]');
-    if (dataTab && !dataTab.classList.contains("active")) {
-      dataTab.click();
-    }
+    // Don't automatically switch tabs - let the user stay in the query editor
+    // The results will be available in the data tab if they want to view them
+    // This keeps the Monaco editor interactive and responsive
     // Render the data in the data-content area
     if (createDataTableFn) {
       const tableHtml =

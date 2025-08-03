@@ -35,8 +35,31 @@ function renderTableTabs(openTables, activeTableKey) {
   const validTabs = Array.isArray(openTables)
     ? openTables.filter((tab) => tab && tab.key && tab.label)
     : [];
-  // Build tabs HTML
-  let html = validTabs
+
+  // Determine if there are more tables to open
+  let allTables = [];
+  if (typeof window.getAllTableNames === "function") {
+    allTables = window.getAllTableNames();
+    allTables = Array.isArray(allTables)
+      ? allTables
+          .map((t) => (typeof t === "string" ? t : t.name))
+          .filter(Boolean)
+      : [];
+  }
+  // Only consider non-result tabs for add
+  const openTableKeys = openTables.map((t) => t.key);
+  const available = allTables.filter((t) => !openTableKeys.includes(t));
+  const addTabDisabled = available.length === 0;
+
+  // Build "+" button first, then tabs - add button at the start
+  let html = `<div class="table-tab add-tab${
+    addTabDisabled ? " disabled" : ""
+  }" id="add-table-tab" title="Add table"${
+    addTabDisabled ? ' tabindex="-1" aria-disabled="true"' : ""
+  }>+</div>`;
+
+  // Add the regular tabs after the plus button
+  html += validTabs
     .map((tab) => {
       const { key, label, isResultTab } = tab;
       const isRenaming = renamingTabKey === key;
@@ -69,26 +92,7 @@ function renderTableTabs(openTables, activeTableKey) {
       `;
     })
     .join("");
-  // Determine if there are more tables to open
-  let allTables = [];
-  if (typeof window.getAllTableNames === "function") {
-    allTables = window.getAllTableNames();
-    allTables = Array.isArray(allTables)
-      ? allTables
-          .map((t) => (typeof t === "string" ? t : t.name))
-          .filter(Boolean)
-      : [];
-  }
-  // Only consider non-result tabs for add
-  const openTableKeys = openTables.map((t) => t.key);
-  const available = allTables.filter((t) => !openTableKeys.includes(t));
-  const addTabDisabled = available.length === 0;
-  // Add "+" button, disabled if no more tables
-  html += `<div class="table-tab add-tab${
-    addTabDisabled ? " disabled" : ""
-  }" id="add-table-tab" title="Add table"${
-    addTabDisabled ? ' tabindex="-1" aria-disabled="true"' : ""
-  }>+</div>`;
+
   // Add a hidden dropdown for table picker
   html += `<select id="table-picker-dropdown" style="display:none; position:absolute;"></select>`;
   tabsBar.innerHTML = html;
@@ -346,16 +350,13 @@ function renderTableTabs(openTables, activeTableKey) {
       labelHtmlEl.style.cursor = "context-menu";
       labelHtmlEl.title = "Right-click to rename";
 
-      // Add right-click event for rename
+      // Add right-click event for tab context menu
       labelEl.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // Only trigger rename if not already renaming this tab
-        if (renamingTabKey !== key) {
-          renamingTabKey = key;
-          renamingValue = label;
-          currentRenameValue = null; // Reset the current rename value
-          renderTableTabs(openTables, activeTableKey);
+        const mouseEvent = /** @type {MouseEvent} */ (e);
+        if (key && label) {
+          showTabContextMenu(mouseEvent, key, label);
         }
       });
 
@@ -367,12 +368,9 @@ function renderTableTabs(openTables, activeTableKey) {
         iconEl.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          // Only trigger rename if not already renaming this tab
-          if (renamingTabKey !== key) {
-            renamingTabKey = key;
-            renamingValue = label;
-            currentRenameValue = null; // Reset the current rename value
-            renderTableTabs(openTables, activeTableKey);
+          const mouseEvent = /** @type {MouseEvent} */ (e);
+          if (key && label) {
+            showTabContextMenu(mouseEvent, key, label);
           }
         });
       }
@@ -540,6 +538,28 @@ if (typeof window !== "undefined") {
   window.refreshSortableInstance = refreshSortableInstance;
   window.forceSortableReinit = forceSortableReinit;
   window.updateSortableOptions = updateSortableOptions;
+
+  // Initialize tab context menu when DOM is ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeTabContextMenu);
+  } else {
+    initializeTabContextMenu();
+  }
+}
+
+/**
+ * Initialize tab context menu functionality
+ */
+function initializeTabContextMenu() {
+  // Add global click listener to hide context menu
+  document.addEventListener("click", hideTabContextMenu);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      hideTabContextMenu();
+    }
+  });
+
+  console.log("Tab context menu initialized");
 }
 
 // Helper: get all table names from state (for table picker)
@@ -567,4 +587,252 @@ if (
     }
     return [];
   };
+}
+
+// Tab context menu functionality
+let tabContextMenu = null;
+let currentTabKey = null;
+let currentTabLabel = null;
+
+/**
+ * Create the tab context menu DOM element
+ */
+function createTabContextMenuElement() {
+  if (tabContextMenu) {
+    return;
+  }
+
+  tabContextMenu = document.createElement("div");
+  tabContextMenu.className = "context-menu tab-context-menu";
+  tabContextMenu.innerHTML = `
+    <div class="context-menu-item" data-action="edit-query">
+      <span class="icon">✏️</span>
+      <span>Edit Query</span>
+    </div>
+    <div class="context-menu-item" data-action="refresh-query">
+      <span class="icon">🔄</span>
+      <span>Refresh Query</span>
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="rename-tab">
+      <span class="icon">🏷️</span>
+      <span>Rename Tab</span>
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item context-menu-item-danger" data-action="close-tab">
+      <span class="icon">❌</span>
+      <span>Close Tab</span>
+    </div>
+  `;
+
+  // Add click handlers for menu items
+  tabContextMenu.addEventListener("click", handleTabContextMenuClick);
+
+  // Prevent context menu from closing when clicking inside it
+  tabContextMenu.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  document.body.appendChild(tabContextMenu);
+}
+
+/**
+ * Show the tab context menu
+ * @param {MouseEvent} e - Mouse event
+ * @param {string} tabKey - The key of the tab
+ * @param {string} tabLabel - The label of the tab
+ */
+function showTabContextMenu(e, tabKey, tabLabel) {
+  currentTabKey = tabKey;
+  currentTabLabel = tabLabel;
+
+  if (!tabContextMenu) {
+    createTabContextMenuElement();
+  }
+
+  // Position the context menu
+  const menuWidth = 200;
+  const menuHeight = 160;
+  let x = e.clientX;
+  let y = e.clientY;
+
+  // Adjust position if menu would go off screen
+  if (x + menuWidth > window.innerWidth) {
+    x = window.innerWidth - menuWidth - 10;
+  }
+  if (y + menuHeight > window.innerHeight) {
+    y = window.innerHeight - menuHeight - 10;
+  }
+
+  tabContextMenu.style.left = `${x}px`;
+  tabContextMenu.style.top = `${y}px`;
+  tabContextMenu.style.display = "block";
+
+  // Add global click listener to hide menu
+  setTimeout(() => {
+    document.addEventListener("click", hideTabContextMenu);
+    document.addEventListener("contextmenu", hideTabContextMenu);
+  }, 0);
+}
+
+/**
+ * Hide the tab context menu
+ */
+function hideTabContextMenu() {
+  if (tabContextMenu) {
+    tabContextMenu.style.display = "none";
+  }
+  currentTabKey = null;
+  currentTabLabel = null;
+
+  // Remove global listeners
+  document.removeEventListener("click", hideTabContextMenu);
+  document.removeEventListener("contextmenu", hideTabContextMenu);
+}
+
+/**
+ * Handle tab context menu clicks
+ * @param {Event} e - Click event
+ */
+function handleTabContextMenuClick(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const target = /** @type {HTMLElement} */ (e.target);
+  const menuItem = target.closest(".context-menu-item");
+  if (!menuItem) {
+    return;
+  }
+
+  const action = menuItem.getAttribute("data-action");
+  if (!action || !currentTabKey) {
+    return;
+  }
+
+  executeTabContextMenuAction(action, currentTabKey, currentTabLabel);
+  hideTabContextMenu();
+}
+
+/**
+ * Execute tab context menu actions
+ * @param {string} action - The action to execute
+ * @param {string} tabKey - The tab key
+ * @param {string} tabLabel - The tab label
+ */
+function executeTabContextMenuAction(action, tabKey, tabLabel) {
+  switch (action) {
+    case "edit-query":
+      // Switch to query editor and populate with the query for this tab
+      if (typeof (/** @type {any} */ (window).switchTab) === "function") {
+        /** @type {any} */ (window).switchTab("query");
+        // Get the query for this tab and populate the editor
+        if (
+          typeof (/** @type {any} */ (window).getCurrentState) === "function"
+        ) {
+          const state = /** @type {any} */ (window).getCurrentState();
+          const tabData =
+            state.openTables &&
+            state.openTables.find(
+              /** @param {any} t */ (t) => t.key === tabKey
+            );
+          let queryToEdit = null;
+
+          // First try to get query from the tab object
+          if (tabData && tabData.query) {
+            queryToEdit = tabData.query;
+          }
+          // If not found in tab, try to get it from the cache
+          else if (state.tableCache) {
+            let cachedData = null;
+            if (
+              state.tableCache instanceof Map &&
+              state.tableCache.has(tabKey)
+            ) {
+              cachedData = state.tableCache.get(tabKey);
+            } else if (
+              typeof state.tableCache === "object" &&
+              state.tableCache[tabKey]
+            ) {
+              cachedData = state.tableCache[tabKey];
+            }
+            if (cachedData && cachedData.query) {
+              queryToEdit = cachedData.query;
+            }
+          }
+
+          if (queryToEdit) {
+            // Set the query in the enhanced Monaco editor
+            if (
+              typeof (/** @type {any} */ (window).queryEditor) !==
+                "undefined" &&
+              /** @type {any} */ (window).queryEditor.setValue
+            ) {
+              /** @type {any} */ (window).queryEditor.setValue(queryToEdit);
+            }
+            // Fallback: try to set in regular query editor element
+            else {
+              const queryEditor = document.getElementById("query-editor");
+              if (queryEditor) {
+                const editorEl = /** @type {any} */ (queryEditor);
+                if (editorEl.setValue) {
+                  editorEl.setValue(queryToEdit);
+                } else if (editorEl.value !== undefined) {
+                  editorEl.value = queryToEdit;
+                }
+              }
+            }
+          } else {
+            console.warn("No query found for tab:", tabKey);
+          }
+        }
+      }
+      break;
+
+    case "refresh-query":
+      // Re-execute the query for this tab
+      if (typeof (/** @type {any} */ (window).getCurrentState) === "function") {
+        const state = /** @type {any} */ (window).getCurrentState();
+        const tabData =
+          state.openTables &&
+          state.openTables.find(/** @param {any} t */ (t) => t.key === tabKey);
+        if (tabData && tabData.query) {
+          // Execute the query again - send query directly, not nested in data
+          const vscode = /** @type {any} */ (window).vscode;
+          if (vscode) {
+            vscode.postMessage({
+              type: "executeQuery",
+              query: tabData.query,
+            });
+          }
+        } else {
+          console.warn("No query found for refresh on tab:", tabKey);
+        }
+      }
+      break;
+
+    case "rename-tab":
+      // Trigger rename mode for this tab
+      renamingTabKey = tabKey;
+      renamingValue = tabLabel;
+      currentRenameValue = null;
+      if (
+        typeof (/** @type {any} */ (window).getCurrentState) === "function" &&
+        typeof renderTableTabs === "function"
+      ) {
+        const state = /** @type {any} */ (window).getCurrentState();
+        renderTableTabs(state.openTables, state.activeTable);
+      }
+      break;
+
+    case "close-tab":
+      // Close this tab
+      if (typeof (/** @type {any} */ (window).closeTableTab) === "function") {
+        /** @type {any} */ (window).closeTableTab(tabKey);
+      }
+      break;
+
+    default:
+      console.warn("Unknown tab context menu action:", action);
+  }
 }
