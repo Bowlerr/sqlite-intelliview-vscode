@@ -85,6 +85,37 @@ if (
     if (message.type === "databaseInfo" && Array.isArray(message.tables)) {
       if (typeof window.updateState === "function") {
         window.updateState({ allTables: message.tables });
+        if (message.tables.length > 0) {
+          const firstTableName = message.tables[0];
+          const state =
+            typeof window.getCurrentState === "function"
+              ? window.getCurrentState()
+              : {};
+          const openTables = Array.isArray(state.openTables)
+            ? state.openTables
+            : [];
+          if (
+            !openTables.find((t) => t.key === firstTableName) &&
+            typeof window.openTableTab === "function"
+          ) {
+            window.openTableTab(firstTableName);
+          }
+          // Always refresh tabs and sidebar using allTables
+          if (typeof window.renderTableTabs === "function") {
+            window.renderTableTabs(
+              window.getCurrentState().openTables,
+              window.getCurrentState().activeTable ||
+                window.getCurrentState().selectedTable ||
+                ""
+            );
+          }
+          if (
+            typeof window.displayTablesList === "function" &&
+            Array.isArray(window.getCurrentState().allTables)
+          ) {
+            window.displayTablesList(window.getCurrentState().allTables);
+          }
+        }
       }
     }
 
@@ -235,26 +266,38 @@ if (
         ? state.openTables.map((t) => ({ ...t }))
         : [];
       // If already open, just activate
-      let tabObj = openTables.find((t) => t.key === tableName);
+      let key =
+        typeof tableName === "object" && tableName !== null && tableName.name
+          ? tableName.name
+          : tableName;
+      let tabObj = openTables.find((t) => t.key === key);
       if (!tabObj) {
-        // Use tableName as label for normal tables, or prettify for results
-        let label = tableName;
+        let label = key;
         let isResultTab = false;
-        if (/^results \(\d{4}-\d{2}-\d{2}/i.test(tableName)) {
-          label = tableName;
+        if (/^results \(\d{4}-\d{2}-\d{2}/i.test(label)) {
           isResultTab = true;
         }
-        tabObj = { key: tableName, label, isResultTab };
+        tabObj = { key, label, isResultTab };
         openTables.push(tabObj);
+        if (typeof window.updateState === "function") {
+          window.updateState({
+            openTables,
+            activeTable: tabObj.key,
+            selectedTable: tabObj.key,
+          });
+        }
+        selectTableInternal(tabObj.key, page, pageSize);
+      } else {
+        // If already open, just activate and select
+        if (typeof window.updateState === "function") {
+          window.updateState({
+            openTables,
+            activeTable: tabObj.key,
+            selectedTable: tabObj.key,
+          });
+        }
+        selectTableInternal(tabObj.key, page, pageSize);
       }
-      if (typeof window.updateState === "function") {
-        window.updateState({
-          openTables,
-          activeTable: tabObj.key,
-          selectedTable: tabObj.key,
-        });
-      }
-      selectTableInternal(tabObj.key, page, pageSize);
     }
 
     /**
@@ -293,6 +336,16 @@ if (
           tableCache: state.tableCache,
         });
       }
+      // Core trigger: re-render tabs and sidebar
+      if (typeof window.renderTableTabs === "function") {
+        window.renderTableTabs(openTables, newActive || "");
+      }
+      if (
+        typeof window.displayTablesList === "function" &&
+        Array.isArray(state.allTables)
+      ) {
+        window.displayTablesList(state.allTables);
+      }
       if (newActive) {
         selectTableInternal(newActive);
       } else {
@@ -314,6 +367,23 @@ if (
           selectedTable: tableKey,
         });
       }
+
+      // Core trigger: explicitly refresh tabs and sidebar after switching
+      if (typeof window.renderTableTabs === "function") {
+        const state =
+          typeof window.getCurrentState === "function"
+            ? window.getCurrentState()
+            : {};
+        window.renderTableTabs(state.openTables || [], tableKey);
+      }
+      if (typeof window.displayTablesList === "function") {
+        const state =
+          typeof window.getCurrentState === "function"
+            ? window.getCurrentState()
+            : {};
+        window.displayTablesList(state.allTables || []);
+      }
+
       selectTableInternal(tableKey);
     }
 
@@ -334,11 +404,16 @@ if (
         window.resizableSidebar.updateSelectedTable(tableKey);
       }
 
-      // Highlight selected table
+      // Highlight selected table - improved logic for both normal tables and result tabs
       const tableElements = document.querySelectorAll(".table-item");
       tableElements.forEach((el) => {
         el.classList.remove("selected");
-        if (el.textContent && el.textContent.includes(tableKey)) {
+        // Check both data-table attribute and textContent for exact matches
+        const dataTable = el.getAttribute("data-table");
+        if (
+          dataTable === tableKey ||
+          (el.textContent && el.textContent.trim() === tableKey)
+        ) {
           el.classList.add("selected");
         }
       });
@@ -419,6 +494,16 @@ if (
             activeTable: tabObj.key,
             selectedTable: tabObj.key,
           });
+        }
+        // Core trigger: re-render tabs and sidebar
+        if (typeof window.renderTableTabs === "function") {
+          window.renderTableTabs(openTables, tabObj.key);
+        }
+        if (
+          typeof window.displayTablesList === "function" &&
+          Array.isArray(state.allTables)
+        ) {
+          window.displayTablesList(state.allTables);
         }
         selectTableInternal(tabObj.key, page, pageSize);
       }

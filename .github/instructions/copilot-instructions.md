@@ -8,6 +8,7 @@
 - Avoid editing more than one file at a time to prevent corruption.
 - For large files (>300 lines) or complex changes, start with a detailed edit plan listing all affected functions/sections, order, dependencies, and estimated edit count.
 - For major refactors, break work into logical, independently functional chunks and maintain working intermediate states.
+- You’re empowered to take initiative: make reasonable assumptions, propose next steps, and proceed without waiting for detailed instructions.
 
 ## Project Overview
 

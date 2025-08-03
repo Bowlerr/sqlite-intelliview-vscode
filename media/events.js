@@ -631,13 +631,20 @@ function displayTablesList(tables) {
 
   // Render normal tables
   let html = tables
-    .map(
-      (table) => `
-        <div class="table-item" data-table="${table.name}">
+    .map((table) => {
+      const state =
+        typeof window.getCurrentState === "function"
+          ? window.getCurrentState()
+          : {};
+      const isSelected = state.selectedTable === table.name;
+      return `
+        <div class="table-item${isSelected ? " selected" : ""}" data-table="${
+        table.name
+      }">
           <span class="table-name">${table.name}</span>
         </div>
-      `
-    )
+      `;
+    })
     .join("");
 
   // Render query result tabs under a separator
@@ -678,16 +685,8 @@ function displayTablesList(tables) {
         if (item.classList.contains("result-tab-item")) {
           const dataTab = document.querySelector('[data-tab="data"]');
           if (dataTab && !dataTab.classList.contains("active")) {
-            // Cast to HTMLElement for click support
-            var dataTabEl = dataTab instanceof HTMLElement ? dataTab : null;
-            if (dataTabEl) {
-              dataTabEl.click();
-            } else {
-              // fallback for non-HTMLElement
-              var evt = document.createEvent("MouseEvents");
-              evt.initEvent("click", true, true);
-              dataTab.dispatchEvent(evt);
-            }
+            const dataTabEl = /** @type {HTMLElement} */ (dataTab);
+            dataTabEl.click();
           }
         }
       }
@@ -763,8 +762,15 @@ function displayQueryResults(data, columns) {
       selectedTable: tabKey,
       tableCache: state.tableCache,
     });
+    // Core trigger: always refresh tabs and sidebar
     if (typeof window["renderTableTabs"] === "function") {
       window["renderTableTabs"](openTables, tabKey);
+    }
+    if (
+      typeof window["displayTablesList"] === "function" &&
+      Array.isArray(state.allTables)
+    ) {
+      window["displayTablesList"](state.allTables);
     }
     // Switch to the Data tab if not already active
     const dataTab = document.querySelector('[data-tab="data"]');

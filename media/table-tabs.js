@@ -7,6 +7,7 @@
 // Track which tab is being renamed and its value
 let renamingTabKey = null;
 let renamingValue = "";
+let currentRenameValue = null;
 
 /**
  * Render the table tabs bar above the data table area
@@ -34,6 +35,10 @@ function renderTableTabs(openTables, activeTableKey) {
     .map((tab) => {
       const { key, label, isResultTab } = tab;
       const isRenaming = renamingTabKey === key;
+      let inputValue = renamingValue;
+      if (isResultTab && isRenaming && currentRenameValue !== null) {
+        inputValue = currentRenameValue;
+      }
       return `
         <div class="table-tab${
           key === activeTableKey ? " active" : ""
@@ -43,17 +48,18 @@ function renderTableTabs(openTables, activeTableKey) {
           ${
             isResultTab && isRenaming
               ? `<input type="text" class="tab-rename-input" value="${escapeHtml(
-                  renamingValue
-                )}" autofocus style="min-width:100px;" />`
+                  inputValue
+                )}" autofocus style="min-width:100px;" />
+                 <button class="tick-tab-btn" title="Confirm" tabindex="0">&#10003;</button>`
               : `<span class="tab-label"${
                   isResultTab ? ' data-rename="true"' : ""
                 }>${
                   isResultTab
                     ? '<span class="tab-icon" title="Query Result">🧮</span> '
                     : ""
-                }${escapeHtml(label)}</span>`
+                }${escapeHtml(label)}</span>
+                 <button class="close-tab-btn" title="Close">&times;</button>`
           }
-          <button class="close-tab-btn" title="Close">&times;</button>
         </div>
       `;
     })
@@ -234,23 +240,59 @@ function renderTableTabs(openTables, activeTableKey) {
     const labelEl = tabEl.querySelector(".tab-label");
     const input = tabEl.querySelector(".tab-rename-input");
     if (input) {
-      // If this is the renaming input, attach handlers
-      setTimeout(() => {
-        input.focus();
-        input.select();
-      }, 0);
-      input.onblur = finishRename;
-      input.onkeydown = function (ev) {
-        if (ev.key === "Enter") {
-          finishRename();
-        } else if (ev.key === "Escape") {
-          cancelRename();
-        } else {
-          renamingValue = input.value;
+      // Simple tab rename input logic
+      const inputEl = input instanceof HTMLInputElement ? input : null;
+
+      if (inputEl) {
+        // Focus input when entering edit mode (only on initial render)
+        if (currentRenameValue === null) {
+          setTimeout(() => {
+            inputEl.focus();
+            // Select all text for easier editing
+            inputEl.select();
+          }, 0);
         }
-      };
+
+        // Track live value on input
+        inputEl.oninput = function () {
+          currentRenameValue = inputEl.value;
+        };
+
+        // Handle mouse clicks to preserve cursor position
+        inputEl.onclick = function (e) {
+          e.stopPropagation();
+          // Don't prevent default to allow normal cursor positioning
+        };
+
+        // Prevent input from losing focus due to tab clicks
+        inputEl.onmousedown = function (e) {
+          e.stopPropagation();
+        };
+
+        // Keydown: Enter to commit, Escape to cancel
+        inputEl.onkeydown = function (ev) {
+          if (ev.key === "Enter") {
+            finishRename();
+          } else if (ev.key === "Escape") {
+            cancelRename();
+          }
+        };
+      }
+      // Tick button handler
+      const tickBtn = tabEl.querySelector(".tick-tab-btn");
+      if (tickBtn) {
+        tickBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          finishRename();
+        });
+      }
       function finishRename() {
-        let newLabel = input.value.trim();
+        let newLabel =
+          currentRenameValue !== null
+            ? currentRenameValue.trim()
+            : inputEl
+            ? inputEl.value.trim()
+            : label;
         if (!newLabel) {
           newLabel = label;
         }
@@ -281,6 +323,11 @@ function renderTableTabs(openTables, activeTableKey) {
           }
           renamingTabKey = null;
           renamingValue = "";
+          currentRenameValue = null;
+          // Force tab bar re-render to exit edit mode
+          if (typeof renderTableTabs === "function") {
+            renderTableTabs(openTables, key || "");
+          }
         }
       }
       function cancelRename() {
@@ -290,24 +337,38 @@ function renderTableTabs(openTables, activeTableKey) {
       }
     } else if (labelEl && labelEl.getAttribute("data-rename") === "true") {
       // Cast to HTMLElement for style/title
-      labelEl.style.cursor = "pointer";
-      labelEl.title = "Double-click to rename";
-      labelEl.addEventListener("dblclick", (e) => {
+      const labelHtmlEl = /** @type {HTMLElement} */ (labelEl);
+      labelHtmlEl.style.cursor = "context-menu";
+      labelHtmlEl.title = "Right-click to rename";
+
+      // Add right-click event for rename
+      labelEl.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        renamingTabKey = key;
-        renamingValue = label;
-        renderTableTabs(openTables, activeTableKey);
+        // Only trigger rename if not already renaming this tab
+        if (renamingTabKey !== key) {
+          renamingTabKey = key;
+          renamingValue = label;
+          currentRenameValue = null; // Reset the current rename value
+          renderTableTabs(openTables, activeTableKey);
+        }
       });
+
       const icon = labelEl.querySelector(".tab-icon");
       if (icon) {
         const iconEl = /** @type {HTMLElement} */ (icon);
-        iconEl.style.cursor = "pointer";
-        iconEl.title = "Double-click to rename";
-        iconEl.addEventListener("dblclick", (e) => {
+        iconEl.style.cursor = "context-menu";
+        iconEl.title = "Right-click to rename";
+        iconEl.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          renamingTabKey = key;
-          renamingValue = label;
-          renderTableTabs(openTables, activeTableKey);
+          // Only trigger rename if not already renaming this tab
+          if (renamingTabKey !== key) {
+            renamingTabKey = key;
+            renamingValue = label;
+            currentRenameValue = null; // Reset the current rename value
+            renderTableTabs(openTables, activeTableKey);
+          }
         });
       }
     }

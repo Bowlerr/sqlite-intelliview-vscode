@@ -9,6 +9,7 @@ let currentState = {
   databasePath: "",
   encryptionKey: "",
   // Multi-table tabs state
+  /** @type {Array<any>} */
   openTables: [], // Array of {key, label} objects
   activeTable: null, // Currently active table in tabs (key)
   // Legacy single-table selection (for backward compatibility)
@@ -50,6 +51,18 @@ function updateState(newState) {
   if (typeof vscode !== "undefined") {
     vscode.setState(currentState);
   }
+  // Core State-Change Trigger: always refresh tabs and sidebar
+  if (typeof window !== "undefined") {
+    if (typeof window.renderTableTabs === "function") {
+      window.renderTableTabs(
+        currentState.openTables,
+        currentState.activeTable || currentState.selectedTable || ""
+      );
+    }
+    if (typeof window.displayTablesList === "function") {
+      window.displayTablesList(currentState.allTables);
+    }
+  }
 }
 
 /**
@@ -60,6 +73,32 @@ function initializeState() {
     const savedState = vscode.getState();
     if (savedState) {
       currentState = { ...currentState, ...savedState };
+    }
+    // If openTables is empty and allTables has tables, initialize openTables with the first table
+    if (
+      Array.isArray(currentState.openTables) &&
+      currentState.openTables.length === 0 &&
+      Array.isArray(currentState.allTables) &&
+      currentState.allTables.length > 0
+    ) {
+      const firstTable = currentState.allTables[0];
+      if (firstTable) {
+        currentState.openTables = [{ key: firstTable, label: firstTable }];
+        currentState.activeTable = firstTable;
+        currentState.selectedTable = firstTable;
+        // Immediately update tabs and sidebar
+        if (typeof window !== "undefined") {
+          if (typeof window.renderTableTabs === "function") {
+            window.renderTableTabs(
+              currentState.openTables,
+              currentState.activeTable || ""
+            );
+          }
+          if (typeof window.displayTablesList === "function") {
+            window.displayTablesList(currentState.allTables);
+          }
+        }
+      }
     }
   }
 }
@@ -93,7 +132,9 @@ function resetState() {
 // Ensure vscode is available globally for state.js
 // @ts-ignore
 var vscode =
-  typeof window !== "undefined" && window.vscode ? window.vscode : undefined;
+  typeof window !== "undefined" && window["vscode"]
+    ? window["vscode"]
+    : undefined;
 
 // Export functions for use in other modules
 if (typeof module !== "undefined" && module.exports) {
