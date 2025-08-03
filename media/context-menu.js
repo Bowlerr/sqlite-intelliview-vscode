@@ -62,8 +62,8 @@ function createContextMenuElement() {
     </div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item context-menu-item-fk" data-action="navigate-foreign-key" style="display: none;">
-      <span class="icon">🔗</span>
-      <span>Go to Referenced Row</span>
+      <span class="icon">�</span>
+      <span>Query Referenced Row</span>
     </div>
     <div class="context-menu-separator context-menu-separator-fk" style="display: none;"></div>
     <div class="context-menu-item context-menu-item-danger" data-action="delete-row">
@@ -152,10 +152,10 @@ function showContextMenu(x, y) {
         fkMenuItem.style.display = "block";
         fkSeparator.style.display = "block";
 
-        // Update the menu item text to show the specific table
+        // Update the menu item text to show querying the referenced table
         const span = fkMenuItem.querySelector("span:last-child");
         if (span) {
-          span.textContent = `Go to ${foreignKeyInfo.referencedTable} (ID: ${foreignKeyInfo.value})`;
+          span.textContent = `Query ${foreignKeyInfo.referencedTable} (${foreignKeyInfo.referencedColumn} = ${foreignKeyInfo.value})`;
         }
       } else {
         fkMenuItem.style.display = "none";
@@ -1178,48 +1178,40 @@ function navigateToForeignKeyReference() {
 
   console.log("Navigating to foreign key reference:", foreignKeyInfo);
 
-  // Send message to extension to navigate to the referenced table
+  // Send message to extension to execute a query for the referenced row in the referenced table
   if (typeof vscode !== "undefined") {
-    // Store the foreign key reference for highlighting after data loads
-    storeForeignKeyReference(foreignKeyInfo);
-
-    // Update the selected table state to avoid conflicts
-    if (typeof updateState === "function") {
-      updateState({ selectedTable: foreignKeyInfo.referencedTable });
+    // Generate a SQL query to find rows in the referenced table that match this foreign key value
+    // Handle different data types appropriately for SQL
+    let queryValue = foreignKeyInfo.value;
+    let formattedValue;
+    
+    // Check if the value is numeric (integer or float)
+    if (!isNaN(queryValue) && !isNaN(parseFloat(queryValue))) {
+      // Numeric values don't need quotes
+      formattedValue = queryValue;
+    } else {
+      // String values need to be properly escaped and quoted
+      // Escape single quotes by doubling them (SQL standard)
+      formattedValue = `'${queryValue.replace(/'/g, "''")}'`;
     }
+    
+    const query = `SELECT * FROM "${foreignKeyInfo.referencedTable}" WHERE "${foreignKeyInfo.referencedColumn}" = ${formattedValue} LIMIT 100;`;
+    
+    console.log("Executing foreign key query for referenced table:", query);
 
-    // Update the sidebar selection if available
-    if (typeof window !== "undefined" && window.updateSelectedTableSafe) {
-      window.updateSelectedTableSafe(foreignKeyInfo.referencedTable);
-    }
-
-    // Request to switch to the referenced table
-    let pageSize = 100;
-    if (
-      typeof window !== "undefined" &&
-      typeof window.getCurrentState === "function"
-    ) {
-      const state = window.getCurrentState();
-      if (state && state.pageSize) {
-        pageSize = state.pageSize;
-      }
-    }
+    // Execute the query to create a new query results tab
     vscode.postMessage({
-      type: "getTableData",
-      tableName: foreignKeyInfo.referencedTable,
+      type: "executeQuery",
+      query: query,
       key: getCurrentEncryptionKey(),
-      page: 1,
-      pageSize: pageSize, // Use persisted pageSize from state
     });
 
-    // Switch to data tab to show the table
-    if (typeof switchTab === "function") {
-      switchTab("data");
-    }
+    // Don't switch tabs immediately - let the query result handler manage the tab switching
+    // The displayQueryResults function will create the new tab and switch to it automatically
 
     // Show success message
     if (typeof showSuccess === "function") {
-      showSuccess(`Navigating to ${foreignKeyInfo.referencedTable} table...`);
+      showSuccess(`Querying ${foreignKeyInfo.referencedTable} for ${foreignKeyInfo.referencedColumn} = ${queryValue}...`);
     }
   }
 }
