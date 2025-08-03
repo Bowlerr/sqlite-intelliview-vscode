@@ -199,74 +199,6 @@ function reorderTabs(fromIndex, toIndex) {
 
   console.log("State: Tab reorder completed successfully");
 }
-/**
- * Move a specific tab to a target position
- * @param {string} tabKey - Key of the tab to move
- * @param {number} targetIndex - Target position index
- */
-function moveTabToPosition(tabKey, targetIndex) {
-  const currentIndex = currentState.openTables.findIndex(
-    (tab) => tab.key === tabKey
-  );
-  if (currentIndex !== -1 && currentIndex !== targetIndex) {
-    reorderTabs(currentIndex, targetIndex);
-  }
-}
-
-/**
- * Get the ordered list of tab keys
- * @returns {Array<string>} Array of tab keys in display order
- */
-function getTabOrderedList() {
-  return currentState.tabOrder.length > 0
-    ? currentState.tabOrder
-    : currentState.openTables.map((tab) => tab.key);
-}
-
-/**
- * Update the tab order array
- * @param {Array<string>} newOrder - New array of tab keys in order
- */
-function updateTabOrder(newOrder) {
-  updateState({ tabOrder: newOrder });
-}
-
-/**
- * Update drag state for SortableJS operations
- * @param {boolean} isDragging - Whether a drag operation is active
- * @param {string|null} draggedTabKey - Key of the tab being dragged
- * @param {number} originalIndex - Original index of the dragged tab
- */
-function updateDragState(isDragging, draggedTabKey, originalIndex) {
-  updateState({
-    dragState: {
-      isDragging,
-      draggedTabKey,
-      originalIndex,
-    },
-  });
-}
-
-/**
- * Validate that the tab order is consistent with open tables
- * @param {Array<string>} order - Tab order to validate
- * @returns {boolean} Whether the order is valid
- */
-function validateTabOrder(order) {
-  if (!Array.isArray(order)) {
-    return false;
-  }
-
-  const openTabKeys = currentState.openTables.map((tab) => tab.key);
-  if (order.length !== openTabKeys.length) {
-    return false;
-  }
-
-  return (
-    order.every((key) => openTabKeys.includes(key)) &&
-    openTabKeys.every((key) => order.includes(key))
-  );
-}
 
 // Ensure vscode is available globally for state.js
 // @ts-ignore
@@ -284,11 +216,6 @@ if (typeof module !== "undefined" && module.exports) {
     resetState,
     // SortableJS integration functions
     reorderTabs,
-    moveTabToPosition,
-    getTabOrderedList,
-    updateTabOrder,
-    updateDragState,
-    validateTabOrder,
   };
 }
 
@@ -300,9 +227,4 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).resetState = resetState;
   // SortableJS integration functions
   /** @type {any} */ (window).reorderTabs = reorderTabs;
-  /** @type {any} */ (window).moveTabToPosition = moveTabToPosition;
-  /** @type {any} */ (window).getTabOrderedList = getTabOrderedList;
-  /** @type {any} */ (window).updateTabOrder = updateTabOrder;
-  /** @type {any} */ (window).updateDragState = updateDragState;
-  /** @type {any} */ (window).validateTabOrder = validateTabOrder;
 }
