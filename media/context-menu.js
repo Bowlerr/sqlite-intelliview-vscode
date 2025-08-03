@@ -1184,7 +1184,7 @@ function navigateToForeignKeyReference() {
     // Handle different data types appropriately for SQL
     let queryValue = foreignKeyInfo.value;
     let formattedValue;
-    
+
     // Check if the value is numeric (integer or float)
     if (!isNaN(queryValue) && !isNaN(parseFloat(queryValue))) {
       // Numeric values don't need quotes
@@ -1194,9 +1194,9 @@ function navigateToForeignKeyReference() {
       // Escape single quotes by doubling them (SQL standard)
       formattedValue = `'${queryValue.replace(/'/g, "''")}'`;
     }
-    
+
     const query = `SELECT * FROM "${foreignKeyInfo.referencedTable}" WHERE "${foreignKeyInfo.referencedColumn}" = ${formattedValue} LIMIT 100;`;
-    
+
     console.log("Executing foreign key query for referenced table:", query);
 
     // Execute the query to create a new query results tab
@@ -1211,7 +1211,9 @@ function navigateToForeignKeyReference() {
 
     // Show success message
     if (typeof showSuccess === "function") {
-      showSuccess(`Querying ${foreignKeyInfo.referencedTable} for ${foreignKeyInfo.referencedColumn} = ${queryValue}...`);
+      showSuccess(
+        `Querying ${foreignKeyInfo.referencedTable} for ${foreignKeyInfo.referencedColumn} = ${queryValue}...`
+      );
     }
   }
 }
