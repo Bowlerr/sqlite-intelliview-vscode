@@ -18,6 +18,7 @@ let currentState = {
     isDragging: false,
     draggedTabKey: null,
     originalIndex: -1,
+    preventRerender: false,
   },
   tabGroups: {
     tables: [], // Regular table tabs
@@ -62,18 +63,33 @@ function updateState(newState) {
   if (typeof vscode !== "undefined") {
     vscode.setState(currentState);
   }
-  // Core State-Change Trigger: always refresh tabs and sidebar
+  // Core State-Change Trigger: selectively refresh tabs and sidebar
   // Skip rendering during drag operations to prevent SortableJS conflicts
-  if (typeof window !== "undefined" && !currentState.dragState.isDragging) {
+  if (
+    typeof window !== "undefined" &&
+    !currentState.dragState.isDragging &&
+    !currentState.dragState.preventRerender &&
+    !newState.skipTabRerender
+  ) {
+    // Always re-render tabs for now to ensure SortableJS gets initialized properly
+    // TODO: Optimize this to only re-render when needed once SortableJS stability is confirmed
     if (typeof window.renderTableTabs === "function") {
+      console.log("State: Re-rendering tabs");
       window.renderTableTabs(
         currentState.openTables,
         currentState.activeTable || currentState.selectedTable || ""
       );
     }
+
     if (typeof window.displayTablesList === "function") {
       window.displayTablesList(currentState.allTables);
     }
+  } else if (newState.skipTabRerender) {
+    console.log("State: Skipping tab re-render due to skipTabRerender flag");
+  } else if (currentState.dragState.preventRerender) {
+    console.log(
+      "State: Skipping tab re-render due to drag preventRerender flag"
+    );
   }
 }
 
@@ -131,6 +147,7 @@ function resetState() {
       isDragging: false,
       draggedTabKey: null,
       originalIndex: -1,
+      preventRerender: false,
     },
     tabGroups: {
       tables: [], // Regular table tabs
@@ -191,10 +208,11 @@ function reorderTabs(fromIndex, toIndex) {
     cleanTabs.map((tab) => tab.label)
   );
 
-  // Update state properly using updateState to trigger UI updates
+  // Update state with a special flag to prevent re-rendering during drag operations
   updateState({
     openTables: cleanTabs,
     tabOrder: cleanTabs.map((tab) => tab.key),
+    skipTabRerender: true, // Flag to prevent DOM re-render during drag reorder
   });
 
   console.log("State: Tab reorder completed successfully");

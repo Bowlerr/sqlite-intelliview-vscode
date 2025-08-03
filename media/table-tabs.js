@@ -14,23 +14,70 @@ let currentRenameValue = null;
 let sortableInstance = null;
 let sortableJS = null; // Will hold the SortableJS class once loaded
 
+// Track the last rendered state to avoid unnecessary re-renders
+let lastRenderedState = {
+  openTables: [],
+  activeTable: "",
+};
+
+/**
+ * Check if tabs need to be re-rendered by comparing with last state
+ * @param {Array<{key: string, label: string}>} openTables
+ * @param {string} activeTableKey
+ * @returns {boolean}
+ */
+function shouldRerenderTabs(openTables, activeTableKey) {
+  // Check if tab structure changed
+  if (!openTables || !Array.isArray(openTables)) {
+    return true;
+  }
+
+  if (lastRenderedState.openTables.length !== openTables.length) {
+    return true;
+  }
+
+  // Check if any tab keys or labels changed
+  for (let i = 0; i < openTables.length; i++) {
+    const current = openTables[i];
+    const last = lastRenderedState.openTables[i];
+    if (!last || current.key !== last.key || current.label !== last.label) {
+      return true;
+    }
+  }
+
+  // If only active tab changed, no need to re-render DOM
+  return false;
+}
+
 /**
  * Render the table tabs bar above the data table area
  * @param {Array<{key: string, label: string}>} openTables - Array of open table objects
  * @param {string} activeTableKey - Currently active table key
  */
 function renderTableTabs(openTables, activeTableKey) {
-  let tabsBar = document.getElementById("table-tabs-bar");
+  const tabsBar = document.getElementById("table-tabs-bar");
   if (!tabsBar) {
-    tabsBar = document.createElement("div");
-    tabsBar.id = "table-tabs-bar";
-    tabsBar.className = "table-tabs-bar";
-    // Insert above data-content
-    const dataContent = document.getElementById("data-content");
-    if (dataContent && dataContent.parentNode) {
-      dataContent.parentNode.insertBefore(tabsBar, dataContent);
-    }
+    return;
   }
+
+  // Check if we need to re-render the DOM or just update active tab
+  if (!shouldRerenderTabs(openTables, activeTableKey)) {
+    console.log(
+      "Table tabs: Only active tab changed, updating without DOM re-render"
+    );
+    updateActiveTab(activeTableKey);
+    return;
+  }
+
+  console.log("Table tabs: Structure changed, performing full re-render");
+
+  // Update our tracking state
+  lastRenderedState = {
+    openTables: openTables
+      ? openTables.map((t) => ({ key: t.key, label: t.label }))
+      : [],
+    activeTable: activeTableKey || "",
+  };
   // Filter out invalid tab objects (missing key or label)
   const validTabs = Array.isArray(openTables)
     ? openTables.filter((tab) => tab && tab.key && tab.label)
@@ -95,6 +142,11 @@ function renderTableTabs(openTables, activeTableKey) {
 
   // Add a hidden dropdown for table picker
   html += `<select id="table-picker-dropdown" style="display:none; position:absolute;"></select>`;
+
+  // Destroy existing SortableJS instance before replacing DOM
+  destroySortableJS();
+
+  // Replace DOM content
   tabsBar.innerHTML = html;
 
   // Add event listeners
@@ -377,14 +429,11 @@ function renderTableTabs(openTables, activeTableKey) {
     }
   });
 
-  // Initialize SortableJS for drag-and-drop functionality
-  // Only initialize if not already done to prevent conflicts during re-renders
-  if (!sortableInstance) {
-    console.log("Table tabs: Initializing SortableJS for first time");
-    initializeSortableJS();
-  } else {
-    console.log("Table tabs: SortableJS already initialized, skipping");
-  }
+  // Initialize SortableJS for drag-and-drop functionality AFTER DOM is created
+  console.log(
+    "Table tabs: DOM was replaced, initializing SortableJS with new elements"
+  );
+  initializeSortableJS(); // Create new instance with the new DOM elements
 }
 
 /**
@@ -401,6 +450,13 @@ function initializeSortableJS() {
     return; // Exit if no tabs bar
   }
 
+  // Check if there are any draggable tabs
+  const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
+  if (draggableTabs.length === 0) {
+    console.log("SortableJS: No draggable tabs found, skipping initialization");
+    return;
+  }
+
   if (sortableInstance) {
     console.log("SortableJS: Instance already exists, destroying first");
     sortableInstance.destroy();
@@ -415,7 +471,11 @@ function initializeSortableJS() {
     return;
   }
 
-  console.log("SortableJS: Initializing new instance");
+  console.log(
+    "SortableJS: Initializing new instance with",
+    draggableTabs.length,
+    "draggable tabs"
+  );
   sortableJS = window.Sortable;
 
   sortableInstance = sortableJS.create(tabsBar, {
@@ -432,10 +492,20 @@ function initializeSortableJS() {
     draggable: ".table-tab:not(.add-tab)",
     filter: ".close-tab-btn, .tick-tab-btn, .tab-rename-input",
 
-    // Simple event handling
     onStart: function (evt) {
       console.log("SortableJS: Drag started from index", evt.oldIndex);
-      // Just add visual feedback - no complex state tracking needed
+
+      // Set a persistent flag to prevent any re-renders during and after drag
+      if (typeof window.updateState === "function") {
+        window.updateState({
+          dragState: {
+            isDragging: true,
+            preventRerender: true, // Prevent all tab re-renders
+          },
+        });
+      }
+
+      // Add visual feedback
       tabsBar.classList.add("sortable-drag-active");
     },
 
@@ -448,9 +518,76 @@ function initializeSortableJS() {
       // Only update state if position actually changed
       if (evt.oldIndex !== evt.newIndex) {
         console.log("SortableJS: Reordering tabs");
-        reorderTabsWrapper(evt.oldIndex, evt.newIndex);
+
+        // CRITICAL: Get the new order from the actual DOM elements after SortableJS moved them
+        const tabElements = tabsBar.querySelectorAll(
+          ".table-tab:not(.add-tab)"
+        );
+        const newOrderKeys = Array.from(tabElements)
+          .map((el) => el.getAttribute("data-table-key"))
+          .filter((key) => key);
+
+        console.log("SortableJS: New DOM order:", newOrderKeys);
+
+        // Update state to match the DOM order, not the theoretical reorder
+        if (
+          typeof window.getCurrentState === "function" &&
+          typeof window.updateState === "function"
+        ) {
+          const currentState = window.getCurrentState();
+          if (currentState && currentState.openTables) {
+            // Reconstruct openTables array to match the new DOM order
+            const newOpenTables = newOrderKeys
+              .map((key) =>
+                currentState.openTables.find((tab) => tab.key === key)
+              )
+              .filter((tab) => tab); // Remove any undefined entries
+
+            console.log("SortableJS: Updating state to match DOM order");
+
+            // Update state with DOM-based order and prevent re-render
+            window.updateState({
+              openTables: newOpenTables,
+              tabOrder: newOrderKeys,
+              skipTabRerender: true,
+            });
+
+            // Update our tracking to match
+            lastRenderedState = {
+              openTables: newOpenTables.map((t) => ({
+                key: t.key,
+                label: t.label,
+              })),
+              activeTable:
+                currentState.activeTable || currentState.selectedTable || "",
+            };
+          }
+        }
+
+        // Clear drag state without causing re-render
+        setTimeout(() => {
+          if (typeof window.updateState === "function") {
+            window.updateState({
+              dragState: {
+                isDragging: false,
+                preventRerender: false,
+              },
+              skipTabRerender: true, // Still prevent re-render when clearing
+            });
+          }
+        }, 50);
       } else {
         console.log("SortableJS: No position change, skipping reorder");
+
+        // Clear drag state immediately if no reorder
+        if (typeof window.updateState === "function") {
+          window.updateState({
+            dragState: {
+              isDragging: false,
+              preventRerender: false,
+            },
+          });
+        }
       }
     },
 
@@ -519,6 +656,66 @@ function reorderTabsWrapper(fromIndex, toIndex) {
 }
 
 /**
+ * Update the active tab without full re-render (preserves SortableJS)
+ * @param {string} activeTableKey - The key of the tab to make active
+ */
+function updateActiveTab(activeTableKey) {
+  const tabsBar = document.getElementById("table-tabs-bar");
+  if (!tabsBar) {
+    return;
+  }
+
+  // Remove active class from all tabs
+  tabsBar.querySelectorAll(".table-tab").forEach((tab) => {
+    tab.classList.remove("active");
+  });
+
+  // Add active class to the specified tab
+  if (activeTableKey) {
+    const activeTab = tabsBar.querySelector(
+      `[data-table-key="${activeTableKey}"]`
+    );
+    if (activeTab) {
+      activeTab.classList.add("active");
+      console.log(
+        "Table tabs: Updated active tab to",
+        activeTableKey,
+        "without re-render"
+      );
+    }
+  }
+}
+
+/**
+ * Debug function to check SortableJS status
+ */
+function debugSortableJS() {
+  console.log("=== SortableJS Debug Info ===");
+  console.log(
+    "SortableJS library loaded:",
+    typeof window.Sortable !== "undefined"
+  );
+  console.log("SortableJS instance exists:", !!sortableInstance);
+
+  const tabsBar = document.getElementById("table-tabs-bar");
+  console.log("Tabs bar element found:", !!tabsBar);
+
+  if (tabsBar) {
+    const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
+    console.log("Number of draggable tabs:", draggableTabs.length);
+    draggableTabs.forEach((tab, index) => {
+      console.log(`  Tab ${index}:`, tab.getAttribute("data-table-key"));
+    });
+  }
+
+  if (sortableInstance) {
+    console.log("SortableJS instance el:", sortableInstance.el);
+    console.log("SortableJS options:", sortableInstance.option());
+  }
+  console.log("=== End Debug Info ===");
+}
+
+/**
  * Escape HTML for safe rendering
  * @param {string} text
  * @returns {string}
@@ -532,6 +729,8 @@ function escapeHtml(text) {
 // Export globally for main.js
 if (typeof window !== "undefined") {
   window.renderTableTabs = renderTableTabs;
+  window.updateActiveTab = updateActiveTab;
+  window.debugSortableJS = debugSortableJS;
   // SortableJS integration exports
   window.initializeSortableJS = initializeSortableJS;
   window.destroySortableJS = destroySortableJS;
