@@ -14,7 +14,7 @@
 ---
 
 
-## What’s New in 0.2.16
+### Highlights from 0.2.17
 
 - Major speed and stability improvements for a smoother experience
 - Full offline support: All features work without an internet connection
