@@ -12,6 +12,8 @@ let currentRenameValue = null;
 
 // SortableJS instance and state
 let sortableInstance = null;
+let sortableInitializationTimeout = null;
+let isInitializingSortable = false;
 let sortableJS = null; // Will hold the SortableJS class once loaded
 
 // Track the last rendered state to avoid unnecessary re-renders
@@ -381,14 +383,16 @@ function renderTableTabs(openTables, activeTableKey) {
             openTables[idx].label = newLabel;
           }
 
-          // Update state with skipTabRerender to avoid double rendering
-          window["updateState"]({
-            openTables,
-            activeTable: key,
-            selectedTable: key,
-            tableCache: state.tableCache,
-            skipTabRerender: true,
-          });
+          // Update state without triggering immediate render
+          window["updateState"](
+            {
+              openTables,
+              activeTable: key,
+              selectedTable: key,
+              tableCache: state.tableCache,
+            },
+            { renderTabs: false, renderSidebar: false }
+          );
 
           // Also update the sidebar immediately if available
           if (
@@ -454,16 +458,85 @@ function renderTableTabs(openTables, activeTableKey) {
     }
   });
 
-  // Initialize SortableJS for drag-and-drop functionality AFTER DOM is created
-  console.log(
-    "Table tabs: DOM was replaced, initializing SortableJS with new elements"
-  );
-  initializeSortableJS(); // Create new instance with the new DOM elements
+  // Initialize SortableJS ONLY if needed and DOM structure actually changed
+  initializeSortableJSIfNeeded();
 }
 
 /**
  * SortableJS Integration Functions
  */
+
+/**
+ * Smart SortableJS lifecycle management with debouncing - only initialize when needed
+ */
+function initializeSortableJSIfNeeded() {
+  // Clear any pending initialization to avoid rapid re-inits
+  if (sortableInitializationTimeout) {
+    clearTimeout(sortableInitializationTimeout);
+    sortableInitializationTimeout = null;
+  }
+
+  // Debounce initialization to handle rapid DOM changes
+  sortableInitializationTimeout = setTimeout(() => {
+    performSortableInitialization();
+  }, 10); // Small delay to batch DOM changes
+}
+
+function performSortableInitialization() {
+  if (isInitializingSortable) {
+    console.log("SortableJS: Already initializing, skipping duplicate request");
+    return;
+  }
+
+  const tabsBar = document.getElementById("table-tabs-bar");
+  if (!tabsBar) {
+    console.log("SortableJS: No tabs-bar found, skipping initialization");
+    return;
+  }
+
+  // Check if there are any draggable tabs
+  const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
+  if (draggableTabs.length === 0) {
+    console.log(
+      "SortableJS: No draggable tabs found, destroying instance if exists"
+    );
+    destroySortableJS();
+    return;
+  }
+
+  // Check if current instance is still valid and attached to correct element
+  if (sortableInstance) {
+    try {
+      // Verify instance is still connected to the DOM and the right element
+      if (sortableInstance.el === tabsBar && document.contains(tabsBar)) {
+        console.log(
+          "SortableJS: Instance still valid, skipping re-initialization"
+        );
+        return;
+      } else {
+        console.log(
+          "SortableJS: Instance element mismatch, destroying and recreating"
+        );
+        sortableInstance.destroy();
+        sortableInstance = null;
+      }
+    } catch (error) {
+      console.log(
+        "SortableJS: Error checking instance validity, recreating:",
+        error
+      );
+      sortableInstance = null;
+    }
+  }
+
+  // Initialize fresh instance
+  console.log(
+    "SortableJS: Creating new instance for",
+    draggableTabs.length,
+    "tabs"
+  );
+  initializeSortableJS();
+}
 
 /**
  * Initialize SortableJS for drag-and-drop functionality
@@ -482,19 +555,28 @@ function initializeSortableJS() {
     return;
   }
 
+  // Double-check for existing instance (should not happen with smart lifecycle)
   if (sortableInstance) {
-    console.log("SortableJS: Instance already exists, destroying first");
-    sortableInstance.destroy();
+    console.log("SortableJS: Unexpected existing instance, destroying first");
+    try {
+      sortableInstance.destroy();
+    } catch (error) {
+      console.log("SortableJS: Error destroying existing instance:", error);
+    }
     sortableInstance = null;
   }
 
   // Wait for SortableJS to be available globally
   if (typeof window.Sortable === "undefined") {
     console.log("SortableJS: Library not loaded yet, retrying in 100ms");
-    // SortableJS not yet loaded, try again later
+    // Clear flag and retry later
+    isInitializingSortable = false;
     setTimeout(initializeSortableJS, 100);
     return;
   }
+
+  // Set initialization flag to prevent concurrent initialization
+  isInitializingSortable = true;
 
   console.log(
     "SortableJS: Initializing new instance with",
@@ -571,11 +653,13 @@ function initializeSortableJS() {
             console.log("SortableJS: Updating state to match DOM order");
 
             // Update state with DOM-based order and prevent re-render
-            window.updateState({
-              openTables: newOpenTables,
-              tabOrder: newOrderKeys,
-              skipTabRerender: true,
-            });
+            window.updateState(
+              {
+                openTables: newOpenTables,
+                tabOrder: newOrderKeys,
+              },
+              { renderTabs: false, renderSidebar: false }
+            );
 
             // Update our tracking to match
             lastRenderedState = {
@@ -592,13 +676,15 @@ function initializeSortableJS() {
         // Clear drag state without causing re-render
         setTimeout(() => {
           if (typeof window.updateState === "function") {
-            window.updateState({
-              dragState: {
-                isDragging: false,
-                preventRerender: false,
+            window.updateState(
+              {
+                dragState: {
+                  isDragging: false,
+                  preventRerender: false,
+                },
               },
-              skipTabRerender: true, // Still prevent re-render when clearing
-            });
+              { renderTabs: false, renderSidebar: false }
+            );
           }
         }, 50);
       } else {
@@ -628,16 +714,34 @@ function initializeSortableJS() {
       return true;
     },
   });
+
+  // Clear initialization flag - instance successfully created
+  isInitializingSortable = false;
+  console.log("SortableJS: Instance created successfully");
 }
 
 /**
  * Destroy the current SortableJS instance
  */
 function destroySortableJS() {
+  // Clear any pending initialization
+  if (sortableInitializationTimeout) {
+    clearTimeout(sortableInitializationTimeout);
+    sortableInitializationTimeout = null;
+  }
+
   if (sortableInstance) {
-    sortableInstance.destroy();
+    try {
+      sortableInstance.destroy();
+    } catch (error) {
+      console.log("SortableJS: Error during destruction:", error);
+    }
     sortableInstance = null;
   }
+
+  // Clear initialization state
+  isInitializingSortable = false;
+  console.log("SortableJS: Instance destroyed and state cleared");
 }
 
 /**

@@ -47,8 +47,17 @@ function getCurrentState() {
 /**
  * Update the current state
  * @param {object} newState - New state values to merge
+ * @param {object} options - Update options { renderTabs: boolean, renderSidebar: boolean }
  */
-function updateState(newState) {
+function updateState(newState, options = {}) {
+  const { renderTabs = true, renderSidebar = true } = options;
+
+  // Store previous state for comparison
+  const prevOpenTables = currentState.openTables;
+  const prevActiveTable =
+    currentState.activeTable || currentState.selectedTable;
+  const prevAllTables = currentState.allTables;
+
   currentState = { ...currentState, ...newState };
 
   // Debug logging for encryption key changes
@@ -63,34 +72,126 @@ function updateState(newState) {
   if (typeof vscode !== "undefined") {
     vscode.setState(currentState);
   }
-  // Core State-Change Trigger: selectively refresh tabs and sidebar
-  // Skip rendering during drag operations to prevent SortableJS conflicts
-  if (
-    typeof window !== "undefined" &&
-    !currentState.dragState.isDragging &&
-    !currentState.dragState.preventRerender &&
-    !newState.skipTabRerender
-  ) {
-    // Always re-render tabs for now to ensure SortableJS gets initialized properly
-    // TODO: Optimize this to only re-render when needed once SortableJS stability is confirmed
-    if (typeof window.renderTableTabs === "function") {
-      console.log("State: Re-rendering tabs");
-      window.renderTableTabs(
-        currentState.openTables,
-        currentState.activeTable || currentState.selectedTable || ""
-      );
+
+  // Optimized rendering logic - only render when necessary
+  if (typeof window !== "undefined") {
+    // Check if we should skip all rendering
+    const shouldSkipRendering =
+      currentState.dragState.isDragging ||
+      currentState.dragState.preventRerender ||
+      newState.skipTabRerender;
+
+    if (shouldSkipRendering) {
+      if (newState.skipTabRerender) {
+        console.log("State: Skipping render due to skipTabRerender flag");
+      } else if (currentState.dragState.preventRerender) {
+        console.log("State: Skipping render due to drag preventRerender flag");
+      } else if (currentState.dragState.isDragging) {
+        console.log("State: Skipping render due to active drag");
+      }
+      return; // Exit early, no rendering
     }
 
-    if (typeof window.displayTablesList === "function") {
-      window.displayTablesList(currentState.allTables);
+    // Smart tab rendering - only when structure actually changed
+    if (renderTabs && typeof window.renderTableTabs === "function") {
+      const tabsChanged = hasTabsChanged(
+        prevOpenTables,
+        currentState.openTables
+      );
+      const activeChanged =
+        prevActiveTable !==
+        (currentState.activeTable || currentState.selectedTable);
+
+      if (tabsChanged) {
+        console.log("State: Re-rendering tabs (structure changed)");
+        window.renderTableTabs(
+          currentState.openTables,
+          currentState.activeTable || currentState.selectedTable || ""
+        );
+      } else if (
+        activeChanged &&
+        typeof window.updateActiveTab === "function"
+      ) {
+        console.log("State: Updating active tab only (no structure change)");
+        window.updateActiveTab(
+          currentState.activeTable || currentState.selectedTable || ""
+        );
+      }
     }
-  } else if (newState.skipTabRerender) {
-    console.log("State: Skipping tab re-render due to skipTabRerender flag");
-  } else if (currentState.dragState.preventRerender) {
-    console.log(
-      "State: Skipping tab re-render due to drag preventRerender flag"
-    );
+
+    // Smart sidebar rendering - only when table list changed
+    if (renderSidebar && typeof window.displayTablesList === "function") {
+      const sidebarChanged = hasArrayChanged(
+        prevAllTables,
+        currentState.allTables
+      );
+
+      if (sidebarChanged) {
+        console.log("State: Re-rendering sidebar (tables changed)");
+        window.displayTablesList(currentState.allTables);
+      }
+    }
   }
+}
+
+/**
+ * Check if tabs array has structurally changed (keys, labels, order)
+ * @param {Array} prevTabs - Previous tabs array
+ * @param {Array} currentTabs - Current tabs array
+ * @returns {boolean} - True if tabs changed
+ */
+function hasTabsChanged(prevTabs, currentTabs) {
+  if (!Array.isArray(prevTabs) || !Array.isArray(currentTabs)) {
+    return true;
+  }
+
+  if (prevTabs.length !== currentTabs.length) {
+    return true;
+  }
+
+  for (let i = 0; i < prevTabs.length; i++) {
+    const prev = prevTabs[i];
+    const current = currentTabs[i];
+
+    if (!prev || !current) {
+      return true;
+    }
+    if (prev.key !== current.key) {
+      return true;
+    }
+    if (prev.label !== current.label) {
+      return true;
+    }
+    if (prev.isResultTab !== current.isResultTab) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if array has changed (shallow comparison)
+ * @param {Array} prevArray - Previous array
+ * @param {Array} currentArray - Current array
+ * @returns {boolean} - True if array changed
+ */
+function hasArrayChanged(prevArray, currentArray) {
+  if (!Array.isArray(prevArray) || !Array.isArray(currentArray)) {
+    return true;
+  }
+
+  if (prevArray.length !== currentArray.length) {
+    return true;
+  }
+
+  for (let i = 0; i < prevArray.length; i++) {
+    if (prevArray[i] !== currentArray[i]) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -208,12 +309,14 @@ function reorderTabs(fromIndex, toIndex) {
     cleanTabs.map((tab) => tab.label)
   );
 
-  // Update state with a special flag to prevent re-rendering during drag operations
-  updateState({
-    openTables: cleanTabs,
-    tabOrder: cleanTabs.map((tab) => tab.key),
-    skipTabRerender: true, // Flag to prevent DOM re-render during drag reorder
-  });
+  // Update state without re-rendering during drag operations
+  updateState(
+    {
+      openTables: cleanTabs,
+      tabOrder: cleanTabs.map((tab) => tab.key),
+    },
+    { renderTabs: false, renderSidebar: false }
+  );
 
   console.log("State: Tab reorder completed successfully");
 }
