@@ -35,11 +35,8 @@ class DebugLogger {
       }
     }
 
-    // Check if this is a development environment
-    const isDevelopment = this.isDevEnvironment();
-
-    // Default to INFO for development, ERROR for production (to show errors but not spam)
-    return isDevelopment ? DEBUG_LEVELS.INFO : DEBUG_LEVELS.ERROR;
+    // Default to OFF
+    return DEBUG_LEVELS.OFF;
   }
 
   isDevEnvironment() {

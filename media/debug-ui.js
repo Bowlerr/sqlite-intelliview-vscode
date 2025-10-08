@@ -138,21 +138,6 @@ function createDebugControls() {
   });
 }
 
-// Auto-create debug controls if debug level is high enough
-if (typeof document !== "undefined") {
-  document.addEventListener("DOMContentLoaded", () => {
-    // Small delay to ensure debug system is loaded
-    setTimeout(createDebugControls, 100);
-  });
-
-  // Also try immediately in case DOM is already loaded
-  if (document.readyState === "loading") {
-    // DOM is still loading
-  } else {
-    setTimeout(createDebugControls, 100);
-  }
-}
-
 // Add keyboard shortcut to toggle debug controls (Ctrl/Cmd + Shift + D)
 if (typeof document !== "undefined") {
   document.addEventListener("keydown", (e) => {
