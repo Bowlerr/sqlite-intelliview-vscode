@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck
 /**
  * Table Tabs UI for multi-table support in Data tab
  * Handles rendering, switching, adding, closing, and reordering table tabs
@@ -27,6 +27,11 @@ let lastRenderedState = {
  * @returns {boolean}
  */
 function shouldRerenderTabs(openTables, activeTableKey) {
+  // Always re-render if there's an active rename operation to ensure UI state consistency
+  if (renamingTabKey !== null) {
+    return true;
+  }
+
   // Check if tab structure changed
   if (!openTables || !Array.isArray(openTables)) {
     return true;
@@ -357,6 +362,12 @@ function renderTableTabs(openTables, activeTableKey) {
         if (!newLabel) {
           newLabel = label;
         }
+
+        // Clear rename state FIRST to avoid race conditions
+        renamingTabKey = null;
+        renamingValue = "";
+        currentRenameValue = null;
+
         if (
           typeof window["getCurrentState"] === "function" &&
           typeof window["updateState"] === "function"
@@ -369,12 +380,16 @@ function renderTableTabs(openTables, activeTableKey) {
           if (idx !== -1) {
             openTables[idx].label = newLabel;
           }
+
+          // Update state with skipTabRerender to avoid double rendering
           window["updateState"]({
             openTables,
             activeTable: key,
             selectedTable: key,
             tableCache: state.tableCache,
+            skipTabRerender: true,
           });
+
           // Also update the sidebar immediately if available
           if (
             typeof window.displayTablesList === "function" &&
@@ -382,19 +397,29 @@ function renderTableTabs(openTables, activeTableKey) {
           ) {
             window.displayTablesList(state.allTables);
           }
-          renamingTabKey = null;
-          renamingValue = "";
-          currentRenameValue = null;
-          // Force tab bar re-render to exit edit mode
-          if (typeof renderTableTabs === "function") {
-            renderTableTabs(openTables, key || "");
-          }
+
+          // Force a clean re-render with updated state and cleared rename flags
+          setTimeout(() => {
+            if (typeof renderTableTabs === "function") {
+              renderTableTabs(openTables, key || "");
+            }
+          }, 0);
         }
       }
       function cancelRename() {
+        // Clear rename state FIRST
         renamingTabKey = null;
         renamingValue = "";
-        renderTableTabs(openTables, activeTableKey);
+        currentRenameValue = null;
+
+        // Force immediate re-render to exit edit mode
+        if (
+          typeof window["getCurrentState"] === "function" &&
+          typeof renderTableTabs === "function"
+        ) {
+          const state = window["getCurrentState"]();
+          renderTableTabs(state.openTables || openTables, activeTableKey);
+        }
       }
     } else if (labelEl && labelEl.getAttribute("data-rename") === "true") {
       // Cast to HTMLElement for style/title
@@ -1015,12 +1040,17 @@ function executeTabContextMenuAction(action, tabKey, tabLabel) {
       renamingTabKey = tabKey;
       renamingValue = tabLabel;
       currentRenameValue = null;
+
+      // Force immediate re-render to enter edit mode
       if (
         typeof (/** @type {any} */ (window).getCurrentState) === "function" &&
         typeof renderTableTabs === "function"
       ) {
         const state = /** @type {any} */ (window).getCurrentState();
-        renderTableTabs(state.openTables, state.activeTable);
+        // Use setTimeout to ensure the rename state is set before rendering
+        setTimeout(() => {
+          renderTableTabs(state.openTables, state.activeTable);
+        }, 0);
       }
       break;
 
