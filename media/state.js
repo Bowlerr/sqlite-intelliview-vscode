@@ -62,8 +62,9 @@ function updateState(newState, options = {}) {
 
   // Debug logging for encryption key changes
   if (newState.encryptionKey !== undefined) {
-    console.log(
-      "Encryption key updated in state:",
+    window.debug.debug(
+      "State", 
+      "Encryption key updated in state:", 
       newState.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
     );
   }
@@ -83,11 +84,11 @@ function updateState(newState, options = {}) {
 
     if (shouldSkipRendering) {
       if (newState.skipTabRerender) {
-        console.log("State: Skipping render due to skipTabRerender flag");
+        window.debug.debug("State", "Skipping render due to skipTabRerender flag");
       } else if (currentState.dragState.preventRerender) {
-        console.log("State: Skipping render due to drag preventRerender flag");
+        window.debug.debug("State", "Skipping render due to drag preventRerender flag");
       } else if (currentState.dragState.isDragging) {
-        console.log("State: Skipping render due to active drag");
+        window.debug.debug("State", "Skipping render due to active drag");
       }
       return; // Exit early, no rendering
     }
@@ -103,7 +104,7 @@ function updateState(newState, options = {}) {
         (currentState.activeTable || currentState.selectedTable);
 
       if (tabsChanged) {
-        console.log("State: Re-rendering tabs (structure changed)");
+        window.debug.debug("State", "Re-rendering tabs (structure changed)");
         window.renderTableTabs(
           currentState.openTables,
           currentState.activeTable || currentState.selectedTable || ""
@@ -112,7 +113,7 @@ function updateState(newState, options = {}) {
         activeChanged &&
         typeof window.updateActiveTab === "function"
       ) {
-        console.log("State: Updating active tab only (no structure change)");
+        window.debug.debug("State", "Updating active tab only (no structure change)");
         window.updateActiveTab(
           currentState.activeTable || currentState.selectedTable || ""
         );
@@ -127,7 +128,7 @@ function updateState(newState, options = {}) {
       );
 
       if (sidebarChanged) {
-        console.log("State: Re-rendering sidebar (tables changed)");
+        window.debug.debug("State", "Re-rendering sidebar (tables changed)");
         window.displayTablesList(currentState.allTables);
       }
     }
@@ -281,7 +282,7 @@ function resetState() {
  */
 function reorderTabs(fromIndex, toIndex) {
   if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
-    console.log("State: No reorder needed - same position or invalid indices");
+    window.debug.debug("State", "No reorder needed - same position or invalid indices");
     return; // No change needed
   }
 
@@ -291,21 +292,23 @@ function reorderTabs(fromIndex, toIndex) {
   );
 
   if (fromIndex >= cleanTabs.length || toIndex >= cleanTabs.length) {
-    console.log("State: Invalid indices - out of bounds");
+    window.debug.warn("State", "Invalid indices - out of bounds");
     return; // Invalid indices
   }
 
-  console.log("State: Reordering tabs from", fromIndex, "to", toIndex);
-  console.log(
-    "State: Before reorder:",
+  window.debug.debug("State", "Reordering tabs from", fromIndex, "to", toIndex);
+  window.debug.debug(
+    "State",
+    "Before reorder:",
     cleanTabs.map((tab) => tab.label)
   );
 
   const [movedTab] = cleanTabs.splice(fromIndex, 1);
   cleanTabs.splice(toIndex, 0, movedTab);
 
-  console.log(
-    "State: After reorder:",
+  window.debug.debug(
+    "State",
+    "After reorder:",
     cleanTabs.map((tab) => tab.label)
   );
 
@@ -318,7 +321,7 @@ function reorderTabs(fromIndex, toIndex) {
     { renderTabs: false, renderSidebar: false }
   );
 
-  console.log("State: Tab reorder completed successfully");
+  window.debug.info("State", "Tab reorder completed successfully");
 }
 
 // Ensure vscode is available globally for state.js

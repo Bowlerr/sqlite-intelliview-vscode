@@ -69,14 +69,20 @@ function renderTableTabs(openTables, activeTableKey) {
 
   // Check if we need to re-render the DOM or just update active tab
   if (!shouldRerenderTabs(openTables, activeTableKey)) {
-    console.log(
-      "Table tabs: Only active tab changed, updating without DOM re-render"
+    window.debug.debug(
+      "TableTabs",
+      "Only active tab changed, updating without DOM re-render"
     );
     updateActiveTab(activeTableKey);
     return;
   }
 
-  console.log("Table tabs: Structure changed, performing full re-render");
+  if (window.debug) {
+    window.debug.debug(
+      "TableTabs",
+      "Structure changed, performing full re-render"
+    );
+  }
 
   // Update our tracking state
   lastRenderedState = {
@@ -270,7 +276,8 @@ function renderTableTabs(openTables, activeTableKey) {
             }
           } else {
             // fallback: tell user to select from sidebar
-            console.log(
+            window.debug.info(
+              "TableTabs",
               "Table picker not available. Select a table from the sidebar."
             );
           }
@@ -484,22 +491,35 @@ function initializeSortableJSIfNeeded() {
 
 function performSortableInitialization() {
   if (isInitializingSortable) {
-    console.log("SortableJS: Already initializing, skipping duplicate request");
+    if (window.debug) {
+      window.debug.debug(
+        "SortableJS",
+        "Already initializing, skipping duplicate request"
+      );
+    }
     return;
   }
 
   const tabsBar = document.getElementById("table-tabs-bar");
   if (!tabsBar) {
-    console.log("SortableJS: No tabs-bar found, skipping initialization");
+    if (window.debug) {
+      window.debug.debug(
+        "SortableJS",
+        "No tabs-bar found, skipping initialization"
+      );
+    }
     return;
   }
 
   // Check if there are any draggable tabs
   const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
   if (draggableTabs.length === 0) {
-    console.log(
-      "SortableJS: No draggable tabs found, destroying instance if exists"
-    );
+    if (window.debug) {
+      window.debug.debug(
+        "SortableJS",
+        "No draggable tabs found, destroying instance if exists"
+      );
+    }
     destroySortableJS();
     return;
   }
@@ -509,20 +529,23 @@ function performSortableInitialization() {
     try {
       // Verify instance is still connected to the DOM and the right element
       if (sortableInstance.el === tabsBar && document.contains(tabsBar)) {
-        console.log(
-          "SortableJS: Instance still valid, skipping re-initialization"
+        window.debug.debug(
+          "SortableJS",
+          "Instance still valid, skipping re-initialization"
         );
         return;
       } else {
-        console.log(
-          "SortableJS: Instance element mismatch, destroying and recreating"
+        window.debug.debug(
+          "SortableJS",
+          "Instance element mismatch, destroying and recreating"
         );
         sortableInstance.destroy();
         sortableInstance = null;
       }
     } catch (error) {
-      console.log(
-        "SortableJS: Error checking instance validity, recreating:",
+      window.debug.debug(
+        "SortableJS",
+        "Error checking instance validity, recreating:",
         error
       );
       sortableInstance = null;
@@ -530,8 +553,9 @@ function performSortableInitialization() {
   }
 
   // Initialize fresh instance
-  console.log(
-    "SortableJS: Creating new instance for",
+  window.debug.debug(
+    "SortableJS",
+    "Creating new instance for",
     draggableTabs.length,
     "tabs"
   );
@@ -544,31 +568,31 @@ function performSortableInitialization() {
 function initializeSortableJS() {
   const tabsBar = document.getElementById("table-tabs-bar");
   if (!tabsBar) {
-    console.log("SortableJS: No tabs bar found, skipping initialization");
+    window.debug.debug("SortableJS", "No tabs bar found, skipping initialization");
     return; // Exit if no tabs bar
   }
 
   // Check if there are any draggable tabs
   const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
   if (draggableTabs.length === 0) {
-    console.log("SortableJS: No draggable tabs found, skipping initialization");
+    window.debug.debug("SortableJS", "No draggable tabs found, skipping initialization");
     return;
   }
 
   // Double-check for existing instance (should not happen with smart lifecycle)
   if (sortableInstance) {
-    console.log("SortableJS: Unexpected existing instance, destroying first");
+    window.debug.warn("SortableJS", "Unexpected existing instance, destroying first");
     try {
       sortableInstance.destroy();
     } catch (error) {
-      console.log("SortableJS: Error destroying existing instance:", error);
+      window.debug.error("SortableJS", "Error destroying existing instance:", error);
     }
     sortableInstance = null;
   }
 
   // Wait for SortableJS to be available globally
   if (typeof window.Sortable === "undefined") {
-    console.log("SortableJS: Library not loaded yet, retrying in 100ms");
+    window.debug.debug("SortableJS", "Library not loaded yet, retrying in 100ms");
     // Clear flag and retry later
     isInitializingSortable = false;
     setTimeout(initializeSortableJS, 100);
@@ -578,8 +602,9 @@ function initializeSortableJS() {
   // Set initialization flag to prevent concurrent initialization
   isInitializingSortable = true;
 
-  console.log(
-    "SortableJS: Initializing new instance with",
+  window.debug.debug(
+    "SortableJS",
+    "Initializing new instance with",
     draggableTabs.length,
     "draggable tabs"
   );
@@ -600,7 +625,7 @@ function initializeSortableJS() {
     filter: ".close-tab-btn, .tick-tab-btn, .tab-rename-input",
 
     onStart: function (evt) {
-      console.log("SortableJS: Drag started from index", evt.oldIndex);
+      window.debug.debug("SortableJS", "Drag started from index", evt.oldIndex);
 
       // Set a persistent flag to prevent any re-renders during and after drag
       if (typeof window.updateState === "function") {
@@ -617,14 +642,14 @@ function initializeSortableJS() {
     },
 
     onEnd: function (evt) {
-      console.log("SortableJS: Drag ended", evt.oldIndex, "->", evt.newIndex);
+      window.debug.debug("SortableJS", "Drag ended", evt.oldIndex, "->", evt.newIndex);
 
       // Remove visual feedback
       tabsBar.classList.remove("sortable-drag-active");
 
       // Only update state if position actually changed
       if (evt.oldIndex !== evt.newIndex) {
-        console.log("SortableJS: Reordering tabs");
+        window.debug.debug("SortableJS", "Reordering tabs");
 
         // CRITICAL: Get the new order from the actual DOM elements after SortableJS moved them
         const tabElements = tabsBar.querySelectorAll(
@@ -634,7 +659,7 @@ function initializeSortableJS() {
           .map((el) => el.getAttribute("data-table-key"))
           .filter((key) => key);
 
-        console.log("SortableJS: New DOM order:", newOrderKeys);
+        window.debug.debug("SortableJS", "New DOM order:", newOrderKeys);
 
         // Update state to match the DOM order, not the theoretical reorder
         if (
@@ -650,7 +675,7 @@ function initializeSortableJS() {
               )
               .filter((tab) => tab); // Remove any undefined entries
 
-            console.log("SortableJS: Updating state to match DOM order");
+            window.debug.debug("SortableJS", "Updating state to match DOM order");
 
             // Update state with DOM-based order and prevent re-render
             window.updateState(
@@ -688,7 +713,7 @@ function initializeSortableJS() {
           }
         }, 50);
       } else {
-        console.log("SortableJS: No position change, skipping reorder");
+        window.debug.debug("SortableJS", "No position change, skipping reorder");
 
         // Clear drag state immediately if no reorder
         if (typeof window.updateState === "function") {
@@ -706,7 +731,7 @@ function initializeSortableJS() {
       // Only prevent dropping on add-tab button
       // Let SortableJS handle everything else naturally!
       if (evt.related.classList.contains("add-tab")) {
-        console.log("SortableJS: Preventing drop on add-tab button");
+        window.debug.debug("SortableJS", "Preventing drop on add-tab button");
         return false;
       }
 
@@ -717,7 +742,7 @@ function initializeSortableJS() {
 
   // Clear initialization flag - instance successfully created
   isInitializingSortable = false;
-  console.log("SortableJS: Instance created successfully");
+  window.debug.info("SortableJS", "Instance created successfully");
 }
 
 /**
@@ -734,21 +759,21 @@ function destroySortableJS() {
     try {
       sortableInstance.destroy();
     } catch (error) {
-      console.log("SortableJS: Error during destruction:", error);
+      window.debug.error("SortableJS", "Error during destruction:", error);
     }
     sortableInstance = null;
   }
 
   // Clear initialization state
   isInitializingSortable = false;
-  console.log("SortableJS: Instance destroyed and state cleared");
+  window.debug.info("SortableJS", "Instance destroyed and state cleared");
 }
 
 /**
  * Refresh the SortableJS instance with new configuration
  */
 function refreshSortableInstance() {
-  console.log("SortableJS: Refreshing instance");
+  window.debug.debug("SortableJS", "Refreshing instance");
   destroySortableJS();
   // Small delay to ensure DOM is settled
   setTimeout(initializeSortableJS, 10);
@@ -758,7 +783,7 @@ function refreshSortableInstance() {
  * Force reinitialize SortableJS after DOM changes
  */
 function forceSortableReinit() {
-  console.log("SortableJS: Force reinitializing");
+  window.debug.debug("SortableJS", "Force reinitializing");
   destroySortableJS();
   initializeSortableJS();
 }
@@ -806,8 +831,9 @@ function updateActiveTab(activeTableKey) {
     );
     if (activeTab) {
       activeTab.classList.add("active");
-      console.log(
-        "Table tabs: Updated active tab to",
+      window.debug.debug(
+        "TableTabs",
+        "Updated active tab to",
         activeTableKey,
         "without re-render"
       );
@@ -819,29 +845,30 @@ function updateActiveTab(activeTableKey) {
  * Debug function to check SortableJS status
  */
 function debugSortableJS() {
-  console.log("=== SortableJS Debug Info ===");
-  console.log(
+  window.debug.debug("SortableJS", "=== SortableJS Debug Info ===");
+  window.debug.debug(
+    "SortableJS",
     "SortableJS library loaded:",
     typeof window.Sortable !== "undefined"
   );
-  console.log("SortableJS instance exists:", !!sortableInstance);
+  window.debug.debug("SortableJS", "SortableJS instance exists:", !!sortableInstance);
 
   const tabsBar = document.getElementById("table-tabs-bar");
-  console.log("Tabs bar element found:", !!tabsBar);
+  window.debug.debug("SortableJS", "Tabs bar element found:", !!tabsBar);
 
   if (tabsBar) {
     const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
-    console.log("Number of draggable tabs:", draggableTabs.length);
+    window.debug.debug("SortableJS", "Number of draggable tabs:", draggableTabs.length);
     draggableTabs.forEach((tab, index) => {
-      console.log(`  Tab ${index}:`, tab.getAttribute("data-table-key"));
+      window.debug.debug("SortableJS", `  Tab ${index}:`, tab.getAttribute("data-table-key"));
     });
   }
 
   if (sortableInstance) {
-    console.log("SortableJS instance el:", sortableInstance.el);
-    console.log("SortableJS options:", sortableInstance.option());
+    window.debug.debug("SortableJS", "SortableJS instance el:", sortableInstance.el);
+    window.debug.debug("SortableJS", "SortableJS options:", sortableInstance.option());
   }
-  console.log("=== End Debug Info ===");
+  window.debug.debug("SortableJS", "=== End Debug Info ===");
 }
 
 /**
@@ -887,7 +914,7 @@ function initializeTabContextMenu() {
     }
   });
 
-  console.log("Tab context menu initialized");
+  window.debug.info("TableTabs", "Tab context menu initialized");
 }
 
 // Helper: get all table names from state (for table picker)
@@ -1111,7 +1138,7 @@ function executeTabContextMenuAction(action, tabKey, tabLabel) {
               }
             }
           } else {
-            console.warn("No query found for tab:", tabKey);
+            window.debug.warn("TableTabs", "No query found for tab:", tabKey);
           }
         }
       }
@@ -1134,7 +1161,7 @@ function executeTabContextMenuAction(action, tabKey, tabLabel) {
             });
           }
         } else {
-          console.warn("No query found for refresh on tab:", tabKey);
+          window.debug.warn("TableTabs", "No query found for refresh on tab:", tabKey);
         }
       }
       break;
@@ -1166,6 +1193,6 @@ function executeTabContextMenuAction(action, tabKey, tabLabel) {
       break;
 
     default:
-      console.warn("Unknown tab context menu action:", action);
+      window.debug.warn("TableTabs", "Unknown tab context menu action:", action);
   }
 }

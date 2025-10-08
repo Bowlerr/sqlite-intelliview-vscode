@@ -54,7 +54,7 @@ if (
    * Uses functions from modular files loaded before this script
    */
 
-  console.log("SQLite IntelliView: Starting main initialization...");
+  window.debug.info("main", "SQLite IntelliView: Starting main initialization...");
 
   // --- Sidebar maximize logic ---
   function maximizeSidebar() {
@@ -170,7 +170,7 @@ if (
      * Initialize the SQLite IntelliView application
      */
     function initializeApp() {
-      console.log("Initializing SQLite IntelliView application...");
+      window.debug.info("main", "Initializing SQLite IntelliView application...");
 
       try {
         // Initialize modules (functions from loaded JS files)
@@ -192,25 +192,26 @@ if (
 
         // Initialize enhanced query editor
         if (typeof (/** @type {any} */ (window).QueryEditor) !== "undefined") {
-          console.log("Initializing enhanced query editor...");
+          window.debug.info("main", "Initializing enhanced query editor...");
           /** @type {any} */ (window).queryEditor = new /** @type {any} */ (
             window
           ).QueryEditor();
           /** @type {any} */ (window).queryEditor
             .init()
             .then(() => {
-              console.log("Enhanced query editor initialized successfully");
+              window.debug.info("main", "Enhanced query editor initialized successfully");
               // Connect to existing buttons
               connectQueryButtons();
             })
             .catch((error) => {
-              console.error(
+              window.debug.error(
+                "main",
                 "Failed to initialize enhanced query editor:",
                 error
               );
             });
         } else {
-          console.warn("QueryEditor class not found, using fallback");
+          window.debug.warn("main", "QueryEditor class not found, using fallback");
         }
 
         // Initialize diagram functionality
@@ -225,10 +226,10 @@ if (
 
         // Initialize SortableJS for table tabs
         if (typeof window.initializeSortableJS === "function") {
-          console.log("Initializing SortableJS for table tabs...");
+          window.debug.info("main", "Initializing SortableJS for table tabs...");
           // Delay initialization to ensure DOM is ready
           setTimeout(() => {
-            console.log("Delayed SortableJS initialization");
+            window.debug.info("main", "Delayed SortableJS initialization");
             window.initializeSortableJS();
           }, 500);
         }
@@ -243,7 +244,7 @@ if (
           initializeQueryEditorVisibility();
         }
 
-        console.log("SQLite IntelliView initialized successfully");
+        window.debug.info("main", "SQLite IntelliView initialized successfully");
 
         // Load initial data
         loadInitialData();
@@ -251,7 +252,7 @@ if (
         // Attach sidebar table handlers after all scripts loaded
         setTimeout(attachSidebarTableHandlers, 300);
       } catch (error) {
-        console.error("Error during initialization:", error);
+        window.debug.error("main", "Error during initialization:", error);
         if (typeof showError === "function") {
           showError("Failed to initialize: " + error.message);
         }
@@ -267,7 +268,7 @@ if (
      * Add a table to open tabs (if not already open) and make it active
      */
     function openTableTab(tableName, page = 1, pageSize = 100) {
-      console.log("[openTableTab] called with:", tableName, { page, pageSize });
+      window.debug.debug("main", "[openTableTab] called with:", tableName, { page, pageSize });
       const state =
         typeof window.getCurrentState === "function"
           ? window.getCurrentState()
@@ -401,11 +402,11 @@ if (
      * Internal: select table and load data (does not update tab state)
      */
     function selectTableInternal(tableKey, page = 1, pageSize = 100) {
-      console.log("[selectTableInternal] called with:", tableKey, {
+      window.debug.debug("main", "[selectTableInternal] called with:", tableKey, {
         page,
         pageSize,
       });
-      console.log(`Selecting table: ${tableKey}`);
+      window.debug.debug("main", `Selecting table: ${tableKey}`);
 
       // Update minimized sidebar with selected table
       if (window.updateSelectedTableSafe) {
@@ -541,7 +542,8 @@ if (
     function requestTableSchema(tableName) {
       const state =
         typeof getCurrentState === "function" ? getCurrentState() : {};
-      console.log(
+      window.debug.debug(
+        "main",
         "Requesting table schema with encryption key:",
         state.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
       );
@@ -559,7 +561,8 @@ if (
     function requestTableData(tableName, page = 1, pageSize = 100) {
       const state =
         typeof getCurrentState === "function" ? getCurrentState() : {};
-      console.log(
+      window.debug.debug(
+        "main",
         "Requesting table data with encryption key:",
         state.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
       );
@@ -821,7 +824,8 @@ if (
       };
     }
   } catch (error) {
-    console.error(
+    window.debug.error(
+      "main",
       "SQLite IntelliView: Fatal error during initialization:",
       error
     );

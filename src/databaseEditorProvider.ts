@@ -14,6 +14,21 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     /** cache full pages keyed by `${db}:${table}:${page}:${pageSize}` → QueryResult.values */
     private lastPageCache = new Map<string, any[][]>();
 
+    /** Development mode logging helper */
+    private isDevelopment = process.env.NODE_ENV === 'development' || vscode.env.appName.includes('Dev');
+    
+    private debugLog(component: string, message: string, ...args: any[]): void {
+        if (this.isDevelopment) {
+            console.log(`[${component}] ${message}`, ...args);
+        }
+    }
+
+    private debugError(component: string, message: string, ...args: any[]): void {
+        if (this.isDevelopment) {
+            console.error(`[${component}] ${message}`, ...args);
+        }
+    }
+
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
         const providerRegistration = vscode.window.registerCustomEditorProvider(
@@ -94,7 +109,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
         // Handle messages from the webview
         webviewPanel.webview.onDidReceiveMessage(e => {
-            console.log(`[onDidReceiveMessage] Received message type: ${e.type}`, e);
+            this.debugLog('onDidReceiveMessage', `Received message type: ${e.type}`, e);
             
             switch (e.type) {
                 case 'requestDatabaseInfo':
@@ -113,7 +128,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     this.handleCellUpdateRequest(webviewPanel, document.uri.fsPath, e.tableName, e.rowIndex, e.columnName, e.newValue, e.key);
                     return;
                 case 'deleteRow':
-                    console.log(`[onDidReceiveMessage] Processing deleteRow message`);
+                    this.debugLog('onDidReceiveMessage', 'Processing deleteRow message');
                     this.handleDeleteRowRequest(webviewPanel, document.uri.fsPath, e.tableName, e.rowId, e.key);
                     return;
                 case 'generateERDiagram':
@@ -179,7 +194,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; img-src ${webview.cspSource} data:; worker-src blob:; child-src blob:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; worker-src blob:; child-src blob:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${cssLinks}
                 <title>SQLite IntelliView</title>
@@ -310,12 +325,14 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'd3.min.js'))}"></script>
                 
                 <!-- Load SortableJS for drag-and-drop functionality -->
-                <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'Sortable.min.js'))}"></script>
                 
                 <!-- Load Monaco Editor -->
-                <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'monaco-editor', 'vs', 'loader.js'))}"></script>
                 
                 <!-- Load modular JavaScript files in dependency order -->
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'debug.js'))}"></script>
+                <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'debug-ui.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'state.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'dom.js'))}"></script>
                 <script nonce="${nonce}" src="${webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'notifications.js'))}"></script>
@@ -460,7 +477,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     pageSize: pageSize!,
                     lastPageData: data // <--- store the actual rows
                 });
-                console.log('[getTableDataPaginated] lastSync set for', databasePath, { table: tableName, page, pageSize, lastPageData: data });
+                this.debugLog('getTableDataPaginated', 'lastSync set for', databasePath, { table: tableName, page, pageSize, lastPageData: data });
             }
         } catch (error) {
             webviewPanel.webview.postMessage({
@@ -471,22 +488,18 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     private async handleCellUpdateRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, rowIndex: number, columnName: string, newValue: any, key?: string) {
-        console.log(`[handleCellUpdateRequest] Processing cell update request:`, {
-            databasePath,
-            tableName,
-            rowIndex,
-            columnName,
-            newValue,
-            hasKey: !!key
+        this.debugLog('handleCellUpdateRequest', `Processing cell update request:`, {
+            tableName, rowIndex, columnName, newValue,
+            databasePath: databasePath.substring(databasePath.lastIndexOf('/') + 1)
         });
 
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
             // First, get the rowid for the row we want to update
-            console.log(`[handleCellUpdateRequest] Getting rowid for row index ${rowIndex}`);
+            this.debugLog('handleCellUpdateRequest', `Getting rowid for row index ${rowIndex}`);
             const rowId = await dbService.getCellRowId(tableName, rowIndex);
             // Update the cell data
-            console.log(`[handleCellUpdateRequest] Updating cell data with rowid ${rowId}`);
+            this.debugLog('handleCellUpdateRequest', `Updating cell data with rowid ${rowId}`);
             await dbService.updateCellData(tableName, rowId, columnName, newValue);
             // Send success response
             webviewPanel.webview.postMessage({
@@ -498,9 +511,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 newValue: newValue
             });
             
-            console.log(`[handleCellUpdateRequest] Cell update completed successfully`);
+            this.debugLog('handleCellUpdateRequest', 'Cell update completed successfully');
         } catch (error) {
-            console.error(`[handleCellUpdateRequest] Cell update failed:`, error);
+            this.debugError('handleCellUpdateRequest', 'Cell update failed:', error);
             webviewPanel.webview.postMessage({
                 type: 'cellUpdateError',
                 success: false,
@@ -514,15 +527,15 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     private async handleTableSchemaRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string) {
         try {
-            console.log(`Handling schema request for table: ${tableName}, key provided: ${key ? '[PROVIDED]' : '[EMPTY]'}`);
+            this.debugLog('handleSchemaRequest', `Handling schema request for table: ${tableName}, key provided: ${key ? '[PROVIDED]' : '[EMPTY]'}`);
             const dbService = await this.getOrCreateConnection(databasePath, key);
             const result = await dbService.getTableSchema(tableName);
             
             // Also get foreign key information for the table
             const foreignKeys = await dbService.getForeignKeys(tableName);
 
-            console.log(`Schema result for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
-            console.log(`Foreign keys for ${tableName}:`, foreignKeys);
+            this.debugLog('handleSchemaRequest', `Schema result for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
+            this.debugLog('handleSchemaRequest', `Foreign keys for ${tableName}:`, foreignKeys);
             
             webviewPanel.webview.postMessage({
                 type: 'tableSchema',
@@ -533,7 +546,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 foreignKeys: foreignKeys
             });
         } catch (error) {
-            console.error(`Schema request failed for ${tableName}:`, error);
+            this.debugError('handleSchemaRequest', `Schema request failed for ${tableName}:`, error);
             webviewPanel.webview.postMessage({
                 type: 'error',
                 message: `Failed to load table schema: ${error}`
@@ -543,9 +556,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     private async handleERDiagramRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, key?: string) {
         try {
-            console.log(`=== ER DIAGRAM REQUEST START ===`);
-            console.log(`Database path: ${databasePath}`);
-            console.log(`Key provided: ${key ? 'YES' : 'NO'}`);
+            this.debugLog('handleERDiagramRequest', '=== ER DIAGRAM REQUEST START ===');
+            this.debugLog('handleERDiagramRequest', `Database path: ${databasePath}`);
+            this.debugLog('handleERDiagramRequest', `Key provided: ${key ? 'YES' : 'NO'}`);
             
             // Send progress update - step 1
             webviewPanel.webview.postMessage({

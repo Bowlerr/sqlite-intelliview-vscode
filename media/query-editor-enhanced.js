@@ -45,9 +45,12 @@ WHERE column1 = 'value';`;
       throw new Error("Query editor container not found");
     }
     if (window.require) {
+      // Use local Monaco Editor files for offline functionality
+      const monacoBasePath = new URL("./monaco-editor/vs", document.baseURI)
+        .href;
       window.require.config({
         paths: {
-          vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs",
+          vs: monacoBasePath,
         },
       });
       window.require(["vs/editor/editor.main"], () => {

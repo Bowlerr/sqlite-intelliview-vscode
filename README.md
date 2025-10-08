@@ -133,10 +133,24 @@ Or search for **"SQLite IntelliView"** in the Extensions sidebar.
 git clone https://github.com/Bowlerr/sqlite-intelliview-vscode.git
 cd sqlite-intelliview-vscode
 npm install
+npm run vendor   # Vendor external libraries (Monaco Editor, etc.)
 npm run compile
 # For development mode:
 npm run watch
 ```
+
+### Packaging
+
+```sh
+npm run package  # Automatically runs vendor + compile + vsce package
+```
+
+### Debug Controls
+
+In development, press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> to open debug controls for:
+- Adjusting log levels (OFF, ERROR, WARN, INFO, DEBUG, TRACE) 
+- Exporting debug logs for troubleshooting
+- Real-time debugging feedback
 
 ### Test
 
@@ -152,6 +166,18 @@ npm run lint
 
 ---
 
+## Troubleshooting
+
+### Debug Mode
+If you encounter issues, enable debug logging:
+1. Press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> to open debug controls
+2. Set debug level to **DEBUG** or **TRACE**
+3. Reproduce the issue
+4. Click **Export** to save debug logs
+5. Share the exported JSON file when reporting issues
+
+---
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes and version history.
@@ -164,13 +190,15 @@ MIT License – see [LICENSE](LICENSE) for details.
 
 ---
 
-## Credits & Dependencies
+## Credits / Architecture & Dependencies
 
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)
-- [sql.js](https://github.com/sql-js/sql.js)
-- [monaco-editor](https://github.com/microsoft/monaco-editor)
-- [d3](https://d3js.org/)
-- [VS Code API](https://code.visualstudio.com/api)
+### Core Libraries
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - High-performance SQLite binding
+- [sql.js](https://github.com/sql-js/sql.js) - SQLite compiled to WebAssembly
+- [monaco-editor](https://github.com/microsoft/monaco-editor) - Code editor (bundled locally)
+- [sortablejs](https://sortablejs.github.io/Sortable/) - Drag-and-drop functionality (bundled locally)  
+- [d3](https://d3js.org/) - Data visualization for ER diagrams
+- [VS Code API](https://code.visualstudio.com/api) - Extension host integration
 
 ---
 

@@ -181,6 +181,8 @@
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "vendor": "node vendor-libs.js",
+    "prepackage": "npm run vendor && npm run compile",
     "package": "vsce package",
     "publish": "vsce publish",
     "lint": "eslint src --fix",
