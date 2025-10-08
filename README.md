@@ -13,6 +13,24 @@
 
 ---
 
+
+## What’s New in 0.2.16
+
+- Major speed and stability improvements for a smoother experience
+- Full offline support: All features work without an internet connection
+- New tabbed interface for tables and query results: Open, switch, rename, and drag tabs for multiple tables and query results at once
+- Faster, more responsive tabs and table navigation
+- Improved drag-and-drop for tabs—no more glitches or stuck states
+- Enhanced security: No external network requests or CDN dependencies
+- Smaller, more efficient extension package
+- Smarter rendering: Fewer unnecessary updates for better performance
+- Better error reporting and troubleshooting tools
+- Build and packaging process improvements for reliability
+- All core libraries (Monaco Editor, SortableJS) now bundled locally
+- No breaking changes—fully backwards compatible
+
+---
+
 ## Features
 
 - **Custom Editor for SQLite Files**: Open `.db`, `.sqlite`, and `.sqlite3` files in a rich, Monaco-powered editor.
