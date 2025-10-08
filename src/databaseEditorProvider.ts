@@ -19,13 +19,19 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     
     private debugLog(component: string, message: string, ...args: any[]): void {
         if (this.isDevelopment) {
-            console.log(`[${component}] ${message}`, ...args);
+            console.info(component, message, ...args);
         }
     }
 
     private debugError(component: string, message: string, ...args: any[]): void {
         if (this.isDevelopment) {
-            console.error(`[${component}] ${message}`, ...args);
+            console.error(component, message, ...args);
+        }
+    }
+
+    private debugWarn(component: string, message: string, ...args: any[]): void {
+        if (this.isDevelopment) {
+            console.warn(component, message, ...args);
         }
     }
 
@@ -194,7 +200,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; worker-src blob:; child-src blob:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; img-src ${webview.cspSource} data:; worker-src blob: ${webview.cspSource}; child-src blob:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${cssLinks}
                 <title>SQLite IntelliView</title>
@@ -567,9 +573,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 message: 'Connecting to database...'
             });
             
-            console.log(`Attempting to get database connection...`);
+            this.debugLog('ERDiagram', 'Attempting to get database connection...');
             const dbService = await this.getOrCreateConnection(databasePath, key);
-            console.log(`Database connection successful`);
+            this.debugLog('ERDiagram', 'Database connection successful');
             
             // Send progress update - step 2
             webviewPanel.webview.postMessage({
@@ -578,10 +584,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 message: 'Analyzing database tables...'
             });
             
-            console.log(`Getting tables list...`);
+            this.debugLog('ERDiagram', 'Getting tables list...');
             // Get all tables
             const tables = await dbService.getTables();
-            console.log(`Found ${tables.length} tables:`, tables.map(t => t.name));
+            this.debugLog('ERDiagram', `Found ${tables.length} tables:`, tables.map(t => t.name));
             
             // Send progress update with table count
             webviewPanel.webview.postMessage({
@@ -590,12 +596,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 message: `Found ${tables.length} tables, analyzing schemas...`
             });
             
-            console.log(`Starting schema analysis for ${tables.length} tables...`);
+            this.debugLog('ERDiagram', `Starting schema analysis for ${tables.length} tables...`);
             
             // Get schema for each table
             const tablesWithSchemas = await Promise.all(
                 tables.map(async (table, index) => {
-                    console.log(`Processing table ${index + 1}/${tables.length}: ${table.name}`);
+                    this.debugLog('ERDiagram', `Processing table ${index + 1}/${tables.length}: ${table.name}`);
                     
                     // Send progress update for each table
                     webviewPanel.webview.postMessage({
@@ -606,7 +612,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     
                     try {
                         const schema = await dbService.getTableSchema(table.name);
-                        console.log(`Schema for ${table.name}:`, schema);
+                        this.debugLog('ERDiagram', `Schema for ${table.name}:`, schema);
                         
                         const columns = schema.values.map((row: any) => ({
                             name: row[1], // column name
@@ -616,20 +622,20 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                             primaryKey: row[5] === 1 // primary key
                         }));
                         
-                        console.log(`Table ${table.name} processed: ${columns.length} columns`);
+                        this.debugLog('ERDiagram', `Table ${table.name} processed: ${columns.length} columns`);
                         
                         return {
                             name: table.name,
                             columns: columns
                         };
                     } catch (error) {
-                        console.error(`Error processing table ${table.name}:`, error);
+                        this.debugError('ERDiagram', `Error processing table ${table.name}:`, error);
                         throw error;
                     }
                 })
             );
 
-            console.log(`Schema analysis complete. Starting foreign key detection...`);
+            this.debugLog('ERDiagram', 'Schema analysis complete. Starting foreign key detection...');
             
             // Send progress update - step 3
             webviewPanel.webview.postMessage({
@@ -642,10 +648,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const relationships = await Promise.all(
                 tables.map(async (table, index) => {
                     try {
-                        console.log(`Checking foreign keys for table ${index + 1}/${tables.length}: ${table.name}`);
+                        this.debugLog('ERDiagram', `Checking foreign keys for table ${index + 1}/${tables.length}: ${table.name}`);
                         
                         const foreignKeys = await dbService.executeQuery(`PRAGMA foreign_key_list(${table.name})`);
-                        console.log(`Foreign keys result for ${table.name}:`, foreignKeys);
+                        this.debugLog('ERDiagram', `Foreign keys result for ${table.name}:`, foreignKeys);
                         
                         const fkList = foreignKeys.values.map((fk: any) => ({
                             column: fk[3], // from column
@@ -654,7 +660,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                         }));
                         
                         if (fkList.length > 0) {
-                            console.log(`Found ${fkList.length} foreign keys in ${table.name}:`, fkList);
+                            this.debugLog('ERDiagram', `Found ${fkList.length} foreign keys in ${table.name}:`, fkList);
                         }
                         
                         return {
@@ -662,7 +668,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                             foreignKeys: fkList
                         };
                     } catch (error) {
-                        console.warn(`Failed to get foreign keys for ${table.name}:`, error);
+                        this.debugError('ERDiagram', `Failed to get foreign keys for ${table.name}:`, error);
                         return {
                             table: table.name,
                             foreignKeys: []
@@ -672,10 +678,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             );
 
             const filteredRelationships = relationships.filter(rel => rel.foreignKeys.length > 0);
-            console.log(`Found ${filteredRelationships.length} tables with foreign key relationships`);
-            console.log(`Relationships:`, filteredRelationships);
+            this.debugLog('ERDiagram', `Found ${filteredRelationships.length} tables with foreign key relationships`);
+            this.debugLog('ERDiagram', 'Relationships:', filteredRelationships);
 
-            console.log(`Sending final ER diagram data...`);
+            this.debugLog('ERDiagram', 'Sending final ER diagram data...');
             
             // Send final success message
             webviewPanel.webview.postMessage({
@@ -685,12 +691,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 relationships: filteredRelationships
             });
             
-            console.log(`=== ER DIAGRAM REQUEST COMPLETE ===`);
+            this.debugLog('ERDiagram', '=== ER DIAGRAM REQUEST COMPLETE ===');
             
         } catch (error) {
-            console.error(`=== ER DIAGRAM REQUEST FAILED ===`);
-            console.error(`Error details:`, error);
-            console.error(`Stack trace:`, error instanceof Error ? error.stack : 'No stack trace');
+            this.debugError('ERDiagram', '=== ER DIAGRAM REQUEST FAILED ===');
+            this.debugError('ERDiagram', 'Error details:', error);
+            this.debugError('ERDiagram', 'Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
             
             webviewPanel.webview.postMessage({
                 type: 'erDiagram',
@@ -701,7 +707,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     private async handleDeleteRowRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, rowId: any, key?: string) {
-        console.log(`[handleDeleteRowRequest] Starting delete row request:`, {
+        this.debugLog('DeleteRow', 'Starting delete row request:', {
             databasePath,
             tableName,
             rowId,
@@ -712,7 +718,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const dbService = await this.getOrCreateConnection(databasePath, key);
             
             // Delete the row
-            console.log(`[handleDeleteRowRequest] Deleting row with identifier:`, rowId);
+            this.debugLog('DeleteRow', 'Deleting row with identifier:', rowId);
             await dbService.deleteRow(tableName, rowId);
             
             // Send success response
@@ -723,9 +729,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 rowId: rowId
             });
             
-            console.log(`[handleDeleteRowRequest] Row deletion completed successfully`);
+            this.debugLog('DeleteRow', 'Row deletion completed successfully');
         } catch (error) {
-            console.error(`[handleDeleteRowRequest] Row deletion failed:`, error);
+            this.debugError('DeleteRow', 'Row deletion failed:', error);
             webviewPanel.webview.postMessage({
                 type: 'deleteRowError',
                 success: false,
@@ -742,11 +748,11 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         const normalizedKey = key || '';
         const connectionKey = `${databasePath}:${normalizedKey}`;
         
-        console.log(`Getting connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
+        this.debugLog('Connection', `Getting connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
         this.debugLogConnections();
         
         if (this.activeConnections.has(connectionKey)) {
-            console.log('Reusing existing connection');
+            this.debugLog('Connection', 'Reusing existing connection');
             return this.activeConnections.get(connectionKey)!;
         }
         
@@ -754,12 +760,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         // This handles cases where the key might be passed inconsistently
         for (const [existingKey, connection] of this.activeConnections) {
             if (existingKey.startsWith(`${databasePath}:`)) {
-                console.log(`Found existing connection for database path: ${databasePath}`);
+                this.debugLog("Connection", `Found existing connection for database path: ${databasePath}`);
                 return connection;
             }
         }
         
-        console.log('Creating new connection');
+        this.debugLog('Connection', 'Creating new connection');
         const dbService = new DatabaseService();
         await dbService.openDatabase(databasePath, normalizedKey || undefined);
         this.activeConnections.set(connectionKey, dbService);
@@ -784,32 +790,28 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     private closeConnection(databasePath: string, key?: string): void {
         if (key !== undefined) {
-            // Close specific connection with key
             const normalizedKey = key || '';
             const connectionKey = `${databasePath}:${normalizedKey}`;
             const connection = this.activeConnections.get(connectionKey);
-            
             if (connection) {
-                console.log(`Closing connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
+                console.info('Closing connection', `for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
                 connection.closeDatabase();
                 this.activeConnections.delete(connectionKey);
             }
         } else {
-            // Close all connections for this database path
             const keysToDelete = [];
             for (const [connectionKey, connection] of this.activeConnections) {
                 if (connectionKey.startsWith(`${databasePath}:`)) {
-                    console.log(`Closing connection for database path: ${databasePath}`);
+                    console.info('Closing connection', `for database path: ${databasePath}`);
                     connection.closeDatabase();
                     keysToDelete.push(connectionKey);
                 }
             }
             keysToDelete.forEach(key => this.activeConnections.delete(key));
-            // Only clear sync state if the panel is closed
             if (!this.webviewPanels.has(databasePath)) {
                 this.lastSync.delete(databasePath);
             } else {
-                console.log(`[closeConnection] Panel still open for ${databasePath}, retaining lastSync`);
+                console.info('Panel still open', `for ${databasePath}, retaining lastSync`);
             }
         }
     }
@@ -823,9 +825,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     private debugLogConnections(): void {
-        console.log(`Active connections (${this.activeConnections.size}):`);
+        console.info('Active connections', `(${this.activeConnections.size}):`);
         for (const [key, connection] of this.activeConnections) {
-            console.log(`  - ${key}`);
+            console.info('Connection Key', key);
         }
     }
 
@@ -837,34 +839,28 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     public async handleExternalDatabaseChange(databasePath: string) {
-        // Close and reopen the connection to ensure SQLite sees external changes
         this.closeConnection(databasePath);
         const panel = this.webviewPanels.get(databasePath);
         const sync = this.lastSync.get(databasePath);
-        console.log('[handleExternalDatabaseChange] Triggered for', databasePath, { hasPanel: !!panel, hasSync: !!sync });
+        console.info('DatabaseChange', `[handleExternalDatabaseChange] Triggered for ${databasePath}`, { hasPanel: !!panel, hasSync: !!sync });
         if (!panel || !sync) {
-            console.warn('[handleExternalDatabaseChange] No panel or sync found for', databasePath, { panel, sync });
+            console.warn('DatabaseChange', `[handleExternalDatabaseChange] No panel or sync found for ${databasePath}`, { panel, sync });
             return;
         }
-        // fetch old & new page
         const { table, page, pageSize, lastPageData } = sync;
-        console.log('[handleExternalDatabaseChange] Using sync state', { table, page, pageSize, lastPageData });
-        // Reopen the connection
+        console.info('DatabaseChange', "[handleExternalDatabaseChange] Using sync state", { table, page, pageSize, lastPageData });
         const db = await this.getOrCreateConnection(databasePath);
-        // Fetch new page data WITHOUT updating lastSync
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
-        console.log('[handleExternalDatabaseChange] New page data fetched', { newResult });
+        console.info('New page data fetched', { newResult });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;
-        console.log('[handleExternalDatabaseChange] oldRows:', JSON.stringify(oldRows));
-        console.log('[handleExternalDatabaseChange] newRows:', JSON.stringify(newRows));
+        console.info('Old Rows', JSON.stringify(oldRows));
+        console.info('New Rows', JSON.stringify(newRows));
         const baseIndex = (page - 1) * pageSize;
-        // Build maps of rowid → localIndex
         const oldMap = new Map();
         oldRows.forEach((r, i) => oldMap.set(r[0], JSON.stringify(r)));
         const newMap = new Map();
         newRows.forEach((r, i) => newMap.set(r[0], JSON.stringify(r)));
-        // DELETES
         const deletes: number[] = [];
         for (const [rowid, _] of oldMap) {
             if (!newMap.has(rowid)) {
@@ -872,14 +868,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 deletes.push(baseIndex + localIdx);
             }
         }
-        // INSERTS
         const inserts: { rowIndex: number; rowData: any[] }[] = [];
         newRows.forEach((r, i) => {
             if (!oldMap.has(r[0])) {
                 inserts.push({ rowIndex: baseIndex + i, rowData: r });
             }
         });
-        // UPDATES
         const updates: { rowIndex: number; rowData: any[] }[] = [];
         newRows.forEach((r, i) => {
             const rowid = r[0], payload = JSON.stringify(r);
@@ -887,8 +881,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 updates.push({ rowIndex: baseIndex + i, rowData: r });
             }
         });
-        console.log('[handleExternalDatabaseChange] Delta computed', { inserts, updates, deletes });
-        // send them back to the webview
+        console.info('Delta computed', { inserts, updates, deletes });
         panel.webview.postMessage({
             type: 'tableDataDelta',
             tableName: table,
@@ -896,11 +889,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             updates,
             deletes
         });
-        console.log('[handleExternalDatabaseChange] tableDataDelta sent to webview', { table, inserts, updates, deletes });
-        // update our lastPageData snapshot
+        console.info('tableDataDelta sent to webview', { table, inserts, updates, deletes });
         sync.lastPageData = newRows;
         this.lastSync.set(databasePath, sync);
-        console.log('[handleExternalDatabaseChange] lastPageData updated in lastSync', { databasePath, lastPageData: sync.lastPageData });
+        console.info('lastPageData updated in lastSync', { databasePath, lastPageData: sync.lastPageData });
     }
 }
 

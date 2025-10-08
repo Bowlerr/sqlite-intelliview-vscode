@@ -57,6 +57,25 @@ export class DatabaseService {
     private tempDecryptedPath: string | null = null;
     private currentDatabasePath: string | null = null;
     private currentEncryptionKey: string | null = null;
+    private isDevelopment = process.env.NODE_ENV === 'development' || (typeof process !== 'undefined' && process.env.VSCODE_PID !== undefined);
+
+    private debugLog(component: string, message: string, ...args: any[]): void {
+        if (this.isDevelopment) {
+            console.log(`[${component}] ${message}`, ...args);
+        }
+    }
+
+    private debugError(component: string, message: string, ...args: any[]): void {
+        if (this.isDevelopment) {
+            console.error(`[${component}] ${message}`, ...args);
+        }
+    }
+
+    private debugWarn(component: string, message: string, ...args: any[]): void {
+        if (this.isDevelopment) {
+            console.warn(`[${component}] ${message}`, ...args);
+        }
+    }
 
     async initialize(): Promise<void> {
         if (!this.SQL) {
@@ -153,9 +172,9 @@ export class DatabaseService {
             // SQLCipher proper decryption using the standard approach
             const decryptCommand = `echo "PRAGMA key = '${escapedKey}'; ATTACH DATABASE '${this.tempDecryptedPath}' AS plaintext KEY ''; SELECT sqlcipher_export('plaintext'); DETACH DATABASE plaintext;" | sqlcipher "${databasePath}"`;
 
-            console.log('Attempting to decrypt database with SQLCipher...');
+            this.debugLog('Decrypt', 'Attempting to decrypt database with SQLCipher...');
             const result = await execAsync(decryptCommand);
-            console.log('SQLCipher command result:', result);
+            this.debugLog('Decrypt', 'SQLCipher command result:', result);
 
             // Verify the decrypted file exists and is valid
             if (!fs.existsSync(this.tempDecryptedPath)) {
@@ -173,7 +192,7 @@ export class DatabaseService {
                 throw new Error('Decryption failed - output is not a valid SQLite database. Please check your encryption key.');
             }
 
-            console.log('Database successfully decrypted');
+            this.debugLog('Decrypt', 'Database successfully decrypted');
             return this.tempDecryptedPath;
 
         } catch (error) {
@@ -185,7 +204,7 @@ export class DatabaseService {
                 this.tempDecryptedPath = null;
             }
             
-            console.error('Decryption error:', error);
+            this.debugError('Decrypt', 'Decryption error:', error);
             
             if (error instanceof Error) {
                 // Provide more helpful error messages
@@ -305,7 +324,7 @@ export class DatabaseService {
             stmt.free();
 
             if (rowCount >= maxRows) {
-                console.warn(`Query result truncated to ${maxRows} rows`);
+                this.debugWarn('Query', `Query result truncated to ${maxRows} rows`);
             }
 
             return result;
@@ -335,7 +354,7 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        console.log(`[updateCellData] Starting cell update:`, {
+        this.debugLog('CellUpdate', 'Starting cell update:', {
             tableName,
             rowId,
             columnName,
@@ -365,13 +384,13 @@ export class DatabaseService {
                 }
             }
             
-            console.log(`[updateCellData] Executing query:`, updateQuery);
-            console.log(`[updateCellData] Parameters:`, [processedValue, rowId]);
+            this.debugLog('CellUpdate', 'Executing query:', updateQuery);
+            this.debugLog('CellUpdate', 'Parameters:', [processedValue, rowId]);
             
             stmt.run([processedValue, rowId]);
             stmt.free();
             
-            console.log(`[updateCellData] Successfully updated ${tableName}.${columnName} = ${processedValue} where rowid = ${rowId}`);
+            this.debugLog('CellUpdate', `Successfully updated ${tableName}.${columnName} = ${processedValue} where rowid = ${rowId}`);
             
             // CRITICAL: Save changes back to the database file
             await this.saveChangesToFile();
@@ -380,10 +399,10 @@ export class DatabaseService {
                 markInternalUpdate(this.currentDatabasePath);
             }
             
-            console.log(`[updateCellData] Cell update completed successfully`);
+            this.debugLog('CellUpdate', 'Cell update completed successfully');
             
         } catch (error) {
-            console.error(`[updateCellData] Failed to update cell:`, error);
+            this.debugError('CellUpdate', 'Failed to update cell:', error);
             throw new Error(`Failed to update cell: ${error}`);
         }
     }
@@ -393,7 +412,7 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        console.log(`[deleteRow] Starting row deletion:`, {
+        this.debugLog('DeleteRow', 'Starting row deletion:', {
             tableName,
             rowIdentifier
         });
@@ -437,14 +456,14 @@ export class DatabaseService {
                 throw new Error('Invalid row identifier format');
             }
             
-            console.log(`[deleteRow] Executing query:`, deleteQuery);
-            console.log(`[deleteRow] Parameters:`, parameters);
+            this.debugLog('DeleteRow', 'Executing query:', deleteQuery);
+            this.debugLog('DeleteRow', 'Parameters:', parameters);
             
             const stmt = this.db.prepare(deleteQuery);
             stmt.run(parameters);
             stmt.free();
             
-            console.log(`[deleteRow] Delete query executed successfully`);
+            this.debugLog('DeleteRow', 'Delete query executed successfully');
             
             // Verify the deletion by checking row count
             const countQuery = `SELECT COUNT(*) as count FROM "${sanitizedTableName}"`;
@@ -453,7 +472,7 @@ export class DatabaseService {
             const rowCount = countResult ? countStmt.get()[0] : 0;
             countStmt.free();
             
-            console.log(`[deleteRow] Rows remaining in table: ${rowCount}`);
+            this.debugLog('DeleteRow', `Rows remaining in table: ${rowCount}`);
             
             // CRITICAL: Save changes back to the database file
             await this.saveChangesToFile();
@@ -462,10 +481,10 @@ export class DatabaseService {
                 markInternalUpdate(this.currentDatabasePath);
             }
             
-            console.log(`[deleteRow] Row deletion completed successfully`);
+            this.debugLog('DeleteRow', 'Row deletion completed successfully');
             
         } catch (error) {
-            console.error(`[deleteRow] Failed to delete row:`, error);
+            this.debugError('DeleteRow', 'Failed to delete row:', error);
             throw new Error(`Failed to delete row: ${error}`);
         }
     }
@@ -478,16 +497,16 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        console.log(`[saveChangesToFile] Starting save operation`);
-        console.log(`[saveChangesToFile] Current database path: ${this.currentDatabasePath}`);
-        console.log(`[saveChangesToFile] Temp decrypted path: ${this.tempDecryptedPath}`);
+        this.debugLog('SaveFile', 'Starting save operation');
+        this.debugLog('SaveFile', `Current database path: ${this.currentDatabasePath}`);
+        this.debugLog('SaveFile', `Temp decrypted path: ${this.tempDecryptedPath}`);
 
         try {
             // Export the current database state
             const data = this.db.export();
             const buffer = Buffer.from(data);
             
-            console.log(`[saveChangesToFile] Exported ${buffer.length} bytes`);
+            this.debugLog('SaveFile', `Exported ${buffer.length} bytes`);
             
             // Write back to the original file (not the temp decrypted file if using encryption)
             const targetPath = this.currentDatabasePath;
@@ -497,20 +516,20 @@ export class DatabaseService {
 
             // If we're working with an encrypted database, we need to re-encrypt
             if (this.tempDecryptedPath) {
-                console.log(`[saveChangesToFile] Saving to encrypted database`);
+                this.debugLog('SaveFile', 'Saving to encrypted database');
                 // Write to temp file first, then re-encrypt
                 fs.writeFileSync(this.tempDecryptedPath, buffer);
                 await this.reEncryptDatabase(targetPath);
             } else {
-                console.log(`[saveChangesToFile] Saving to unencrypted database: ${targetPath}`);
+                this.debugLog('SaveFile', `Saving to unencrypted database: ${targetPath}`);
                 // Direct write to unencrypted database
                 fs.writeFileSync(targetPath, buffer);
             }
             
-            console.log(`[saveChangesToFile] Changes saved to database file successfully`);
+            this.debugLog('SaveFile', 'Changes saved to database file successfully');
             
         } catch (error) {
-            console.error(`[saveChangesToFile] Failed to save changes to file:`, error);
+            this.debugError('SaveFile', 'Failed to save changes to file:', error);
             throw new Error(`Failed to save changes: ${error}`);
         }
     }
@@ -534,7 +553,7 @@ export class DatabaseService {
             // Use sqlcipher to encrypt the updated database
             const encryptCommand = `echo "ATTACH DATABASE '${tempEncryptedFile}' AS encrypted KEY '${escapedKey}'; SELECT sqlcipher_export('encrypted'); DETACH DATABASE encrypted;" | sqlcipher "${this.tempDecryptedPath}"`;
             
-            console.log('Re-encrypting database with SQLCipher...');
+            this.debugLog('ReEncrypt', 'Re-encrypting database with SQLCipher...');
             await execAsync(encryptCommand);
             
             // Verify the encrypted file was created
@@ -548,10 +567,10 @@ export class DatabaseService {
             // Clean up temporary encrypted file
             fs.unlinkSync(tempEncryptedFile);
             
-            console.log('Database re-encrypted successfully');
+            this.debugLog('ReEncrypt', 'Database re-encrypted successfully');
             
         } catch (error) {
-            console.error('Re-encryption error:', error);
+            this.debugError('ReEncrypt', 'Re-encryption error:', error);
             throw new Error(`Failed to re-encrypt database: ${error}`);
         }
     }
@@ -564,21 +583,15 @@ export class DatabaseService {
         const sanitizedTableName = tableName.replace(/"/g, '""');
         const query = `SELECT rowid FROM "${sanitizedTableName}" LIMIT 1 OFFSET ${rowIndex}`;
         
-        console.log(`[getCellRowId] Getting rowid for table: ${tableName}, row index: ${rowIndex}`);
-        console.log(`[getCellRowId] Query: ${query}`);
-        
         try {
             const result = await this.executeQuery(query);
-            console.log(`[getCellRowId] Query result:`, result);
             
             if (result.values.length > 0) {
                 const rowId = result.values[0][0];
-                console.log(`[getCellRowId] Extracted rowid: ${rowId}`);
                 return rowId;
             }
             throw new Error('Row not found');
         } catch (error) {
-            console.error(`[getCellRowId] Failed to get row ID:`, error);
             throw new Error(`Failed to get row ID: ${error}`);
         }
     }
@@ -588,14 +601,11 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        console.log(`Getting schema for table: ${tableName}`);
-        
         // Use executeQuery instead of direct prepared statements to ensure
         // compatibility with SQLCipher encrypted databases
         const query = `PRAGMA table_info(${tableName})`;
         const result = await this.executeQuery(query);
         
-        console.log(`Schema for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
         return result;
     }
 

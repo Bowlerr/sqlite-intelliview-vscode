@@ -71,7 +71,9 @@ function initializeDOMElements() {
   domElements.testConnectionBtn = document.getElementById("test-connection");
 
   // Connection section starts visible by default and will be hidden after successful connection
-  console.log("DOM elements initialized");
+  if (window.debug) {
+    window.debug.debug("DOM elements initialized");
+  }
 }
 
 /**
@@ -272,9 +274,13 @@ function forceHideConnectionSection() {
   if (connectionSection) {
     connectionSection.classList.add("hidden");
     connectionSection.classList.remove("visible");
-    console.log("Connection section forcibly hidden");
+    if (window.debug) {
+      window.debug.debug("Connection section forcibly hidden");
+    }
   } else {
-    console.log("Connection section not found");
+    if (window.debug) {
+      window.debug.debug("Connection section not found");
+    }
   }
 }
 
@@ -285,15 +291,16 @@ function checkConnectionSectionVisibility() {
   const connectionSection = document.getElementById("connection-section");
   if (connectionSection) {
     const isVisible = connectionSection.style.display !== "none";
-    console.log(
-      "Connection section visibility:",
-      isVisible,
-      "display:",
-      connectionSection.style.display
-    );
+    if (window.debug) {
+      window.debug.debug(
+        `Connection section visibility: ${isVisible}, display: ${connectionSection.style.display}`
+      );
+    }
     return isVisible;
   } else {
-    console.log("Connection section not found");
+    if (window.debug) {
+      window.debug.debug("Connection section not found");
+    }
     return false;
   }
 }

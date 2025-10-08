@@ -36,6 +36,24 @@ DELETE FROM your_table
 WHERE column1 = 'value';`;
   }
 
+  async waitForRequire(maxWaitMs = 5000) {
+    const startTime = Date.now();
+    while (
+      typeof window.require !== "function" &&
+      Date.now() - startTime < maxWaitMs
+    ) {
+      if (window.debug) {
+        window.debug.debug("Monaco", "Waiting for require function...");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (typeof window.require !== "function") {
+      throw new Error(
+        "Monaco loader did not initialize require function within timeout"
+      );
+    }
+  }
+
   async init() {
     if (this.editor) {
       return;
@@ -44,71 +62,167 @@ WHERE column1 = 'value';`;
     if (!editorContainer) {
       throw new Error("Query editor container not found");
     }
-    if (window.require) {
+
+    if (window.debug) {
+      window.debug.info("Monaco", "Initializing Monaco Editor...");
+      window.debug.debug(
+        "Monaco",
+        "window.require available:",
+        typeof window.require
+      );
+      window.debug.debug(
+        "Monaco",
+        "window.monaco available:",
+        typeof window.monaco
+      );
+    }
+
+    // Wait a bit for Monaco loader to be ready
+    if (typeof window.require !== "function") {
+      if (window.debug) {
+        window.debug.debug(
+          "Monaco",
+          "Require not ready, waiting for Monaco loader..."
+        );
+      }
+      await this.waitForRequire();
+    }
+
+    if (typeof window.require === "function") {
       // Use local Monaco Editor files for offline functionality
-      const monacoBasePath = new URL("./monaco-editor/vs", document.baseURI)
-        .href;
+      // The loader.js is already loaded from the correct webview URI by the backend
+      // We can extract the base path from the loader script source
+      const loaderScript = document.querySelector('script[src*="loader.js"]');
+      let monacoBasePath = "./monaco-editor/vs"; // fallback
+
+      if (loaderScript && loaderScript.src) {
+        // Extract the vs directory path from the loader script src
+        monacoBasePath = loaderScript.src.replace(/\/loader\.js.*$/, "");
+      }
+
+      if (window.debug) {
+        window.debug.info(
+          "Monaco",
+          "Configuring Monaco with base path:",
+          monacoBasePath
+        );
+      }
       window.require.config({
         paths: {
           vs: monacoBasePath,
         },
       });
-      window.require(["vs/editor/editor.main"], () => {
-        this.editor = window.monaco.editor.create(editorContainer, {
-          value: this.defaultQuery,
-          language: "sql",
-          theme: "vs-dark",
-          automaticLayout: true,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          wordWrap: "on",
-          fontSize: 14,
-          lineNumbers: "on",
-          readOnly: false,
-        });
-        this.registerSQLCompletions();
-        this.registerSQLSnippets();
-        this.registerDynamicCompletions();
-        // Immediately set tables/columns if available
-        if (
-          Array.isArray(window._sqlTables) &&
-          window._sqlTables.length === 0 &&
-          typeof window.getAllDOMElements === "function"
-        ) {
-          // Try to extract table names from the DOM (sidebar)
-          const elements = window.getAllDOMElements();
-          if (elements && elements.tablesListElement) {
-            const tableEls = elements.tablesListElement.querySelectorAll(
-              ".table-item[data-table]"
-            );
-            window._sqlTables = Array.from(tableEls)
-              .map((el) => el.getAttribute("data-table"))
-              .filter(Boolean);
-            console.log(
-              "[Monaco] Fallback: Extracted tables from DOM:",
-              window._sqlTables
+
+      if (window.debug) {
+        window.debug.info("Monaco", "Loading Monaco editor main module...");
+      }
+      window.require(
+        ["vs/editor/editor.main"],
+        () => {
+          if (window.debug) {
+            window.debug.info(
+              "Monaco",
+              "Monaco editor main module loaded successfully"
             );
           }
-        }
-        if (
-          Array.isArray(window._sqlColumns) &&
-          window._sqlColumns.length === 0 &&
-          typeof window.getCurrentState === "function"
-        ) {
-          // Try to extract columns from state (if available)
-          const state = window.getCurrentState();
-          if (state && Array.isArray(state.currentColumns)) {
-            window._sqlColumns = state.currentColumns;
-            console.log(
-              "[Monaco] Fallback: Extracted columns from state:",
+          this.editor = window.monaco.editor.create(editorContainer, {
+            value: this.defaultQuery,
+            language: "sql",
+            theme: "vs-dark",
+            automaticLayout: true,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            wordWrap: "on",
+            fontSize: 14,
+            lineNumbers: "on",
+            readOnly: false,
+          });
+          this.registerSQLCompletions();
+          this.registerSQLSnippets();
+          this.registerDynamicCompletions();
+          // Immediately set tables/columns if available
+          if (
+            Array.isArray(window._sqlTables) &&
+            window._sqlTables.length === 0 &&
+            typeof window.getAllDOMElements === "function"
+          ) {
+            // Try to extract table names from the DOM (sidebar)
+            const elements = window.getAllDOMElements();
+            if (elements && elements.tablesListElement) {
+              const tableEls = elements.tablesListElement.querySelectorAll(
+                ".table-item[data-table]"
+              );
+              window._sqlTables = Array.from(tableEls)
+                .map((el) => el.getAttribute("data-table"))
+                .filter(Boolean);
+              if (window.debug) {
+                window.debug.debug(
+                  "Monaco",
+                  "Fallback: Extracted tables from DOM:",
+                  window._sqlTables
+                );
+              }
+            }
+          }
+          if (
+            Array.isArray(window._sqlColumns) &&
+            window._sqlColumns.length === 0 &&
+            typeof window.getCurrentState === "function"
+          ) {
+            // Try to extract columns from state (if available)
+            const state = window.getCurrentState();
+            if (state && Array.isArray(state.currentColumns)) {
+              window._sqlColumns = state.currentColumns;
+              if (window.debug) {
+                window.debug.debug(
+                  "Monaco",
+                  "Fallback: Extracted columns from state:",
+                  window._sqlColumns
+                );
+              }
+            }
+          }
+          // Log what we have
+          if (window.debug) {
+            window.debug.debug(
+              "Monaco",
+              "Tables after init:",
+              window._sqlTables
+            );
+            window.debug.debug(
+              "Monaco",
+              "Columns after init:",
               window._sqlColumns
             );
           }
+        },
+        (error) => {
+          if (window.debug) {
+            window.debug.error(
+              "Monaco",
+              "Failed to load Monaco editor:",
+              error
+            );
+            window.debug.error("Monaco", "Base path was:", monacoBasePath);
+          }
+          throw new Error(
+            `Failed to load Monaco Editor: ${error.message || error}`
+          );
         }
-        // Log what we have
-        console.log("[Monaco] Tables after init:", window._sqlTables);
-        console.log("[Monaco] Columns after init:", window._sqlColumns);
-      });
+      );
+    } else {
+      if (window.debug) {
+        window.debug.warn(
+          "Monaco",
+          "window.require not available, Monaco Editor will not be initialized"
+        );
+        window.debug.debug(
+          "Monaco",
+          "Available globals:",
+          Object.keys(window).filter((k) => k.toLowerCase().includes("monaco"))
+        );
+      }
+      throw new Error("Monaco Editor require function not available");
     }
   }
 
@@ -253,7 +367,13 @@ WHERE column1 = 'value';`;
           const tables = Array.isArray(window._sqlAllTables)
             ? window._sqlAllTables
             : [];
-          console.log("[Monaco] Table completions triggered. Tables:", tables);
+          if (window.debug) {
+            window.debug.debug(
+              "Monaco",
+              "Table completions triggered. Tables:",
+              tables
+            );
+          }
           return {
             suggestions: tables.map((name) => ({
               label: name,
@@ -271,10 +391,13 @@ WHERE column1 = 'value';`;
           let columns = Object.values(window._sqlTableColumns || {}).flat();
           // Remove duplicates
           columns = Array.from(new Set(columns));
-          console.log(
-            "[Monaco] Column completions triggered. Columns (all tables):",
-            columns
-          );
+          if (window.debug) {
+            window.debug.debug(
+              "Monaco",
+              "Column completions triggered. Columns (all tables):",
+              columns
+            );
+          }
           return {
             suggestions: columns.map((name) => ({
               label: name,
@@ -346,35 +469,53 @@ window.executeQuery = function (query) {
 
 // Function to connect existing query buttons to the enhanced editor
 function connectQueryButtons() {
-  console.log("Connecting query buttons to enhanced editor...");
+  if (window.debug) {
+    window.debug.debug(
+      "QueryEditor",
+      "Connecting query buttons to enhanced editor..."
+    );
+  }
 
   // Execute button
   const executeBtn = document.getElementById("execute-query");
   if (executeBtn) {
     executeBtn.addEventListener("click", () => {
-      console.log("Execute button clicked");
+      if (window.debug) {
+        window.debug.debug("QueryEditor", "Execute button clicked");
+      }
       if (window.queryEditor && window.queryEditor.executeQuery) {
         window.queryEditor.executeQuery();
       } else {
-        console.warn("Enhanced query editor not available, using fallback");
+        if (window.debug) {
+          window.debug.warn(
+            "QueryEditor",
+            "Enhanced query editor not available, using fallback"
+          );
+        }
         if (typeof handleExecuteQuery === "function") {
           handleExecuteQuery();
         }
       }
     });
-    console.log("Execute button connected");
+    if (window.debug) {
+      window.debug.debug("QueryEditor", "Execute button connected");
+    }
   }
 
   // Clear button
   const clearBtn = document.getElementById("clear-query");
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
-      console.log("Clear button clicked");
+      if (window.debug) {
+        window.debug.debug("QueryEditor", "Clear button clicked");
+      }
       if (window.queryEditor && window.queryEditor.clearEditor) {
         window.queryEditor.clearEditor();
       }
     });
-    console.log("Clear button connected");
+    if (window.debug) {
+      window.debug.debug("QueryEditor", "Clear button connected");
+    }
   }
 }
 
@@ -386,7 +527,12 @@ window.refreshQueryEditor = function () {
   if (window.queryEditor && window.queryEditor.refreshEditor) {
     window.queryEditor.refreshEditor();
   } else {
-    console.warn("Query editor not available for refresh");
+    if (window.debug) {
+      window.debug.warn(
+        "QueryEditor",
+        "Query editor not available for refresh"
+      );
+    }
   }
 };
 
@@ -394,7 +540,9 @@ window.focusQueryEditor = function () {
   if (window.queryEditor && window.queryEditor.focusEditor) {
     return window.queryEditor.focusEditor();
   } else {
-    console.warn("Query editor not available for focus");
+    if (window.debug) {
+      window.debug.warn("QueryEditor", "Query editor not available for focus");
+    }
     return false;
   }
 };
@@ -419,32 +567,58 @@ window.getQueryEditorStatus = function () {
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "R") {
     e.preventDefault();
-    console.log("Manual editor refresh triggered");
+    if (window.debug) {
+      window.debug.debug("QueryEditor", "Manual editor refresh triggered");
+    }
     window.refreshQueryEditor();
   }
 });
 
-console.log("QueryEditor: Global helper functions loaded");
-console.log(
-  "  - window.refreshQueryEditor() - Refresh the editor if unresponsive"
-);
-console.log("  - window.focusQueryEditor() - Focus the editor");
-console.log("  - window.getQueryEditorStatus() - Get editor status");
-console.log("  - Ctrl+Shift+R / Cmd+Shift+R - Refresh editor shortcut");
+if (window.debug) {
+  window.debug.debug("QueryEditor", "Global helper functions loaded");
+  window.debug.debug(
+    "QueryEditor",
+    "  - window.refreshQueryEditor() - Refresh the editor if unresponsive"
+  );
+  window.debug.debug(
+    "QueryEditor",
+    "  - window.focusQueryEditor() - Focus the editor"
+  );
+  window.debug.debug(
+    "QueryEditor",
+    "  - window.getQueryEditorStatus() - Get editor status"
+  );
+  window.debug.debug(
+    "QueryEditor",
+    "  - Ctrl+Shift+R / Cmd+Shift+R - Refresh editor shortcut"
+  );
+}
 
 // Emergency global function to fix unresponsive editor
 window.emergencyFixEditor = function () {
-  console.log("EMERGENCY: Attempting to fix unresponsive Monaco editor");
+  if (window.debug) {
+    window.debug.error(
+      "QueryEditor",
+      "EMERGENCY: Attempting to fix unresponsive Monaco editor"
+    );
+  }
   if (window.queryEditor) {
     if (window.queryEditor.nuclearEditorRestore) {
       window.queryEditor.nuclearEditorRestore();
     } else if (window.queryEditor.refreshEditor) {
       window.queryEditor.refreshEditor();
     } else {
-      console.error("EMERGENCY: No recovery methods available");
+      if (window.debug) {
+        window.debug.error(
+          "QueryEditor",
+          "EMERGENCY: No recovery methods available"
+        );
+      }
     }
   } else {
-    console.error("EMERGENCY: Query editor not found");
+    if (window.debug) {
+      window.debug.error("QueryEditor", "EMERGENCY: Query editor not found");
+    }
   }
 };
 
@@ -452,14 +626,27 @@ window.emergencyFixEditor = function () {
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "R") {
     e.preventDefault();
-    console.log("Emergency editor fix triggered via keyboard");
+    if (window.debug) {
+      window.debug.debug(
+        "QueryEditor",
+        "Emergency editor fix triggered via keyboard"
+      );
+    }
     window.emergencyFixEditor();
   }
 });
 
-console.log("QueryEditor: Emergency functions loaded");
-console.log("  - window.emergencyFixEditor() - Nuclear editor restoration");
-console.log("  - Ctrl+Alt+R / Cmd+Alt+R - Emergency keyboard shortcut");
+if (window.debug) {
+  window.debug.debug("QueryEditor", "Emergency functions loaded");
+  window.debug.debug(
+    "QueryEditor",
+    "  - window.emergencyFixEditor() - Nuclear editor restoration"
+  );
+  window.debug.debug(
+    "QueryEditor",
+    "  - Ctrl+Alt+R / Cmd+Alt+R - Emergency keyboard shortcut"
+  );
+}
 
 // Listen for table/column info from events.js
 window._sqlTables = [];
@@ -513,10 +700,13 @@ window.addEventListener("message", function (event) {
     if (window._sqlAllTables.length > 0) {
       window._sqlCurrentTable = window._sqlAllTables[0];
     }
-    console.log(
-      "[Monaco] Populated completions from backend (event listener):",
-      window._sqlAllTables,
-      window._sqlTableColumns
-    );
+    if (window.debug) {
+      window.debug.debug(
+        "Monaco",
+        "Populated completions from backend (event listener):",
+        window._sqlAllTables,
+        window._sqlTableColumns
+      );
+    }
   }
 });

@@ -100,7 +100,11 @@ function startColumnResize(e) {
     document.body.style.cursor = "col-resize";
     header.classList.add("resizing");
 
-    console.log("Started column resize:", columnIndex, startWidth);
+    if (window.debug) {
+      window.debug.debug(
+        `Started column resize: ${columnIndex}, ${startWidth}`
+      );
+    }
   }
 }
 
@@ -126,7 +130,9 @@ function startRowResize(e) {
   document.body.style.cursor = "row-resize";
   row.classList.add("resizing");
 
-  console.log("Started row resize:", rowIndex, startHeight);
+  if (window.debug) {
+    window.debug.debug(`Started row resize: ${rowIndex}, ${startHeight}`);
+  }
 }
 
 /**
@@ -365,7 +371,11 @@ function handleCellColumnResizeStart(e) {
       // Add class to table to prevent text selection during resize
       table.classList.add("resizing");
 
-      console.log("Started column resize from cell:", columnIndex, startWidth);
+      if (window.debug) {
+        window.debug.debug(
+          `Started column resize from cell: ${columnIndex}, ${startWidth}`
+        );
+      }
     }
   }
 }

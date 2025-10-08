@@ -568,31 +568,47 @@ function performSortableInitialization() {
 function initializeSortableJS() {
   const tabsBar = document.getElementById("table-tabs-bar");
   if (!tabsBar) {
-    window.debug.debug("SortableJS", "No tabs bar found, skipping initialization");
+    window.debug.debug(
+      "SortableJS",
+      "No tabs bar found, skipping initialization"
+    );
     return; // Exit if no tabs bar
   }
 
   // Check if there are any draggable tabs
   const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
   if (draggableTabs.length === 0) {
-    window.debug.debug("SortableJS", "No draggable tabs found, skipping initialization");
+    window.debug.debug(
+      "SortableJS",
+      "No draggable tabs found, skipping initialization"
+    );
     return;
   }
 
   // Double-check for existing instance (should not happen with smart lifecycle)
   if (sortableInstance) {
-    window.debug.warn("SortableJS", "Unexpected existing instance, destroying first");
+    window.debug.warn(
+      "SortableJS",
+      "Unexpected existing instance, destroying first"
+    );
     try {
       sortableInstance.destroy();
     } catch (error) {
-      window.debug.error("SortableJS", "Error destroying existing instance:", error);
+      window.debug.error(
+        "SortableJS",
+        "Error destroying existing instance:",
+        error
+      );
     }
     sortableInstance = null;
   }
 
   // Wait for SortableJS to be available globally
   if (typeof window.Sortable === "undefined") {
-    window.debug.debug("SortableJS", "Library not loaded yet, retrying in 100ms");
+    window.debug.debug(
+      "SortableJS",
+      "Library not loaded yet, retrying in 100ms"
+    );
     // Clear flag and retry later
     isInitializingSortable = false;
     setTimeout(initializeSortableJS, 100);
@@ -642,7 +658,13 @@ function initializeSortableJS() {
     },
 
     onEnd: function (evt) {
-      window.debug.debug("SortableJS", "Drag ended", evt.oldIndex, "->", evt.newIndex);
+      window.debug.debug(
+        "SortableJS",
+        "Drag ended",
+        evt.oldIndex,
+        "->",
+        evt.newIndex
+      );
 
       // Remove visual feedback
       tabsBar.classList.remove("sortable-drag-active");
@@ -675,7 +697,10 @@ function initializeSortableJS() {
               )
               .filter((tab) => tab); // Remove any undefined entries
 
-            window.debug.debug("SortableJS", "Updating state to match DOM order");
+            window.debug.debug(
+              "SortableJS",
+              "Updating state to match DOM order"
+            );
 
             // Update state with DOM-based order and prevent re-render
             window.updateState(
@@ -713,7 +738,10 @@ function initializeSortableJS() {
           }
         }, 50);
       } else {
-        window.debug.debug("SortableJS", "No position change, skipping reorder");
+        window.debug.debug(
+          "SortableJS",
+          "No position change, skipping reorder"
+        );
 
         // Clear drag state immediately if no reorder
         if (typeof window.updateState === "function") {
@@ -851,22 +879,42 @@ function debugSortableJS() {
     "SortableJS library loaded:",
     typeof window.Sortable !== "undefined"
   );
-  window.debug.debug("SortableJS", "SortableJS instance exists:", !!sortableInstance);
+  window.debug.debug(
+    "SortableJS",
+    "SortableJS instance exists:",
+    !!sortableInstance
+  );
 
   const tabsBar = document.getElementById("table-tabs-bar");
   window.debug.debug("SortableJS", "Tabs bar element found:", !!tabsBar);
 
   if (tabsBar) {
     const draggableTabs = tabsBar.querySelectorAll(".table-tab:not(.add-tab)");
-    window.debug.debug("SortableJS", "Number of draggable tabs:", draggableTabs.length);
+    window.debug.debug(
+      "SortableJS",
+      "Number of draggable tabs:",
+      draggableTabs.length
+    );
     draggableTabs.forEach((tab, index) => {
-      window.debug.debug("SortableJS", `  Tab ${index}:`, tab.getAttribute("data-table-key"));
+      window.debug.debug(
+        "SortableJS",
+        `  Tab ${index}:`,
+        tab.getAttribute("data-table-key")
+      );
     });
   }
 
   if (sortableInstance) {
-    window.debug.debug("SortableJS", "SortableJS instance el:", sortableInstance.el);
-    window.debug.debug("SortableJS", "SortableJS options:", sortableInstance.option());
+    window.debug.debug(
+      "SortableJS",
+      "SortableJS instance el:",
+      sortableInstance.el
+    );
+    window.debug.debug(
+      "SortableJS",
+      "SortableJS options:",
+      sortableInstance.option()
+    );
   }
   window.debug.debug("SortableJS", "=== End Debug Info ===");
 }
@@ -1161,7 +1209,11 @@ function executeTabContextMenuAction(action, tabKey, tabLabel) {
             });
           }
         } else {
-          window.debug.warn("TableTabs", "No query found for refresh on tab:", tabKey);
+          window.debug.warn(
+            "TableTabs",
+            "No query found for refresh on tab:",
+            tabKey
+          );
         }
       }
       break;
@@ -1193,6 +1245,10 @@ function executeTabContextMenuAction(action, tabKey, tabLabel) {
       break;
 
     default:
-      window.debug.warn("TableTabs", "Unknown tab context menu action:", action);
+      window.debug.warn(
+        "TableTabs",
+        "Unknown tab context menu action:",
+        action
+      );
   }
 }

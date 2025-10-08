@@ -54,7 +54,12 @@ if (
    * Uses functions from modular files loaded before this script
    */
 
-  window.debug.info("main", "SQLite IntelliView: Starting main initialization...");
+  if (window.debug) {
+    window.debug.info(
+      "main",
+      "SQLite IntelliView: Starting main initialization..."
+    );
+  }
 
   // --- Sidebar maximize logic ---
   function maximizeSidebar() {
@@ -170,7 +175,10 @@ if (
      * Initialize the SQLite IntelliView application
      */
     function initializeApp() {
-      window.debug.info("main", "Initializing SQLite IntelliView application...");
+      window.debug.info(
+        "main",
+        "Initializing SQLite IntelliView application..."
+      );
 
       try {
         // Initialize modules (functions from loaded JS files)
@@ -192,26 +200,45 @@ if (
 
         // Initialize enhanced query editor
         if (typeof (/** @type {any} */ (window).QueryEditor) !== "undefined") {
-          window.debug.info("main", "Initializing enhanced query editor...");
+          if (window.debug) {
+            window.debug.info("main", "Initializing enhanced query editor...");
+          }
           /** @type {any} */ (window).queryEditor = new /** @type {any} */ (
             window
           ).QueryEditor();
           /** @type {any} */ (window).queryEditor
             .init()
             .then(() => {
-              window.debug.info("main", "Enhanced query editor initialized successfully");
+              if (window.debug) {
+                window.debug.info(
+                  "main",
+                  "Enhanced query editor initialized successfully"
+                );
+              }
               // Connect to existing buttons
               connectQueryButtons();
             })
             .catch((error) => {
-              window.debug.error(
-                "main",
-                "Failed to initialize enhanced query editor:",
-                error
-              );
+              if (window.debug) {
+                window.debug.error(
+                  "main",
+                  "Failed to initialize enhanced query editor:",
+                  error
+                );
+              } else {
+                if (window.debug) {
+                  window.debug.error(
+                    "Failed to initialize enhanced query editor:",
+                    error
+                  );
+                }
+              }
             });
         } else {
-          window.debug.warn("main", "QueryEditor class not found, using fallback");
+          window.debug.warn(
+            "main",
+            "QueryEditor class not found, using fallback"
+          );
         }
 
         // Initialize diagram functionality
@@ -226,7 +253,10 @@ if (
 
         // Initialize SortableJS for table tabs
         if (typeof window.initializeSortableJS === "function") {
-          window.debug.info("main", "Initializing SortableJS for table tabs...");
+          window.debug.info(
+            "main",
+            "Initializing SortableJS for table tabs..."
+          );
           // Delay initialization to ensure DOM is ready
           setTimeout(() => {
             window.debug.info("main", "Delayed SortableJS initialization");
@@ -244,7 +274,10 @@ if (
           initializeQueryEditorVisibility();
         }
 
-        window.debug.info("main", "SQLite IntelliView initialized successfully");
+        window.debug.info(
+          "main",
+          "SQLite IntelliView initialized successfully"
+        );
 
         // Load initial data
         loadInitialData();
@@ -268,7 +301,10 @@ if (
      * Add a table to open tabs (if not already open) and make it active
      */
     function openTableTab(tableName, page = 1, pageSize = 100) {
-      window.debug.debug("main", "[openTableTab] called with:", tableName, { page, pageSize });
+      window.debug.debug("main", "[openTableTab] called with:", tableName, {
+        page,
+        pageSize,
+      });
       const state =
         typeof window.getCurrentState === "function"
           ? window.getCurrentState()
@@ -402,10 +438,15 @@ if (
      * Internal: select table and load data (does not update tab state)
      */
     function selectTableInternal(tableKey, page = 1, pageSize = 100) {
-      window.debug.debug("main", "[selectTableInternal] called with:", tableKey, {
-        page,
-        pageSize,
-      });
+      window.debug.debug(
+        "main",
+        "[selectTableInternal] called with:",
+        tableKey,
+        {
+          page,
+          pageSize,
+        }
+      );
       window.debug.debug("main", `Selecting table: ${tableKey}`);
 
       // Update minimized sidebar with selected table
@@ -455,25 +496,21 @@ if (
             if (dataContent) {
               const tableHtml =
                 result.data.length > 0 && createDataTableFn
-                  ? createDataTableFn(
-                      result.data,
-                      result.columns,
-                      tableKey,
-                      {
-                        isQueryResult: true,
-                        query: result.query,
-                        currentPage: 1,
-                        totalRows: result.data.length,
-                        pageSize: Math.min(result.data.length, 100),
-                        foreignKeys: result.foreignKeys || [],
-                        allowEditing: false
-                      }
-                    )
+                  ? createDataTableFn(result.data, result.columns, tableKey, {
+                      isQueryResult: true,
+                      query: result.query,
+                      currentPage: 1,
+                      totalRows: result.data.length,
+                      pageSize: Math.min(result.data.length, 100),
+                      foreignKeys: result.foreignKeys || [],
+                      allowEditing: false,
+                    })
                   : `<div class=\"no-results\"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
               dataContent.innerHTML = `<div class=\"table-container\">${tableHtml}</div>`;
-              
+
               // Initialize table interactive features after restoring content
-              const tableWrapper = dataContent.querySelector('.table-container');
+              const tableWrapper =
+                dataContent.querySelector(".table-container");
               if (tableWrapper && typeof initializeTableEvents === "function") {
                 initializeTableEvents(tableWrapper);
               }

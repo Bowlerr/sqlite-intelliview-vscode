@@ -187,7 +187,9 @@ function showKeyboardShortcuts() {
  */
 function addHelpButton() {
   // Help buttons are now added directly in HTML, no need to create them dynamically
-  console.log("Help buttons are available in the header");
+  if (window.debug) {
+    window.debug.debug("Help buttons are available in the header");
+  }
 }
 
 /**

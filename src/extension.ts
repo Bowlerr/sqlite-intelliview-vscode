@@ -10,9 +10,14 @@ let databaseExplorerProvider: DatabaseExplorerProvider;
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
+	// Use the debug system to output diagnostic information in development
 	// This line of code will only be executed once when your extension is activated
-	console.log('SQLite IntelliView extension is now active!');
+	
+	// Debug logging (only in development mode)
+	const isDevelopment = process.env.NODE_ENV === 'development' || vscode.env.appName.includes('Dev');
+	if (isDevelopment) {
+		console.log('[Extension] SQLite IntelliView extension is now active!');
+	}
 
 	// Initialize the database explorer provider
 	databaseExplorerProvider = new DatabaseExplorerProvider();

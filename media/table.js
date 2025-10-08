@@ -61,11 +61,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   // Check if this is a schema table (not editable)
   // Note: Query results should have most table features enabled
   const isSchemaTable = tableName === "schema";
-  
+
   // Determine if editing should be allowed
-  const isEditable = allowEditing !== null 
-    ? allowEditing 
-    : !isSchemaTable && !isQueryResult; // Query results default to read-only for data integrity
+  const isEditable =
+    allowEditing !== null ? allowEditing : !isSchemaTable && !isQueryResult; // Query results default to read-only for data integrity
 
   // When we have totalRows from backend, data is already paginated
   // When we don't have totalRows, we need to paginate the data locally
@@ -219,7 +218,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
  * @param {Array} data - Row data to render
  * @param {number} startIndex - Starting row index for global numbering
  * @param {Array} columns - Column names for data attributes
- * @param {boolean} isSchemaTable - Whether this is a schema table 
+ * @param {boolean} isSchemaTable - Whether this is a schema table
  * @param {boolean} isEditable - Whether cells should be editable
  * @returns {string} HTML string for table rows
  */
@@ -523,7 +522,9 @@ function sortTableByColumn(table, columnIndex) {
  */
 function toggleColumnPin(table, columnIndex) {
   if (!table) {
-    console.warn("Table not found for pinning");
+    if (window.debug) {
+      window.debug.warn("Table not found for pinning");
+    }
     return;
   }
 
@@ -531,7 +532,9 @@ function toggleColumnPin(table, columnIndex) {
   const header = headers[columnIndex];
 
   if (!header) {
-    console.warn(`Header ${columnIndex} not found`);
+    if (window.debug) {
+      window.debug.warn(`Header ${columnIndex} not found`);
+    }
     return;
   }
 

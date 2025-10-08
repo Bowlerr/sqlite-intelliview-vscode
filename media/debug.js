@@ -190,10 +190,20 @@ class DebugLogger {
   }
 }
 
-// Create global debug instance
+// TypeScript declaration for the debug module
+/**
+ * @typedef {Object} DebugLogger
+ * @property {function(string, string, ...any): void} error
+ * @property {function(string, string, ...any): void} warn
+ * @property {function(string, string, ...any): void} info
+ * @property {function(string, string, ...any): void} debug
+ * @property {function(string, string, ...any): void} trace
+ */
+
+/** @type {DebugLogger} */
 const debug = new DebugLogger();
 
-// Expose debug levels for external use
+// Create global debug instance
 debug.LEVELS = DEBUG_LEVELS;
 
 // Make available globally in webview

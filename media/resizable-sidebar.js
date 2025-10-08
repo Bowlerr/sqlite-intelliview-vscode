@@ -24,9 +24,11 @@ class ResizableSidebar {
     this.toggleButton = document.getElementById("sidebar-toggle");
 
     if (!this.sidebar || !this.resizeHandle || !this.toggleButton) {
-      console.warn(
-        "Sidebar elements not found, skipping resizable sidebar initialization"
-      );
+      if (window.debug) {
+        window.debug.warn(
+          "Sidebar elements not found, skipping resizable sidebar initialization"
+        );
+      }
       return;
     }
 
@@ -216,7 +218,9 @@ class ResizableSidebar {
         JSON.stringify(state)
       );
     } catch (error) {
-      console.warn("Failed to save sidebar state:", error);
+      if (window.debug) {
+        window.debug.warn("Failed to save sidebar state:", error);
+      }
     }
   }
 
@@ -238,7 +242,9 @@ class ResizableSidebar {
         }
       }
     } catch (error) {
-      console.warn("Failed to load sidebar state:", error);
+      if (window.debug) {
+        window.debug.warn("Failed to load sidebar state:", error);
+      }
     }
   }
 
@@ -277,7 +283,11 @@ function updateSelectedTableSafe(tableName) {
   if (window.resizableSidebar && window.resizableSidebar.updateSelectedTable) {
     window.resizableSidebar.updateSelectedTable(tableName);
   } else {
-    console.log("ResizableSidebar not ready, will update when initialized");
+    if (window.debug) {
+      window.debug.debug(
+        "ResizableSidebar not ready, will update when initialized"
+      );
+    }
     // Store the table name for when the sidebar is ready
     window.pendingTableSelection = tableName;
   }
@@ -295,15 +305,19 @@ function initializeResizableSidebar() {
 
     // Check if there was a pending table selection
     if (window.pendingTableSelection) {
-      console.log(
-        "Applying pending table selection:",
-        window.pendingTableSelection
-      );
+      if (window.debug) {
+        window.debug.debug(
+          "Applying pending table selection:",
+          window.pendingTableSelection
+        );
+      }
       resizableSidebar.updateSelectedTable(window.pendingTableSelection);
       window.pendingTableSelection = null;
     }
 
-    console.log("Resizable sidebar initialized");
+    if (window.debug) {
+      window.debug.debug("Resizable sidebar initialized");
+    }
   }
 }
 

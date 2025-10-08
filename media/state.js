@@ -63,8 +63,8 @@ function updateState(newState, options = {}) {
   // Debug logging for encryption key changes
   if (newState.encryptionKey !== undefined) {
     window.debug.debug(
-      "State", 
-      "Encryption key updated in state:", 
+      "State",
+      "Encryption key updated in state:",
       newState.encryptionKey ? "[PROVIDED]" : "[EMPTY]"
     );
   }
@@ -84,9 +84,15 @@ function updateState(newState, options = {}) {
 
     if (shouldSkipRendering) {
       if (newState.skipTabRerender) {
-        window.debug.debug("State", "Skipping render due to skipTabRerender flag");
+        window.debug.debug(
+          "State",
+          "Skipping render due to skipTabRerender flag"
+        );
       } else if (currentState.dragState.preventRerender) {
-        window.debug.debug("State", "Skipping render due to drag preventRerender flag");
+        window.debug.debug(
+          "State",
+          "Skipping render due to drag preventRerender flag"
+        );
       } else if (currentState.dragState.isDragging) {
         window.debug.debug("State", "Skipping render due to active drag");
       }
@@ -113,7 +119,10 @@ function updateState(newState, options = {}) {
         activeChanged &&
         typeof window.updateActiveTab === "function"
       ) {
-        window.debug.debug("State", "Updating active tab only (no structure change)");
+        window.debug.debug(
+          "State",
+          "Updating active tab only (no structure change)"
+        );
         window.updateActiveTab(
           currentState.activeTable || currentState.selectedTable || ""
         );
@@ -282,7 +291,10 @@ function resetState() {
  */
 function reorderTabs(fromIndex, toIndex) {
   if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
-    window.debug.debug("State", "No reorder needed - same position or invalid indices");
+    window.debug.debug(
+      "State",
+      "No reorder needed - same position or invalid indices"
+    );
     return; // No change needed
   }
 

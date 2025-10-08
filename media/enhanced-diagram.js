@@ -14,7 +14,9 @@ class DiagramManager {
 
   init() {
     this.setupEventListeners();
-    console.log("D3.js diagram manager initialized");
+    if (window.debug) {
+      window.debug.info("DiagramManager", "D3.js diagram manager initialized");
+    }
   }
 
   setupEventListeners() {
@@ -42,20 +44,29 @@ class DiagramManager {
   }
 
   render(data) {
-    console.log("=== DiagramManager.render called ===");
-    console.log("Render data:", data);
+    if (window.debug) {
+      window.debug.debug(
+        "DiagramManager",
+        "=== DiagramManager.render called ==="
+      );
+      window.debug.debug("DiagramManager", "Render data:", data);
+    }
 
     this.data = data;
 
     // Cleanup previous diagram
     if (this.currentDiagram && this.currentDiagram.destroy) {
-      console.log("Destroying previous diagram");
+      if (window.debug) {
+        window.debug.debug("Destroying previous diagram");
+      }
       this.currentDiagram.destroy();
     }
 
     const container = document.getElementById("diagram-container");
     if (!container) {
-      console.error("Diagram container not found!");
+      if (window.debug) {
+        window.debug.error("DiagramManager", "Diagram container not found!");
+      }
       return;
     }
 
@@ -66,25 +77,39 @@ class DiagramManager {
     // Stop loading messages if they're running
     stopLoadingMessages();
 
-    console.log("Container cleared, starting D3 render...");
+    if (window.debug) {
+      window.debug.debug("Container cleared, starting D3 render...");
+    }
 
     try {
       this.renderWithD3(data);
-      console.log("D3 render completed successfully");
+      if (window.debug) {
+        window.debug.debug("D3 render completed successfully");
+      }
     } catch (error) {
-      console.error("Error rendering D3 diagram:", error);
-      console.error("Error stack:", error.stack);
+      if (window.debug) {
+        window.debug.error(
+          "DiagramManager",
+          "Error rendering D3 diagram:",
+          error
+        );
+        window.debug.error("DiagramManager", "Error stack:", error.stack);
+      }
       this.showError(`Failed to render diagram: ${error.message}`);
     }
   }
 
   renderWithD3(data) {
-    console.log("=== renderWithD3 called ===");
-    console.log("D3 data:", data);
+    if (window.debug) {
+      window.debug.debug("=== renderWithD3 called ===");
+      window.debug.debug(`D3 data: ${JSON.stringify(data)}`);
+    }
 
     // Check if D3 is available
     if (typeof d3 === "undefined") {
-      console.error("D3.js is not loaded!");
+      if (window.debug) {
+        window.debug.error("DiagramManager", "D3.js is not loaded!");
+      }
       this.showError(
         "D3.js library is not available. Please check if D3.js is properly loaded."
       );
@@ -95,11 +120,17 @@ class DiagramManager {
     container.innerHTML =
       '<div id="d3-diagram" style="width: 100%; height: 100%;"></div>';
 
-    console.log("Checking for D3ERDiagram class:", typeof D3ERDiagram);
+    if (window.debug) {
+      window.debug.debug(
+        `Checking for D3ERDiagram class: ${typeof D3ERDiagram}`
+      );
+    }
 
     // Create D3 diagram
     if (typeof D3ERDiagram !== "undefined") {
-      console.log("Creating new D3ERDiagram instance...");
+      if (window.debug) {
+        window.debug.debug("Creating new D3ERDiagram instance...");
+      }
 
       // Check if D3ERDiagram constructor works
       try {
@@ -107,26 +138,38 @@ class DiagramManager {
           width: 800,
           height: 600,
         });
-        console.log("D3ERDiagram created:", this.currentDiagram);
+        if (window.debug) {
+          window.debug.debug("D3ERDiagram created:", this.currentDiagram);
+        }
       } catch (error) {
-        console.error("Error creating D3ERDiagram:", error);
+        if (window.debug) {
+          window.debug.error("Error creating D3ERDiagram:", error);
+        }
         this.showError(`Failed to create D3 diagram: ${error.message}`);
         return;
       }
 
       // Check if render method exists
       if (!this.currentDiagram.render) {
-        console.error("D3ERDiagram render method not found!");
+        if (window.debug) {
+          window.debug.error("D3ERDiagram render method not found!");
+        }
         this.showError("D3ERDiagram render method is not available.");
         return;
       }
 
-      console.log("Calling render on D3ERDiagram...");
+      if (window.debug) {
+        window.debug.debug("Calling render on D3ERDiagram...");
+      }
       try {
         this.currentDiagram.render(data);
-        console.log("D3ERDiagram render complete");
+        if (window.debug) {
+          window.debug.debug("D3ERDiagram render complete");
+        }
       } catch (error) {
-        console.error("Error during D3ERDiagram render:", error);
+        if (window.debug) {
+          window.debug.error("Error during D3ERDiagram render:", error);
+        }
         this.showError(`Failed to render D3 diagram: ${error.message}`);
         return;
       }
@@ -139,14 +182,16 @@ class DiagramManager {
       }, 200);
 
       this.addD3Controls();
-      console.log("D3 controls added");
+      if (window.debug) {
+        window.debug.debug("D3 controls added");
+      }
     } else {
-      console.error("D3ERDiagram class not found!");
+      if (window.debug) {
+        window.debug.error("D3ERDiagram class not found!");
+      }
       this.showError("D3ERDiagram class not available");
     }
   }
-
-
 
   addD3Controls() {
     const container = document.getElementById("diagram-container");
@@ -183,8 +228,6 @@ class DiagramManager {
     container.appendChild(controls);
   }
 
-
-
   showError(message) {
     const container = document.getElementById("diagram-container");
     if (!container) {
@@ -208,7 +251,9 @@ class DiagramManager {
     if (this.currentDiagram && this.currentDiagram.exportAsPNG) {
       this.currentDiagram.exportAsPNG();
     } else {
-      console.warn("Export not available - D3 diagram not initialized");
+      if (window.debug) {
+        window.debug.warn("Export not available - D3 diagram not initialized");
+      }
     }
   }
 }
@@ -219,11 +264,15 @@ let isInitialized = false;
 
 function initializeDiagram() {
   if (isInitialized) {
-    console.log("Diagram already initialized, skipping...");
+    if (window.debug) {
+      window.debug.debug("Diagram already initialized, skipping...");
+    }
     return;
   }
 
-  console.log("Initializing D3.js diagram functionality...");
+  if (window.debug) {
+    window.debug.debug("Initializing D3.js diagram functionality...");
+  }
   diagramManager = new DiagramManager();
   window.diagramManager = diagramManager;
 
@@ -231,24 +280,34 @@ function initializeDiagram() {
   setupDiagramEventListeners();
 
   isInitialized = true;
-  console.log("D3.js diagram initialization complete");
+  if (window.debug) {
+    window.debug.debug("D3.js diagram initialization complete");
+  }
 }
 
 // Add diagram button event listeners
 function setupDiagramEventListeners() {
-  console.log("Setting up diagram event listeners...");
+  if (window.debug) {
+    window.debug.debug("Setting up diagram event listeners...");
+  }
 
   // Add a small delay to ensure DOM is fully ready
   setTimeout(() => {
     const generateBtn = document.getElementById("generate-diagram");
-    console.log("Generate button found:", generateBtn);
+    if (window.debug) {
+      window.debug.debug("Generate button found:", generateBtn);
+    }
     if (generateBtn) {
       // Remove any existing listeners first
       generateBtn.removeEventListener("click", requestERDiagram);
       generateBtn.addEventListener("click", requestERDiagram);
-      console.log("Generate button event listener added");
+      if (window.debug) {
+        window.debug.debug("Generate button event listener added");
+      }
     } else {
-      console.error("Generate button not found!");
+      if (window.debug) {
+        window.debug.error("Generate button not found!");
+      }
     }
 
     // Note: Auto-generation removed - users must manually click "Generate ER Diagram" button
@@ -257,8 +316,10 @@ function setupDiagramEventListeners() {
 
 // Enhanced diagram request function
 function requestERDiagram() {
-  console.log("=== REQUESTING ER DIAGRAM ===");
-  console.log("requestERDiagram function called!");
+  if (window.debug) {
+    window.debug.debug("=== REQUESTING ER DIAGRAM ===");
+    window.debug.debug("requestERDiagram function called!");
+  }
 
   // Check connection state first
   const currentState =
@@ -266,7 +327,11 @@ function requestERDiagram() {
 
   // If there's a connection error, show error instead of loading
   if (currentState.connectionError) {
-    console.log("Connection error detected, showing error instead of loading");
+    if (window.debug) {
+      window.debug.debug(
+        "Connection error detected, showing error instead of loading"
+      );
+    }
     showDiagramError(
       "Cannot generate diagram: " + currentState.connectionError
     );
@@ -275,7 +340,11 @@ function requestERDiagram() {
 
   // If not connected, show connection required error
   if (!currentState.isConnected) {
-    console.log("Not connected to database, showing connection required error");
+    if (window.debug) {
+      window.debug.debug(
+        "Not connected to database, showing connection required error"
+      );
+    }
     showDiagramError(
       "Please connect to the database first. If the database is encrypted, enter the correct password."
     );
@@ -293,7 +362,9 @@ function requestERDiagram() {
 
   // Check if vscode API is available
   const vscode = window.vscode;
-  console.log("vscode API available:", !!vscode);
+  if (window.debug) {
+    window.debug.debug(`vscode API available: ${!!vscode}`);
+  }
 
   if (vscode) {
     const message = {
@@ -301,19 +372,27 @@ function requestERDiagram() {
       key: window.appState?.encryptionKey || "",
     };
 
-    console.log("Sending message to extension:", message);
-    console.log("App state:", window.appState);
+    if (window.debug) {
+      window.debug.debug("Sending message to extension:", message);
+      window.debug.debug("App state:", window.appState);
+    }
     vscode.postMessage(message);
   } else {
-    console.error("vscode API not available");
+    if (window.debug) {
+      window.debug.error("vscode API not available");
+    }
     showDiagramError("Extension API not available");
   }
 }
 
 // Enhanced diagram data handler
 function handleERDiagramData(data) {
-  console.log("=== HANDLING ER DIAGRAM DATA ===");
-  console.log("handleERDiagramData called with:", data);
+  if (window.debug) {
+    window.debug.debug("=== HANDLING ER DIAGRAM DATA ===");
+  }
+  if (window.debug) {
+    window.debug.debug("handleERDiagramData called with:", data);
+  }
 
   const generateBtn = document.getElementById("generate-diagram");
   if (generateBtn) {
@@ -322,18 +401,28 @@ function handleERDiagramData(data) {
   }
 
   try {
-    console.log("Checking diagramManager:", diagramManager);
+    if (window.debug) {
+      window.debug.debug("Checking diagramManager:", diagramManager);
+    }
     if (diagramManager) {
-      console.log("Calling diagramManager.render with data:", data);
+      if (window.debug) {
+        window.debug.debug("Calling diagramManager.render with data:", data);
+      }
       diagramManager.render(data);
-      console.log("diagramManager.render completed");
+      if (window.debug) {
+        window.debug.debug("diagramManager.render completed");
+      }
     } else {
-      console.error("Diagram manager not initialized");
+      if (window.debug) {
+        window.debug.error("Diagram manager not initialized");
+      }
       showDiagramError("Diagram manager not initialized");
     }
   } catch (error) {
-    console.error("Error handling ER diagram data:", error);
-    console.error("Error stack:", error.stack);
+    if (window.debug) {
+      window.debug.error("Error handling ER diagram data:", error);
+      window.debug.error("Error stack:", error.stack);
+    }
     showDiagramError("Failed to render diagram: " + error.message);
   }
 }
@@ -416,11 +505,15 @@ function showDiagramError(message) {
     const retryBtn = document.getElementById("retry-diagram-btn");
     if (retryBtn) {
       retryBtn.addEventListener("click", function () {
-        console.log("Retry button clicked");
+        if (window.debug) {
+          window.debug.debug("Retry button clicked");
+        }
         if (window.requestERDiagram) {
           window.requestERDiagram();
         } else {
-          console.error("requestERDiagram function not found");
+          if (window.debug) {
+            window.debug.error("requestERDiagram function not found");
+          }
         }
       });
     }
@@ -437,7 +530,9 @@ window.showDiagramError = showDiagramError;
 // Debug function to manually test button
 window.testGenerateButton = function () {
   const btn = document.getElementById("generate-diagram");
-  console.log("Test: Button found:", btn);
+  if (window.debug) {
+    window.debug.debug("Test: Button found:", btn);
+  }
   if (btn) {
     btn.click();
   }

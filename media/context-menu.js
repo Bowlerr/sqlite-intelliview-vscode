@@ -25,7 +25,9 @@ function initializeContextMenu() {
   // Hide context menu when scrolling
   document.addEventListener("scroll", hideContextMenu, true);
 
-  console.log("Context menu initialized");
+  if (window.debug) {
+    window.debug.debug("Context menu initialized");
+  }
 }
 
 /**
@@ -145,7 +147,9 @@ function showContextMenu(x, y) {
   const isQueryResultTable = tableId && tableId.includes("query");
 
   // Show/hide delete-row option for read-only tables
-  const deleteMenuItem = contextMenu.querySelector('[data-action="delete-row"]');
+  const deleteMenuItem = contextMenu.querySelector(
+    '[data-action="delete-row"]'
+  );
   if (deleteMenuItem) {
     if (isQueryResultTable) {
       deleteMenuItem.style.display = "none";
@@ -310,7 +314,9 @@ function executeContextMenuAction(action) {
       navigateToForeignKeyReference();
       break;
     default:
-      console.log("Unknown context menu action:", action);
+      if (window.debug) {
+        window.debug.debug(`Unknown context menu action: ${action}`);
+      }
   }
 }
 
@@ -506,7 +512,9 @@ function copyToClipboard(text, message) {
         showCopySuccess(message);
       })
       .catch((err) => {
-        console.error("Failed to copy to clipboard:", err);
+        if (window.debug) {
+          window.debug.error(`Failed to copy to clipboard: ${err}`);
+        }
         fallbackCopy(text, message);
       });
   } else {
@@ -534,7 +542,9 @@ function fallbackCopy(text, message) {
     document.execCommand("copy");
     showCopySuccess(message);
   } catch (err) {
-    console.error("Failed to copy to clipboard:", err);
+    if (window.debug) {
+      window.debug.debug(`Failed to copy to clipboard: ${err}`);
+    }
     showCopyError();
   }
 
@@ -552,7 +562,9 @@ function showCopySuccess(message) {
   ) {
     /** @type {any} */ (window).showSuccess(message);
   } else {
-    console.log(message);
+    if (window.debug) {
+      window.debug.debug(`[ContextMenu] Copy success: ${message}`);
+    }
   }
 }
 
@@ -566,7 +578,9 @@ function showCopyError() {
   ) {
     /** @type {any} */ (window).showError("Failed to copy to clipboard");
   } else {
-    console.error("Failed to copy to clipboard");
+    if (window.debug) {
+      window.debug.debug("[ContextMenu] Failed to copy to clipboard");
+    }
   }
 }
 
@@ -629,13 +643,17 @@ function updateContextMenuItems(actions) {
  */
 function deleteRowWithConfirmation() {
   if (!currentRow || !currentCell) {
-    console.error("No current row or cell for deletion");
+    if (window.debug) {
+      window.debug.debug("[ContextMenu] No current row or cell for deletion");
+    }
     return;
   }
 
   const table = currentRow.closest(".data-table");
   if (!table) {
-    console.error("Could not find table for current row");
+    if (window.debug) {
+      window.debug.debug("[ContextMenu] Could not find table for current row");
+    }
     return;
   }
 
@@ -670,7 +688,11 @@ function deleteRowWithConfirmation() {
   showEnhancedConfirmDialog(
     "Are you sure you want to delete this row?",
     () => {
-      console.log("Delete confirmed, executing row deletion...");
+      if (window.debug) {
+        window.debug.debug(
+          "[ContextMenu] Delete confirmed, executing row deletion..."
+        );
+      }
       // Use the stored row reference instead of currentRow
       executeRowDeletion(tableName, rowToDelete);
     },
@@ -685,10 +707,16 @@ function deleteRowWithConfirmation() {
  * @param {HTMLTableRowElement} row - Row element to delete
  */
 function executeRowDeletion(tableName, row) {
-  console.log("executeRowDeletion called with:", tableName, row);
+  if (window.debug) {
+    window.debug.debug(
+      `[ContextMenu] executeRowDeletion called with: ${tableName}, ${row}`
+    );
+  }
 
   if (!row) {
-    console.error("No row provided for deletion");
+    if (window.debug) {
+      window.debug.debug("[ContextMenu] No row provided for deletion");
+    }
     return;
   }
 
@@ -704,7 +732,11 @@ function executeRowDeletion(tableName, row) {
   }
 
   // Debug logging
-  console.log("Row identifier generated:", rowId);
+  if (window.debug) {
+    window.debug.debug(
+      `[ContextMenu] Row identifier generated: ${JSON.stringify(rowId)}`
+    );
+  }
 
   // Show loading state
   showDeleteLoading();
@@ -720,7 +752,9 @@ function executeRowDeletion(tableName, row) {
       encryptionKey = currentState.encryptionKey || "";
     }
   } catch (error) {
-    console.warn("Could not get current state:", error);
+    if (window.debug) {
+      window.debug.debug(`[ContextMenu] Could not get current state: ${error}`);
+    }
   }
 
   // Send deletion request to extension
@@ -734,12 +768,20 @@ function executeRowDeletion(tableName, row) {
       rowId: rowId,
       key: encryptionKey,
     };
-    console.log("Sending delete message to extension:", message);
+    if (window.debug) {
+      window.debug.debug(
+        `[ContextMenu] Sending delete message to extension: ${JSON.stringify(
+          message
+        )}`
+      );
+    }
     /** @type {any} */ (window).vscode.postMessage(message);
   } else {
-    console.error(
-      "Cannot communicate with extension - vscode API not available"
-    );
+    if (window.debug) {
+      window.debug.debug(
+        "[ContextMenu] Cannot communicate with extension - vscode API not available"
+      );
+    }
     showDeleteError("Cannot communicate with extension");
   }
 }
@@ -852,7 +894,9 @@ function showDeleteError(message) {
   ) {
     /** @type {any} */ (window).showError(message);
   } else {
-    console.error("Delete error:", message);
+    if (window.debug) {
+      window.debug.debug(`[ContextMenu] Delete error: ${message}`);
+    }
   }
 }
 
@@ -861,13 +905,23 @@ function showDeleteError(message) {
  * @param {Object} response - Response from extension
  */
 function handleDeleteSuccess(response) {
-  console.log("handleDeleteSuccess called with:", response);
+  if (window.debug) {
+    window.debug.debug(
+      `[ContextMenu] handleDeleteSuccess called with: ${JSON.stringify(
+        response
+      )}`
+    );
+  }
   showDeleteSuccess();
 
   // Remove the row from the table using pendingDeleteRow
   if (pendingDeleteRow) {
     const table = pendingDeleteRow.closest(".data-table");
-    console.log("Removing row from table:", pendingDeleteRow);
+    if (window.debug) {
+      window.debug.debug(
+        `[ContextMenu] Removing row from table: ${pendingDeleteRow}`
+      );
+    }
     pendingDeleteRow.remove();
 
     // Update table statistics
@@ -875,7 +929,11 @@ function handleDeleteSuccess(response) {
       updateTableStatistics(table);
     }
   } else {
-    console.warn("No pendingDeleteRow found to remove from UI");
+    if (window.debug) {
+      window.debug.debug(
+        "[ContextMenu] No pendingDeleteRow found to remove from UI"
+      );
+    }
   }
 
   // Clear references
@@ -889,7 +947,11 @@ function handleDeleteSuccess(response) {
  * @param {Object} response - Error response from extension
  */
 function handleDeleteError(response) {
-  console.log("handleDeleteError called with:", response);
+  if (window.debug) {
+    window.debug.debug(
+      `[ContextMenu] handleDeleteError called with: ${JSON.stringify(response)}`
+    );
+  }
   showDeleteError(response.message || "Failed to delete row");
 
   // Clear pending delete row on error
@@ -925,7 +987,9 @@ function updateTableStatistics(table) {
     typeof (/** @type {any} */ (window).updatePaginationControls) === "function"
   ) {
     // This would need to be implemented to handle pagination updates
-    console.log("Row deleted, pagination may need updating");
+    if (window.debug) {
+      window.debug.debug("Row deleted, pagination may need updating");
+    }
   }
 }
 
@@ -972,9 +1036,8 @@ function showCustomConfirmDialog(message, onConfirm) {
   cancelBtn.addEventListener("click", closeDialog);
 
   confirmBtn.addEventListener("click", () => {
-    console.log("Delete button clicked in confirmation dialog");
     closeDialog();
-    console.log("About to call onConfirm callback");
+
     onConfirm();
   });
 
@@ -1107,9 +1170,7 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
   cancelBtn.addEventListener("click", closeDialog);
 
   confirmBtn.addEventListener("click", () => {
-    console.log("Delete button clicked in confirmation dialog");
     closeDialog();
-    console.log("About to call onConfirm callback");
     onConfirm();
   });
 
@@ -1185,13 +1246,9 @@ function navigateToForeignKeyReference() {
       showError(
         "Cannot navigate: Foreign key information is missing or incomplete for this cell."
       );
-    } else {
-      console.warn("No foreign key information found for cell");
     }
     return;
   }
-
-  console.log("Navigating to foreign key reference:", foreignKeyInfo);
 
   // Send message to extension to execute a query for the referenced row in the referenced table
   if (typeof vscode !== "undefined") {
@@ -1211,8 +1268,6 @@ function navigateToForeignKeyReference() {
     }
 
     const query = `SELECT * FROM "${foreignKeyInfo.referencedTable}" WHERE "${foreignKeyInfo.referencedColumn}" = ${formattedValue} LIMIT 100;`;
-
-    console.log("Executing foreign key query for referenced table:", query);
 
     // Execute the query to create a new query results tab
     vscode.postMessage({
@@ -1290,9 +1345,6 @@ function highlightForeignKeyTarget(tableWrapper) {
   }
 
   if (targetColumnIndex === -1) {
-    console.warn(
-      `Referenced column '${foreignKeyInfo.referencedColumn}' not found in table`
-    );
     return;
   }
 

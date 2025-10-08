@@ -36,17 +36,15 @@ window._eventListenersInitialized;
  */
 function initializeEventListeners() {
   // Enhanced diagnostic: log each call, guard state, and stack trace
-  console.log(
-    "[events.js] initializeEventListeners called. Guard:",
-    window["_eventListenersInitialized"],
-    "Stack:",
-    new Error().stack
-  );
+  if (window.debug) {
+    window.debug.debug(
+      `[events.js] initializeEventListeners called. Guard: ${
+        window["_eventListenersInitialized"]
+      }, Stack: ${new Error().stack}`
+    );
+  }
   /** @type {any} */
   if (window["_eventListenersInitialized"]) {
-    console.log(
-      "[events.js] initializeEventListeners: Guard true, skipping registration."
-    );
     return;
   }
   // Register global event listeners only once per webview lifecycle
@@ -112,7 +110,11 @@ function initializeEventListeners() {
   }
 
   window["_eventListenersInitialized"] = true;
-  console.log("[events.js] Event listeners registered. Guard set to true.");
+  if (window.debug) {
+    window.debug.debug(
+      "[events.js] Event listeners registered. Guard set to true."
+    );
+  }
 }
 
 /**
@@ -159,7 +161,11 @@ function handleGlobalKeyboard(e) {
  */
 function handleExtensionMessage(event) {
   const message = event.data;
-  console.log("Received message:", message.type, message);
+  if (window.debug) {
+    window.debug.debug(
+      `[Events] Received message: ${message.type}, ${JSON.stringify(message)}`
+    );
+  }
 
   switch (message.type) {
     case "update":
@@ -202,7 +208,9 @@ function handleExtensionMessage(event) {
       handleDeleteRowError(message);
       break;
     default:
-      console.log("Unknown message type:", message.type);
+      if (window.debug) {
+        window.debug.debug(`[Events] Unknown message type: ${message.type}`);
+      }
   }
 }
 
@@ -336,13 +344,21 @@ function handleUpdate(message) {
  * @param {object} message - Message object
  */
 function handleDatabaseInfo(message) {
-  console.log("handleDatabaseInfo called with message:", message);
+  if (window.debug) {
+    window.debug.debug(
+      `[Events] handleDatabaseInfo called with message: ${JSON.stringify(
+        message
+      )}`
+    );
+  }
 
   // Reset connect button state regardless of success/failure
   const elements = getAllDOMElements ? getAllDOMElements() : {};
 
   if (message.success) {
-    console.log("Database connection successful");
+    if (window.debug) {
+      window.debug.debug("[Events] Database connection successful");
+    }
 
     if (typeof updateState !== "undefined") {
       updateState({ isConnected: true, connectionError: null });
@@ -362,7 +378,9 @@ function handleDatabaseInfo(message) {
     }
 
     // Hide connection section since we're connected
-    console.log("Calling hideConnectionSection...");
+    if (window.debug) {
+      window.debug.debug("[Events] Calling hideConnectionSection...");
+    }
     hideConnectionSection();
 
     if (typeof displayTablesList !== "undefined") {
@@ -373,7 +391,11 @@ function handleDatabaseInfo(message) {
       showSuccess("Database connected successfully!");
     }
   } else {
-    console.log("Database connection failed:", message.error);
+    if (window.debug) {
+      window.debug.debug(
+        `[Events] Database connection failed: ${message.error}`
+      );
+    }
 
     if (typeof updateState !== "undefined") {
       updateState({ isConnected: false, connectionError: message.error });
@@ -392,7 +414,11 @@ function handleDatabaseInfo(message) {
     }
 
     // Show connection section for retry when database is disconnected
-    console.log("Database connection failed, showing connection section");
+    if (window.debug) {
+      window.debug.debug(
+        "Database connection failed, showing connection section"
+      );
+    }
     showConnectionSection();
 
     if (typeof showError !== "undefined") {
@@ -439,7 +465,11 @@ function handleQueryResult(message) {
       const editor = window.queryEditor.editor;
 
       try {
-        console.log("handleQueryResult: Ensuring Monaco editor responsiveness");
+        if (window.debug) {
+          window.debug.debug(
+            "handleQueryResult: Ensuring Monaco editor responsiveness"
+          );
+        }
 
         // Check if editor is still responsive
         const model = editor.getModel();
@@ -464,10 +494,12 @@ function handleQueryResult(message) {
           }
         }
       } catch (error) {
-        console.error(
-          "handleQueryResult: Error ensuring editor responsiveness:",
-          error
-        );
+        if (window.debug) {
+          window.debug.error(
+            "handleQueryResult: Error ensuring editor responsiveness:",
+            error
+          );
+        }
         // If there's an issue, try refreshing the editor
         if (window.queryEditor.refreshEditor) {
           window.queryEditor.refreshEditor();
@@ -530,7 +562,9 @@ function handleTableData(message) {
  * @param {Object} message - ER diagram message
  */
 function handleERDiagram(message) {
-  console.log("Received ER diagram message:", message);
+  if (window.debug) {
+    window.debug.debug("Received ER diagram message:", message);
+  }
 
   if (message.success) {
     // Add debug information about the received data
@@ -554,7 +588,9 @@ function handleERDiagram(message) {
       handleERDiagramData(message);
     }
   } else {
-    console.error("ER diagram generation failed:", message);
+    if (window.debug) {
+      window.debug.error("ER diagram generation failed:", message);
+    }
 
     if (typeof addDebugMessage !== "undefined") {
       addDebugMessage("ERROR: ER diagram generation failed");
@@ -593,7 +629,9 @@ function handleERDiagram(message) {
  * @param {Object} message - Progress message
  */
 function handleERDiagramProgress(message) {
-  console.log("Received ER diagram progress:", message);
+  if (window.debug) {
+    window.debug.debug("Received ER diagram progress:", message);
+  }
 
   if (typeof updateDiagramProgress !== "undefined") {
     updateDiagramProgress(message.message);
@@ -610,11 +648,19 @@ function handleERDiagramProgress(message) {
  */
 function displayTablesList(tables) {
   const elements = getAllDOMElements ? getAllDOMElements() : {};
-  console.log("displayTablesList called with:", tables);
-  console.log("tablesListElement:", elements.tablesListElement);
+  if (window.debug) {
+    window.debug.debug(
+      `[Events] displayTablesList called with: ${JSON.stringify(tables)}`
+    );
+    window.debug.debug(
+      `[Events] tablesListElement: ${elements.tablesListElement}`
+    );
+  }
 
   if (!elements.tablesListElement) {
-    console.error("tablesListElement not found!");
+    if (window.debug) {
+      window.debug.debug("[Events] tablesListElement not found!");
+    }
     return;
   }
 
@@ -668,7 +714,11 @@ function displayTablesList(tables) {
   }
   elements.tablesListElement.innerHTML = html;
 
-  console.log("Tables HTML generated, adding event listeners...");
+  if (window.debug) {
+    window.debug.debug(
+      "[Events] Tables HTML generated, adding event listeners..."
+    );
+  }
 
   // Add click handlers for table items (normal tables and result tabs)
   elements.tablesListElement.querySelectorAll(".table-item").forEach((item) => {
@@ -710,7 +760,11 @@ function displayTablesList(tables) {
     }
   }
 
-  console.log("Event listeners added to", tables.length, "tables");
+  if (window.debug) {
+    window.debug.debug(
+      `[Events] Event listeners added to ${tables.length} tables`
+    );
+  }
 }
 
 /**
@@ -721,40 +775,52 @@ function displayTablesList(tables) {
  */
 function detectQueryResultForeignKeys(columns, state) {
   const foreignKeys = [];
-  
+
   if (!columns || !Array.isArray(columns) || !state || !state.tableCache) {
     return foreignKeys;
   }
 
   // Get all tables from the cache
-  const tableCache = state.tableCache instanceof Map ? state.tableCache : new Map(Object.entries(state.tableCache || {}));
-  
+  const tableCache =
+    state.tableCache instanceof Map
+      ? state.tableCache
+      : new Map(Object.entries(state.tableCache || {}));
+
   // Track already found foreign keys to avoid duplicates
   const foundForeignKeys = new Set();
-  
+
   // For each query result column, check if it matches a foreign key column in any table
   columns.forEach((columnName, columnIndex) => {
-    if (!columnName || typeof columnName !== 'string') {
+    if (!columnName || typeof columnName !== "string") {
       return;
     }
 
     // Try different column name variations (original, without table prefix, etc.)
     const columnVariations = [
       columnName.trim(),
-      columnName.split('.').pop()?.trim(), // Remove table prefix if present (e.g., "users.id" -> "id")
+      columnName.split(".").pop()?.trim(), // Remove table prefix if present (e.g., "users.id" -> "id")
       columnName.toLowerCase().trim(),
-      columnName.split('.').pop()?.toLowerCase().trim()
-    ].filter(Boolean).filter(v => v && v.length > 0);
+      columnName.split(".").pop()?.toLowerCase().trim(),
+    ]
+      .filter(Boolean)
+      .filter((v) => v && v.length > 0);
 
     // Check each table in the cache for matching foreign key columns
     for (const [tableName, tableData] of tableCache) {
-      if (!tableData || typeof tableData !== 'object' || tableName === 'schema' || tableData.isQueryResult) {
+      if (
+        !tableData ||
+        typeof tableData !== "object" ||
+        tableName === "schema" ||
+        tableData.isQueryResult
+      ) {
         continue;
       }
 
       // Get foreign key information for this table if available
-      const tableForeignKeys = Array.isArray(tableData.foreignKeys) ? tableData.foreignKeys : [];
-      
+      const tableForeignKeys = Array.isArray(tableData.foreignKeys)
+        ? tableData.foreignKeys
+        : [];
+
       for (const fk of tableForeignKeys) {
         if (!fk || !fk.column || !fk.referencedTable || !fk.referencedColumn) {
           continue;
@@ -764,20 +830,20 @@ function detectQueryResultForeignKeys(columns, state) {
         for (const variation of columnVariations) {
           const fkColumnVariations = [
             fk.column,
-            fk.column.toLowerCase()
+            fk.column.toLowerCase(),
           ].filter(Boolean);
 
           if (fkColumnVariations.includes(variation)) {
             // Create a unique key to avoid duplicates
             const fkKey = `${columnName}:${fk.referencedTable}:${fk.referencedColumn}`;
-            
+
             if (!foundForeignKeys.has(fkKey)) {
               foundForeignKeys.add(fkKey);
               foreignKeys.push({
                 column: columnName, // Use original column name from query result
                 referencedTable: fk.referencedTable,
                 referencedColumn: fk.referencedColumn,
-                sourceTable: tableName // Track which table this FK came from
+                sourceTable: tableName, // Track which table this FK came from
               });
             }
             break; // Found a match, no need to check other variations
@@ -878,15 +944,15 @@ function displayQueryResults(data, columns, query = null) {
               totalRows: data.length,
               pageSize: Math.min(data.length, 100),
               foreignKeys: detectedForeignKeys,
-              allowEditing: false // Query results are typically read-only for data integrity
+              allowEditing: false, // Query results are typically read-only for data integrity
             })
           : `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
       const dataContent = document.getElementById("data-content");
       if (dataContent) {
         dataContent.innerHTML = `<div class="table-container">${tableHtml}</div>`;
-        
+
         // Initialize table interactive features
-        const tableWrapper = dataContent.querySelector('.table-container');
+        const tableWrapper = dataContent.querySelector(".table-container");
         if (tableWrapper && typeof initializeTableEvents === "function") {
           initializeTableEvents(tableWrapper);
         }
@@ -906,7 +972,12 @@ function restoreEditorState(editorState) {
 
   try {
     const editor = window.queryEditor.editor;
-    console.log("restoreEditorState: Restoring editor state", editorState);
+    if (window.debug) {
+      window.debug.debug(
+        "restoreEditorState: Restoring editor state",
+        editorState
+      );
+    }
 
     // Force layout recalculation
     editor.layout();
@@ -943,9 +1014,18 @@ function restoreEditorState(editorState) {
       }
     }
 
-    console.log("restoreEditorState: Editor state restored successfully");
+    if (window.debug) {
+      window.debug.debug(
+        "restoreEditorState: Editor state restored successfully"
+      );
+    }
   } catch (error) {
-    console.error("restoreEditorState: Error restoring editor state:", error);
+    if (window.debug) {
+      window.debug.debug(
+        "restoreEditorState: Error restoring editor state:",
+        error
+      );
+    }
   }
 }
 
@@ -998,7 +1078,11 @@ function displayTableData(data, columns, tableName, options = {}) {
   }
 
   // Cache table data including foreign keys for later FK detection
-  if (tableName && typeof window["getCurrentState"] === "function" && typeof window["updateState"] === "function") {
+  if (
+    tableName &&
+    typeof window["getCurrentState"] === "function" &&
+    typeof window["updateState"] === "function"
+  ) {
     const state = window["getCurrentState"]();
     if (state && state.tableCache) {
       const cacheData = {
@@ -1007,7 +1091,7 @@ function displayTableData(data, columns, tableName, options = {}) {
         tableName,
         foreignKeys: options.foreignKeys || [],
         isQueryResult: false,
-        ...options
+        ...options,
       };
 
       if (state.tableCache instanceof Map) {
@@ -1015,7 +1099,7 @@ function displayTableData(data, columns, tableName, options = {}) {
       } else if (typeof state.tableCache === "object") {
         state.tableCache[tableName] = cacheData;
       }
-      
+
       // Update state to persist the cache
       window["updateState"]({ tableCache: state.tableCache });
     }
@@ -1061,17 +1145,9 @@ function initializeTableEvents(tableWrapper) {
 
   // Guard only static elements (search, pagination, etc)
   if (tableWrapper.getAttribute("data-table-events-initialized") === "true") {
-    console.log(
-      "[events.js] Table static events already initialized for this wrapper, skipping static attach.",
-      tableWrapper
-    );
   } else {
     // Mark as initialized
     tableWrapper.setAttribute("data-table-events-initialized", "true");
-    console.log(
-      "[events.js] Initializing static table events for wrapper:",
-      tableWrapper
-    );
 
     // Initialize resizing functionality
     if (typeof initializeResizing === "function") {
@@ -1231,15 +1307,10 @@ function initializeTableEvents(tableWrapper) {
         }, 150);
       });
     });
-    console.log("[events.js] Row/cell events initialized for row:", row);
   });
 
   // After initializing row/cell events for new rows, ensure resizing is re-initialized
   if (typeof initializeResizing === "function" && tableWrapper) {
-    console.log(
-      "[events.js] Re-initializing resizing after row/cell event attachment"
-    );
-    initializeResizing(tableWrapper);
   }
 }
 
@@ -1254,7 +1325,6 @@ function startCellEditing(cell) {
 
   // Only allow editing for cells marked as editable
   if (!cell.hasAttribute("data-editable")) {
-    console.log("Cell is not editable (schema or query result)");
     return;
   }
 
@@ -1309,7 +1379,9 @@ function startCellEditing(cell) {
       }
     }, 10);
   } else {
-    console.error("Cell input not found!", cell);
+    if (window.debug) {
+      window.debug.error("Cell input not found!", cell);
+    }
   }
 }
 
@@ -1344,7 +1416,9 @@ function saveCellEdit(cell) {
   const columnName = cell.getAttribute("data-column-name");
 
   if (!tableName || isNaN(rowIndex) || !columnName) {
-    console.error("Missing cell metadata for update");
+    if (window.debug) {
+      window.debug.error("Missing cell metadata for update");
+    }
     cancelCellEdit(cell);
     return;
   }
@@ -1365,7 +1439,9 @@ function saveCellEdit(cell) {
       key: currentState.encryptionKey,
     });
   } else {
-    console.error("vscode API not available");
+    if (window.debug) {
+      window.debug.error("vscode API not available");
+    }
     cancelCellEdit(cell);
   }
 }
@@ -1467,7 +1543,13 @@ function handleDeleteRowSuccess(message) {
     /** @type {any} */ (window).handleDeleteSuccess(message);
   }
 
-  console.log(`Row deleted successfully from ${tableName}:`, rowId);
+  if (window.debug) {
+    window.debug.debug(
+      `[Events] Row deleted successfully from ${tableName}: ${JSON.stringify(
+        rowId
+      )}`
+    );
+  }
 }
 
 /**
@@ -1484,7 +1566,11 @@ function handleDeleteRowError(message) {
     /** @type {any} */ (window).handleDeleteError(message);
   }
 
-  console.error(`Failed to delete row from ${tableName}:`, message.message);
+  if (window.debug) {
+    window.debug.debug(
+      `[Events] Failed to delete row from ${tableName}: ${message.message}`
+    );
+  }
 }
 
 /**
@@ -1500,15 +1586,14 @@ function getCurrentTableName() {
  * Show connection section for key input
  */
 function showConnectionSection() {
-  console.log("showConnectionSection called");
   const elements = getAllDOMElements ? getAllDOMElements() : {};
-  console.log("connectionSection element:", elements.connectionSection);
   if (elements.connectionSection) {
     elements.connectionSection.classList.remove("hidden");
     elements.connectionSection.classList.add("visible");
-    console.log("Connection section shown");
   } else {
-    console.log("Connection section element not found");
+    if (window.debug) {
+      window.debug.debug("Connection section element not found");
+    }
   }
 }
 
@@ -1516,15 +1601,14 @@ function showConnectionSection() {
  * Hide connection section after successful connection
  */
 function hideConnectionSection() {
-  console.log("hideConnectionSection called");
   const elements = getAllDOMElements ? getAllDOMElements() : {};
-  console.log("connectionSection element:", elements.connectionSection);
   if (elements.connectionSection) {
     elements.connectionSection.classList.remove("visible");
     elements.connectionSection.classList.add("hidden");
-    console.log("Connection section hidden");
   } else {
-    console.log("Connection section element not found");
+    if (window.debug) {
+      window.debug.debug("Connection section element not found");
+    }
   }
 }
 
@@ -1532,15 +1616,15 @@ function hideConnectionSection() {
  * Try initial connection without key
  */
 function tryInitialConnection() {
-  console.log("tryInitialConnection called");
   if (typeof vscode !== "undefined") {
-    console.log("Sending requestDatabaseInfo message without key");
     vscode.postMessage({
       type: "requestDatabaseInfo",
       key: "", // Try without key first
     });
   } else {
-    console.log("vscode API not available");
+    if (window.debug) {
+      window.debug.debug("vscode API not available");
+    }
   }
 }
 
@@ -1604,12 +1688,14 @@ function handleTableDataDelta({
   updates = [],
   deletes = [],
 }) {
-  console.log("[events.js] handleTableDataDelta called", {
-    tableName,
-    inserts,
-    updates,
-    deletes,
-  });
+  if (window.debug) {
+    window.debug.debug("[events.js] handleTableDataDelta called", {
+      tableName,
+      inserts,
+      updates,
+      deletes,
+    });
+  }
   // Show notification about the update
   const ins = inserts.length;
   const upd = updates.length;
@@ -1633,12 +1719,16 @@ function handleTableDataDelta({
     `.enhanced-table-wrapper[data-table="${tableName}"]`
   );
   if (!wrapper) {
-    console.warn("[events.js] No wrapper found for table", tableName);
+    if (window.debug) {
+      window.debug.debug("[events.js] No wrapper found for table", tableName);
+    }
     return;
   }
   const tbody = wrapper.querySelector("tbody");
   if (!tbody) {
-    console.warn("[events.js] No tbody found for table", tableName);
+    if (window.debug) {
+      window.debug.debug("[events.js] No tbody found for table", tableName);
+    }
     return;
   }
 
@@ -1646,7 +1736,9 @@ function handleTableDataDelta({
   updates.forEach(({ rowIndex, rowData }) => {
     const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
     if (!row) {
-      console.warn("[events.js] No row found for update", rowIndex);
+      if (window.debug) {
+        window.debug.debug("[events.js] No row found for update", rowIndex);
+      }
       return;
     }
     rowData.forEach((val, colIdx) => {
@@ -1689,17 +1781,21 @@ function handleTableDataDelta({
         ) {
           columns = win.currentTableSchema[tableName].map((col) => col.name);
           if (!columns || columns.length === 0) {
-            console.warn(
-              "[events.js] No columns found in global schema for table",
-              tableName
-            );
+            if (window.debug) {
+              window.debug.debug(
+                "[events.js] No columns found in global schema for table",
+                tableName
+              );
+            }
           }
         } else {
-          console.warn(
-            "[events.js] Some column names missing in <th> for table",
-            tableName,
-            columns
-          );
+          if (window.debug) {
+            window.debug.debug(
+              "[events.js] Some column names missing in <th> for table",
+              tableName,
+              columns
+            );
+          }
         }
       }
       // Final fallback: replace any null/undefined with placeholder
@@ -1794,11 +1890,13 @@ function handleTableDataDelta({
           tbody.appendChild(newRow);
         }
       } else {
-        console.warn(
-          "[events.js] Failed to create new row for insert",
-          rowIndex,
-          rowData
-        );
+        if (window.debug) {
+          window.debug.debug(
+            "[events.js] Failed to create new row for insert",
+            rowIndex,
+            rowData
+          );
+        }
       }
     });
 
@@ -1813,7 +1911,9 @@ function handleTableDataDelta({
     .forEach((rowIndex) => {
       const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
       if (!row) {
-        console.warn("[events.js] No row found for delete", rowIndex);
+        if (window.debug) {
+          window.debug.debug("[events.js] No row found for delete", rowIndex);
+        }
         return;
       }
       row.remove();
@@ -1834,26 +1934,30 @@ function handleTableDataDelta({
   const newRows = wrapper.querySelectorAll(
     "tr[data-rowid]:not([data-initialized])"
   );
-  console.log("[Delta Debug] New rows before init:", newRows);
-  console.log("[Delta Debug] Wrapper before init:", wrapper);
-  console.log(
-    "[Delta Debug] Guard before table event init:",
-    window["_eventListenersInitialized"],
-    "Stack:",
-    new Error().stack
-  );
+  if (window.debug) {
+    window.debug.debug("[Delta Debug] New rows before init:", newRows);
+    window.debug.debug("[Delta Debug] Wrapper before init:", wrapper);
+    window.debug.debug(
+      "[Delta Debug] Guard before table event init:",
+      window["_eventListenersInitialized"],
+      "Stack:",
+      new Error().stack
+    );
+  }
   // Only initialize table events, never global events here
   initializeTableEvents(wrapper);
   // After initialization, mark new rows and log again
   newRows.forEach((row) => row.setAttribute("data-initialized", "true"));
-  console.log("[Delta Debug] New rows after init:", newRows);
-  console.log("[Delta Debug] Wrapper after init:", wrapper);
-  console.log(
-    "[Delta Debug] Guard after table event init:",
-    window["_eventListenersInitialized"],
-    "Stack:",
-    new Error().stack
-  );
+  if (window.debug) {
+    window.debug.debug("[Delta Debug] New rows after init:", newRows);
+    window.debug.debug("[Delta Debug] Wrapper after init:", wrapper);
+    window.debug.debug(
+      "[Delta Debug] Guard after table event init:",
+      window["_eventListenersInitialized"],
+      "Stack:",
+      new Error().stack
+    );
+  }
 }
 
 // Remove all export statements for browser compatibility

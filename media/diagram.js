@@ -57,11 +57,17 @@ class D3ERDiagram {
       containerWidth = Math.max(containerWidth, 800);
       containerHeight = Math.max(containerHeight, 600);
 
-      console.log("D3 Diagram init - Container dimensions:", {
-        width: containerWidth,
-        height: containerHeight,
-        rect: containerRect,
-      });
+      if (window.debug) {
+        window.debug.debug(
+          "Diagram",
+          "D3 Diagram init - Container dimensions:",
+          {
+            width: containerWidth,
+            height: containerHeight,
+            rect: containerRect,
+          }
+        );
+      }
 
       // Update options with actual container dimensions
       this.options.width = containerWidth;
@@ -77,10 +83,13 @@ class D3ERDiagram {
         .style("min-height", "100%")
         .style("display", "block");
 
-      console.log(
-        "D3 Diagram SVG created with viewBox:",
-        `0 0 ${containerWidth} ${containerHeight}`
-      );
+      if (window.debug) {
+        window.debug.debug(
+          "Diagram",
+          "D3 Diagram SVG created with viewBox:",
+          `0 0 ${containerWidth} ${containerHeight}`
+        );
+      }
 
       // Add defs for markers and patterns
       this.addDefs();
@@ -105,11 +114,18 @@ class D3ERDiagram {
 
       // If we have data, render it now
       if (this.data) {
-        console.log("Rendering data after SVG initialization...");
+        if (window.debug) {
+          window.debug.debug(
+            "Diagram",
+            "Rendering data after SVG initialization..."
+          );
+        }
         this.render(this.data);
       }
 
-      console.log("D3 Diagram initialization complete");
+      if (window.debug) {
+        window.debug.info("Diagram", "D3 Diagram initialization complete");
+      }
     }, 100);
   }
 
@@ -154,7 +170,12 @@ class D3ERDiagram {
 
     // If SVG is not initialized yet, wait for it
     if (!this.svg) {
-      console.log("SVG not ready, waiting for initialization...");
+      if (window.debug) {
+        window.debug.warn(
+          "Diagram",
+          "SVG not ready, waiting for initialization..."
+        );
+      }
       return;
     }
 
@@ -878,19 +899,23 @@ class D3ERDiagram {
     this.options.width = containerWidth;
     this.options.height = containerHeight;
 
-    console.log("SVG dimensions updated:", {
-      width: containerWidth,
-      height: containerHeight,
-    });
+    if (window.debug) {
+      window.debug.debug("Diagram", "SVG dimensions updated:", {
+        width: containerWidth,
+        height: containerHeight,
+      });
+    }
   }
 }
 
 // Debug: Check if D3 is loaded
-console.log("D3 availability check:", typeof d3);
-if (typeof d3 !== "undefined") {
-  console.log("D3 version:", d3.version);
-} else {
-  console.error("D3 is not loaded!");
+if (window.debug) {
+  window.debug.debug("Diagram", "D3 availability check:", typeof d3);
+  if (typeof d3 !== "undefined") {
+    window.debug.info("Diagram", "D3 version:", d3.version);
+  } else {
+    window.debug.error("Diagram", "D3 is not loaded!");
+  }
 }
 
 // Export for global use
