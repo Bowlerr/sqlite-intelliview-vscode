@@ -851,7 +851,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         console.info('DatabaseChange', "[handleExternalDatabaseChange] Using sync state", { table, page, pageSize, lastPageData });
         const db = await this.getOrCreateConnection(databasePath);
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
-        console.info('New page data fetched', { newResult });
+        const newTotalCount = await db.getRowCount(table);
+        console.info('New page data fetched', { newResult, newTotalCount });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;
         console.info('Old Rows', JSON.stringify(oldRows));
@@ -887,9 +888,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             tableName: table,
             inserts,
             updates,
-            deletes
+            deletes,
+            totalCount: newTotalCount
         });
-        console.info('tableDataDelta sent to webview', { table, inserts, updates, deletes });
+        console.info('tableDataDelta sent to webview', { table, inserts, updates, deletes, totalCount: newTotalCount });
         sync.lastPageData = newRows;
         this.lastSync.set(databasePath, sync);
         console.info('lastPageData updated in lastSync', { databasePath, lastPageData: sync.lastPageData });

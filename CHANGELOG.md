@@ -5,11 +5,69 @@
 
 ### Added
 
+- 🔄 **WAL (Write-Ahead Logging) Mode Support**: Full support for databases using WAL journaling mode
+  - Automatic detection of `.db-wal` and `.db-shm` files
+  - Automatic checkpoint of WAL files before opening databases to ensure up-to-date data
+  - Real-time monitoring of WAL file changes with automatic refresh
+  - Retry logic with exponential backoff for handling locked databases
+  - Support for encrypted databases (SQLCipher) with WAL mode
+  - Configurable WAL behavior via settings:
+    - `sqliteIntelliView.walAutoCheckpoint`: Enable/disable automatic checkpointing (default: true)
+    - `sqliteIntelliView.walMonitoring`: Enable/disable WAL file monitoring (default: true)
+  - New command: `Checkpoint WAL and Refresh` for manual checkpoint operations
+  - Comprehensive error handling for locked databases, permission issues, and corrupted WAL files
+  - Cross-platform support (Windows, macOS, Linux)
+  - CLI-based checkpoint using `sqlite3` and `sqlcipher` commands for better reliability
+
+- 🔄 **New to Automatic UI Updates for External Changes**: Complete live refresh system
+  - **Smart Notifications**: Context-aware messages for different change scenarios
+    - "X rows added (on other pages)" when data added beyond current page
+    - "X rows removed (from other pages)" when data deleted from other pages
+    - Row-level change notifications for visible page updates
+    - Total row count shown in all notifications
+  - **Automatic Pagination Updates**: Dynamic pagination control regeneration
+    - Page count automatically updates when data grows/shrinks
+    - New page buttons appear automatically (e.g., page 3, 4, 5, 6)
+    - Pagination controls fully functional after dynamic updates
+    - Event listeners properly reattached to new pagination elements
+  - **Real-time Count Updates**: Total record count updates automatically
+    - Header "X RECORDS" display updates immediately
+    - Footer "Showing X-Y of Z rows" updates automatically
+    - Data attributes synchronized across all UI elements
 
 ### Changed
 
+- Database loading now checks for WAL files and checkpoints them before loading
+- File watcher now monitors `.db-wal` and `.db-shm` files in addition to main database file
+- WAL file changes use 500ms debounce (vs 150ms for main DB) to handle frequent updates
+- **Pagination Event Handling**: Enhanced to support dynamic page number buttons
+  - Fixed page number buttons (1, 2, 3, 4, etc.) not responding to clicks
+  - Added support for `data-page` attribute in pagination button handlers
+  - Event listeners now handle both navigation buttons and page number buttons
+- **Notification System**: Improved to capture state before updates
+  - Notifications now detect total count changes even when no visible rows change
+  - Old total count captured before any DOM updates for accurate diff calculation
+  - Smart message generation based on visible changes vs total count changes
+- **WAL Checkpoint Method**: Switched from native Node.js modules to CLI approach
+  - Removed dependency on `better-sqlite3` and `sqlite3` Node.js modules
+  - Eliminated ABI version conflicts between VS Code and native modules
+  - More reliable cross-platform operation using system SQLite installations
+  - Better compatibility with VS Code's Electron environment
 
 ### Fixed
+
+- Databases with WAL mode now show up-to-date data instead of stale snapshots
+- Extension properly handles databases with active WAL connections from other applications
+- Improved handling of read-only databases with WAL mode
+- **Pagination Controls**: Fixed pagination buttons becoming unresponsive after updates
+  - Page number buttons (1, 2, 3, 4) now properly navigate to selected page
+  - Navigation buttons (⏮️ ⏪ ⏩ ⏭️) remain functional after updates
+  - Event listeners properly reattached when pagination HTML is regenerated
+  - "Go to page" input field maintains functionality after updates
+- **Notification Accuracy**: Fixed "no changes detected" when changes occurred on other pages
+  - Notifications now correctly detect and report off-page changes
+  - Total count changes properly tracked and reported
+  - Proper distinction between visible changes and total count changes
 
 
 ## [0.2.15] - 2025-10-08

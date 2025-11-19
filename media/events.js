@@ -1219,8 +1219,16 @@ function initializeTableEvents(tableWrapper) {
         e.preventDefault();
         const tableWrapper = btn.closest(".enhanced-table-wrapper");
         const action = btn.dataset.action;
+        const page = btn.dataset.page;
+
         if (typeof handlePagination !== "undefined") {
-          handlePagination(tableWrapper, action);
+          if (page) {
+            // Page number button clicked
+            handlePagination(tableWrapper, "goto", page);
+          } else if (action) {
+            // Navigation button clicked (first/prev/next/last)
+            handlePagination(tableWrapper, action);
+          }
         }
       });
     });
@@ -1687,6 +1695,7 @@ function handleTableDataDelta({
   inserts = [],
   updates = [],
   deletes = [],
+  totalCount = null,
 }) {
   if (window.debug) {
     window.debug.debug("[events.js] handleTableDataDelta called", {
@@ -1694,22 +1703,173 @@ function handleTableDataDelta({
       inserts,
       updates,
       deletes,
+      totalCount,
     });
   }
+
+  // Capture old total count BEFORE updating anything (for notification)
+  let oldTotalCountForNotification = 0;
+  const wrapperForOldCount = document.querySelector(
+    `.enhanced-table-wrapper[data-table="${tableName}"]`
+  );
+  if (wrapperForOldCount) {
+    oldTotalCountForNotification = parseInt(
+      wrapperForOldCount.getAttribute("data-total-rows") || "0",
+      10
+    );
+  }
+
+  // Update the total count display if provided
+  if (totalCount !== null) {
+    const wrapper = document.querySelector(
+      `.enhanced-table-wrapper[data-table="${tableName}"]`
+    );
+    if (wrapper) {
+      // Update the header "125 RECORDS" count
+      const statValue = wrapper.querySelector(".records-info .stat-value");
+      if (statValue) {
+        statValue.textContent = totalCount.toLocaleString();
+        if (window.debug) {
+          window.debug.debug("[events.js] Updated total count display", {
+            tableName,
+            totalCount,
+          });
+        }
+      }
+
+      // Update the footer "Showing 1-100 of 125 rows" count
+      const visibleRows = wrapper.querySelector(".visible-rows");
+      if (visibleRows) {
+        const currentText = visibleRows.textContent || "";
+        const match = currentText.match(/Showing (\d+)-(\d+) of/);
+        if (match) {
+          const start = match[1];
+          const end = match[2];
+          visibleRows.textContent = `Showing ${start}-${end} of ${totalCount.toLocaleString()} rows`;
+        }
+      }
+
+      // Update the data-total-rows attribute
+      wrapper.setAttribute("data-total-rows", totalCount.toString());
+
+      // Update pagination controls to reflect new total count
+      const currentPage = parseInt(
+        wrapper.getAttribute("data-current-page") || "1",
+        10
+      );
+      const pageSize = parseInt(
+        wrapper.getAttribute("data-page-size") || "100",
+        10
+      );
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      // Update data attributes first
+      wrapper.setAttribute("data-total-rows", totalCount.toString());
+      wrapper.setAttribute("data-current-page", currentPage.toString());
+      wrapper.setAttribute("data-page-size", pageSize.toString());
+
+      // Regenerate pagination HTML
+      const paginationContainer = wrapper.querySelector(".table-pagination");
+      if (paginationContainer && totalPages > 1) {
+        const tableId = wrapper.getAttribute("data-table-id") || "unknown";
+        if (typeof window.createPaginationControls === "function") {
+          paginationContainer.innerHTML = window.createPaginationControls(
+            currentPage,
+            totalPages,
+            tableId
+          );
+
+          // Re-attach event listeners to the new pagination buttons
+          const paginationBtns =
+            paginationContainer.querySelectorAll(".pagination-btn");
+          paginationBtns.forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const action = btn.getAttribute("data-action");
+              const page = btn.getAttribute("data-page");
+
+              if (page && typeof window.handlePagination === "function") {
+                window.handlePagination(wrapper, "goto", page);
+              } else if (
+                action &&
+                typeof window.handlePagination === "function"
+              ) {
+                window.handlePagination(wrapper, action);
+              }
+            });
+          });
+
+          // Re-attach page input listeners
+          const pageInput = paginationContainer.querySelector(".page-input");
+          if (pageInput) {
+            pageInput.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") {
+                const val = parseInt(pageInput.value, 10);
+                if (
+                  !isNaN(val) &&
+                  typeof window.updateTablePage === "function"
+                ) {
+                  window.updateTablePage(wrapper, val);
+                }
+              }
+            });
+          }
+
+          if (window.debug) {
+            window.debug.debug("[events.js] Updated pagination controls", {
+              tableName,
+              totalCount,
+              currentPage,
+              pageSize,
+              totalPages,
+            });
+          }
+        }
+      } else if (paginationContainer && totalPages <= 1) {
+        // Clear pagination if only one page
+        paginationContainer.innerHTML = "";
+      }
+    }
+  }
+
   // Show notification about the update
   const ins = inserts.length;
   const upd = updates.length;
   const del = deletes.length;
-  const noChanges = ins === 0 && upd === 0 && del === 0;
+  const visibleChanges = ins + upd + del;
 
-  const summary =
-    `Table updated externally: ` +
-    (noChanges
-      ? `no changes detected in ${tableName} Table.`
-      : "" +
-        (ins > 0 ? `${ins} row${ins === 1 ? "" : "s"} inserted. ` : "") +
-        (upd > 0 ? `${upd} row${upd === 1 ? "" : "s"} updated. ` : "") +
-        (del > 0 ? `${del} row${del === 1 ? "" : "s"} deleted.` : ""));
+  // Check if total count changed even if no visible changes (use captured old value)
+  const totalCountChanged =
+    totalCount !== null && totalCount !== oldTotalCountForNotification;
+
+  let summary = `Table updated externally: `;
+
+  if (visibleChanges === 0 && !totalCountChanged) {
+    summary += `no changes detected in ${tableName} table.`;
+  } else if (visibleChanges === 0 && totalCountChanged) {
+    // Total count changed but no visible changes on current page
+    const diff = totalCount - oldTotalCountForNotification;
+    if (diff > 0) {
+      summary += `${diff} row${
+        Math.abs(diff) === 1 ? "" : "s"
+      } added (on other pages). Total: ${totalCount.toLocaleString()} rows.`;
+    } else {
+      summary += `${Math.abs(diff)} row${
+        Math.abs(diff) === 1 ? "" : "s"
+      } removed (from other pages). Total: ${totalCount.toLocaleString()} rows.`;
+    }
+  } else {
+    // Visible changes on current page
+    summary +=
+      (ins > 0 ? `${ins} row${ins === 1 ? "" : "s"} inserted. ` : "") +
+      (upd > 0 ? `${upd} row${upd === 1 ? "" : "s"} updated. ` : "") +
+      (del > 0 ? `${del} row${del === 1 ? "" : "s"} deleted. ` : "");
+
+    if (totalCountChanged) {
+      summary += `Total: ${totalCount.toLocaleString()} rows.`;
+    }
+  }
 
   if (typeof window.showNotification === "function") {
     window.showNotification(summary, "info", 6000);
