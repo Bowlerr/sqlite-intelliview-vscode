@@ -1,7 +1,9 @@
 # Change Log
 
 
-## [Unreleased]
+## [0.3.0] - 2025-11-22
+
+### 🔄 Major WAL (Write-Ahead Logging) Support
 
 ### Added
 
@@ -19,7 +21,7 @@
   - Cross-platform support (Windows, macOS, Linux)
   - CLI-based checkpoint using `sqlite3` and `sqlcipher` commands for better reliability
 
-- 🔄 **New to Automatic UI Updates for External Changes**: Complete live refresh system
+- 🔄 **Automatic UI Updates for External Changes**: Complete live refresh system
   - **Smart Notifications**: Context-aware messages for different change scenarios
     - "X rows added (on other pages)" when data added beyond current page
     - "X rows removed (from other pages)" when data deleted from other pages
