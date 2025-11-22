@@ -24,16 +24,13 @@ export class DatabaseWatcher {
         // Add watcher for the main database file
         this.addWatcherForFile(filePath, onChange, 150); // 150ms debounce for main DB
         
-        // Also watch WAL and SHM files if they exist
+        // Also watch WAL and SHM files - create watchers even if files don't exist yet
+        // SQLite creates WAL/SHM files on first write, so we need to watch for their creation
         const { walPath, shmPath } = getWalFilePaths(filePath);
         
-        if (fs.existsSync(walPath)) {
-            this.addWatcherForFile(walPath, onChange, 500); // 500ms debounce for WAL (more frequent changes)
-        }
-        
-        if (fs.existsSync(shmPath)) {
-            this.addWatcherForFile(shmPath, onChange, 500); // 500ms debounce for SHM
-        }
+        // Always create watchers for WAL and SHM files to catch creation events
+        this.addWatcherForFile(walPath, onChange, 500); // 500ms debounce for WAL (more frequent changes)
+        this.addWatcherForFile(shmPath, onChange, 500); // 500ms debounce for SHM
     }
 
     /**
@@ -85,14 +82,31 @@ export class DatabaseWatcher {
     }
 
     /**
-     * Remove and dispose the watcher for a file.
+     * Remove and dispose the watcher for a database file.
+     * Also removes associated WAL and SHM watchers.
      * @param filePath Absolute path to the database file
      */
     removeWatcher(filePath: string) {
+        // Remove main database watcher
         const watcher = this.watchers.get(filePath);
         if (watcher) {
             watcher.dispose();
             this.watchers.delete(filePath);
+        }
+        
+        // Also remove WAL and SHM watchers
+        const { walPath, shmPath } = getWalFilePaths(filePath);
+        
+        const walWatcher = this.watchers.get(walPath);
+        if (walWatcher) {
+            walWatcher.dispose();
+            this.watchers.delete(walPath);
+        }
+        
+        const shmWatcher = this.watchers.get(shmPath);
+        if (shmWatcher) {
+            shmWatcher.dispose();
+            this.watchers.delete(shmPath);
         }
     }
 
