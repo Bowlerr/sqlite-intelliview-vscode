@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * WAL (Write-Ahead Logging) utility functions for SQLite databases.
@@ -153,8 +154,9 @@ async function checkpointUnencryptedWal(dbPath: string): Promise<void> {
     debugLog('Attempting checkpoint with sqlite3 CLI');
     
     try {
-        // Use sqlite3 CLI which is reliable in VS Code extension context
-        const { stdout, stderr } = await execAsync(`sqlite3 "${dbPath}" "PRAGMA wal_checkpoint(FULL);"`);
+        // Use execFile to safely pass arguments without shell interpolation
+        // This prevents shell injection and handles paths with spaces/special chars
+        const { stdout, stderr } = await execFileAsync('sqlite3', [dbPath, 'PRAGMA wal_checkpoint(FULL);']);
         
         if (stderr && stderr.trim()) {
             debugWarn('sqlite3 CLI stderr:', stderr);
@@ -200,15 +202,16 @@ async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Pr
             throw new Error('SQLCipher not found. Please install SQLCipher to checkpoint encrypted databases with WAL mode.');
         }
         
-        // Escape the encryption key to handle special characters
+        // Escape the encryption key for SQL (not shell)
         const escapedKey = encryptionKey.replace(/'/g, "''");
         
-        // Use sqlcipher to checkpoint the WAL
-        // We open the database, set the key, and run the checkpoint command
-        const checkpointCommand = `echo "PRAGMA key = '${escapedKey}'; PRAGMA busy_timeout = 5000; PRAGMA wal_checkpoint(FULL);" | sqlcipher "${dbPath}"`;
+        // Build SQL commands safely - no shell interpolation
+        const sqlCommands = `PRAGMA key = '${escapedKey}'; PRAGMA busy_timeout = 5000; PRAGMA wal_checkpoint(FULL);`;
         
+        // Use execFile to safely pass arguments without shell interpolation
+        // This prevents shell injection and handles paths with spaces/special chars
         debugLog('Running SQLCipher checkpoint command');
-        const result = await execAsync(checkpointCommand);
+        const result = await execFileAsync('sqlcipher', [dbPath, sqlCommands]);
         
         if (result.stderr && result.stderr.trim()) {
             debugWarn('SQLCipher checkpoint stderr:', result.stderr);
