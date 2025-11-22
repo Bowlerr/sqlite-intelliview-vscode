@@ -167,6 +167,25 @@ async function checkpointUnencryptedWal(dbPath: string): Promise<void> {
 }
 
 /**
+ * Check if SQLCipher is available on the system.
+ * Uses cross-platform command detection.
+ * @returns Promise<boolean> indicating if SQLCipher is available
+ */
+async function isSqlCipherAvailable(): Promise<boolean> {
+    try {
+        // Try to execute sqlcipher -version
+        // This is cross-platform and works on Windows, macOS, and Linux
+        await execAsync('sqlcipher -version');
+        return true;
+    } catch (error: any) {
+        // ENOENT means command not found
+        // Non-zero exit code also indicates absence or error
+        debugLog('SQLCipher not available:', error.message);
+        return false;
+    }
+}
+
+/**
  * Checkpoint an encrypted database using SQLCipher CLI.
  * @param dbPath Path to the database file
  * @param encryptionKey SQLCipher encryption key
@@ -175,10 +194,9 @@ async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Pr
     debugLog('Attempting checkpoint with SQLCipher CLI');
     
     try {
-        // Check if sqlcipher is available
-        try {
-            await execAsync('which sqlcipher');
-        } catch {
+        // Check if sqlcipher is available using cross-platform detection
+        const sqlCipherAvailable = await isSqlCipherAvailable();
+        if (!sqlCipherAvailable) {
             throw new Error('SQLCipher not found. Please install SQLCipher to checkpoint encrypted databases with WAL mode.');
         }
         
