@@ -3,6 +3,7 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { markInternalUpdate } from './databaseWatcher';
+import { hasWalFiles, checkpointWalWithRetry, getWalStatus } from './walUtils';
 
 const execAsync = promisify(exec);
 
@@ -102,6 +103,25 @@ export class DatabaseService {
             // Check if file exists
             if (!fs.existsSync(databasePath)) {
                 throw new Error(`Database file not found: ${databasePath}`);
+            }
+
+            // Check for WAL mode and checkpoint if needed
+            if (await hasWalFiles(databasePath)) {
+                this.debugLog('WAL', 'WAL files detected, performing checkpoint...');
+                const walStatus = await getWalStatus(databasePath);
+                this.debugLog('WAL', `WAL file size: ${walStatus.walSize} bytes, SHM file size: ${walStatus.shmSize} bytes`);
+                
+                try {
+                    const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey);
+                    if (checkpointSuccess) {
+                        this.debugLog('WAL', 'WAL checkpoint completed successfully');
+                    } else {
+                        this.debugWarn('WAL', 'Could not checkpoint WAL after retries. Continuing with potentially stale data.');
+                    }
+                } catch (error) {
+                    this.debugWarn('WAL', 'Could not checkpoint WAL:', error);
+                    // Continue anyway - we'll load what we can from the main database file
+                }
             }
 
             let dataToLoad: Buffer;

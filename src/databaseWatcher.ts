@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
+import { getWalFilePaths } from './walUtils';
 
 /**
  * DatabaseWatcher manages FileSystemWatchers for database files.
@@ -10,6 +12,7 @@ export class DatabaseWatcher {
 
     /**
      * Add a watcher for a database file.
+     * Also watches associated WAL and SHM files if they exist.
      * @param filePath Absolute path to the database file
      * @param onChange Callback to invoke on file change
      */
@@ -17,30 +20,61 @@ export class DatabaseWatcher {
         if (this.watchers.has(filePath)) {
             return;
         }
+        
+        // Add watcher for the main database file
+        this.addWatcherForFile(filePath, onChange, 150); // 150ms debounce for main DB
+        
+        // Also watch WAL and SHM files - create watchers even if files don't exist yet
+        // SQLite creates WAL/SHM files on first write, so we need to watch for their creation
+        const { walPath, shmPath } = getWalFilePaths(filePath);
+        
+        // Always create watchers for WAL and SHM files to catch creation events
+        this.addWatcherForFile(walPath, onChange, 500); // 500ms debounce for WAL (more frequent changes)
+        this.addWatcherForFile(shmPath, onChange, 500); // 500ms debounce for SHM
+    }
+
+    /**
+     * Add a file system watcher for a specific file.
+     * @param filePath Absolute path to the file to watch
+     * @param onChange Callback to invoke on file change
+     * @param debounceMs Debounce delay in milliseconds
+     */
+    private addWatcherForFile(filePath: string, onChange: () => void, debounceMs: number) {
+        // Don't add duplicate watchers
+        if (this.watchers.has(filePath)) {
+            return;
+        }
+        
         // Use a glob pattern for the file in its directory
         const dir = path.dirname(filePath);
         const base = path.basename(filePath);
         const pattern = new vscode.RelativePattern(dir, base);
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+        
         // Debounce map to prevent rapid duplicate triggers
         const debounceMap: Map<string, NodeJS.Timeout> = (this as any)._debounceMap || new Map();
         (this as any)._debounceMap = debounceMap;
-        const DEBOUNCE_MS = 150;
+        
         const filterEvent = (uri: vscode.Uri) => {
             if (uri.fsPath === filePath) {
-                if (isInternalUpdate(filePath)) {
-                    // Suppress this event, it was triggered by our own write
-                    return;
+                // For main database file, check if it's an internal update
+                if (filePath.endsWith('.db') || filePath.endsWith('.sqlite') || filePath.endsWith('.sqlite3')) {
+                    if (isInternalUpdate(filePath)) {
+                        // Suppress this event, it was triggered by our own write
+                        return;
+                    }
                 }
+                
                 if (debounceMap.has(filePath)) {
                     clearTimeout(debounceMap.get(filePath));
                 }
                 debounceMap.set(filePath, setTimeout(() => {
                     onChange();
                     debounceMap.delete(filePath);
-                }, DEBOUNCE_MS));
+                }, debounceMs));
             }
         };
+        
         watcher.onDidChange(filterEvent);
         watcher.onDidCreate(filterEvent);
         watcher.onDidDelete(filterEvent);
@@ -48,14 +82,31 @@ export class DatabaseWatcher {
     }
 
     /**
-     * Remove and dispose the watcher for a file.
+     * Remove and dispose the watcher for a database file.
+     * Also removes associated WAL and SHM watchers.
      * @param filePath Absolute path to the database file
      */
     removeWatcher(filePath: string) {
+        // Remove main database watcher
         const watcher = this.watchers.get(filePath);
         if (watcher) {
             watcher.dispose();
             this.watchers.delete(filePath);
+        }
+        
+        // Also remove WAL and SHM watchers
+        const { walPath, shmPath } = getWalFilePaths(filePath);
+        
+        const walWatcher = this.watchers.get(walPath);
+        if (walWatcher) {
+            walWatcher.dispose();
+            this.watchers.delete(walPath);
+        }
+        
+        const shmWatcher = this.watchers.get(shmPath);
+        if (shmWatcher) {
+            shmWatcher.dispose();
+            this.watchers.delete(shmPath);
         }
     }
 

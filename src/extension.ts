@@ -118,16 +118,60 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	const checkpointWalCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.checkpointWal', async () => {
+		// Get the currently active editor
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showWarningMessage('No database file is currently open');
+			return;
+		}
+
+		const dbPath = activeEditor.document.uri.fsPath;
+		
+		// Check if it's a database file
+		if (!['.db', '.sqlite', '.sqlite3'].some(ext => dbPath.endsWith(ext))) {
+			vscode.window.showWarningMessage('Active file is not a recognized database file');
+			return;
+		}
+
+		vscode.window.showInformationMessage('Checkpointing WAL and refreshing database...');
+		
+		try {
+			// Import WAL utilities dynamically to avoid circular dependencies
+			const { checkpointWalWithRetry, hasWalFiles } = require('./walUtils');
+			
+			// Check if database has WAL files
+			if (!(await hasWalFiles(dbPath))) {
+				vscode.window.showInformationMessage('This database does not have WAL mode enabled');
+				return;
+			}
+			
+			// Attempt checkpoint
+			const success = await checkpointWalWithRetry(dbPath);
+			
+			if (success) {
+				// Refresh the database explorer
+				databaseExplorerProvider.refresh();
+				vscode.window.showInformationMessage('WAL checkpoint completed successfully!');
+			} else {
+				vscode.window.showWarningMessage('Could not checkpoint WAL. Database may be locked by another process.');
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to checkpoint WAL: ${error}`);
+		}
+	});
+
 	// Register all commands
 	context.subscriptions.push(
 		openDatabaseCommand,
 		connectWithKeyCommand,
 		refreshDatabaseCommand,
-		exportDataCommand
+		exportDataCommand,
+		checkpointWalCommand
 	);
 
 	// Show welcome message
-	vscode.window.showInformationMessage('SQLite IntelliView is ready! Right-click on .db files to open them.');
+	vscode.window.showInformationMessage('SQLite IntelliView is ready! Click on .db files to open them.');
 }
 
 // This method is called when your extension is deactivated

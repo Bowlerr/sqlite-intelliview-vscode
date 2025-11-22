@@ -81,6 +81,11 @@
         "command": "sqlite-intelliview-vscode.exportData",
         "title": "Export Data",
         "category": "SQLite IntelliView"
+      },
+      {
+        "command": "sqlite-intelliview-vscode.checkpointWal",
+        "title": "Checkpoint WAL and Refresh",
+        "category": "SQLite IntelliView"
       }
     ],
     "customEditors": [
@@ -170,6 +175,16 @@
           "type": "boolean",
           "default": true,
           "description": "Enable automatic theme integration for the database editor UI."
+        },
+        "sqliteIntelliView.walAutoCheckpoint": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically checkpoint WAL (Write-Ahead Logging) files before opening databases to ensure up-to-date data."
+        },
+        "sqliteIntelliView.walMonitoring": {
+          "type": "boolean",
+          "default": true,
+          "description": "Monitor WAL files for changes and automatically refresh the database view when changes are detected."
         }
       }
     }
