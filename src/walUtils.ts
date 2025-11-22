@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, execFile } from 'child_process';
+import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
@@ -189,45 +189,98 @@ async function isSqlCipherAvailable(): Promise<boolean> {
 
 /**
  * Checkpoint an encrypted database using SQLCipher CLI.
+ * Uses stdin to pass the encryption key securely without exposing it on the command line.
  * @param dbPath Path to the database file
  * @param encryptionKey SQLCipher encryption key
  */
 async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Promise<void> {
     debugLog('Attempting checkpoint with SQLCipher CLI');
     
-    try {
-        // Check if sqlcipher is available using cross-platform detection
-        const sqlCipherAvailable = await isSqlCipherAvailable();
-        if (!sqlCipherAvailable) {
-            throw new Error('SQLCipher not found. Please install SQLCipher to checkpoint encrypted databases with WAL mode.');
-        }
+    // Check if sqlcipher is available using cross-platform detection
+    const sqlCipherAvailable = await isSqlCipherAvailable();
+    if (!sqlCipherAvailable) {
+        throw new Error('SQLCipher not found. Please install SQLCipher to checkpoint encrypted databases with WAL mode.');
+    }
+    
+    return new Promise((resolve, reject) => {
+        // Spawn sqlcipher with database path as argument (no shell interpolation)
+        const sqlcipher = spawn('sqlcipher', [dbPath], {
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
         
-        // Escape the encryption key for SQL (not shell)
+        let stdout = '';
+        let stderr = '';
+        let errorOccurred = false;
+        
+        // Set timeout to prevent hanging
+        const timeout = setTimeout(() => {
+            errorOccurred = true;
+            sqlcipher.kill();
+            reject(new Error('SQLCipher checkpoint timed out after 30 seconds'));
+        }, 30000);
+        
+        // Collect stdout
+        sqlcipher.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+        
+        // Collect stderr
+        sqlcipher.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+        
+        // Handle process exit
+        sqlcipher.on('close', (code) => {
+            clearTimeout(timeout);
+            
+            if (errorOccurred) {
+                return; // Already rejected by timeout or error handler
+            }
+            
+            if (stderr && stderr.trim()) {
+                debugWarn('SQLCipher checkpoint stderr:', stderr);
+                
+                // Check for specific errors
+                if (stderr.includes('database is locked')) {
+                    return reject(new Error('database is locked'));
+                } else if (stderr.includes('file is not a database') || stderr.includes('wrong key')) {
+                    return reject(new Error('Invalid encryption key provided'));
+                }
+            }
+            
+            if (code === 0) {
+                debugLog('SQLCipher checkpoint completed');
+                resolve();
+            } else {
+                reject(new Error(`SQLCipher exited with code ${code}: ${stderr || stdout}`));
+            }
+        });
+        
+        // Handle spawn errors (e.g., command not found)
+        sqlcipher.on('error', (err) => {
+            clearTimeout(timeout);
+            errorOccurred = true;
+            reject(new Error(`Failed to spawn sqlcipher: ${err.message}`));
+        });
+        
+        // Escape the encryption key for SQL
         const escapedKey = encryptionKey.replace(/'/g, "''");
         
-        // Build SQL commands safely - no shell interpolation
-        const sqlCommands = `PRAGMA key = '${escapedKey}'; PRAGMA busy_timeout = 5000; PRAGMA wal_checkpoint(FULL);`;
+        // Write SQL commands to stdin securely (key never appears in process list)
+        const sqlCommands = `PRAGMA key = '${escapedKey}';\nPRAGMA busy_timeout = 5000;\nPRAGMA wal_checkpoint(FULL);\n.quit\n`;
         
-        // Use execFile to safely pass arguments without shell interpolation
-        // This prevents shell injection and handles paths with spaces/special chars
-        debugLog('Running SQLCipher checkpoint command');
-        const result = await execFileAsync('sqlcipher', [dbPath, sqlCommands]);
-        
-        if (result.stderr && result.stderr.trim()) {
-            debugWarn('SQLCipher checkpoint stderr:', result.stderr);
-            // Check for errors in stderr
-            if (result.stderr.includes('database is locked')) {
-                throw new Error('database is locked');
-            } else if (result.stderr.includes('file is not a database') || result.stderr.includes('wrong key')) {
-                throw new Error('Invalid encryption key provided');
+        sqlcipher.stdin.write(sqlCommands, (err) => {
+            if (err) {
+                errorOccurred = true;
+                sqlcipher.kill();
+                clearTimeout(timeout);
+                reject(new Error(`Failed to write to sqlcipher stdin: ${err.message}`));
+            } else {
+                // Close stdin to signal end of input
+                sqlcipher.stdin.end();
             }
-        }
-        
-        debugLog('SQLCipher checkpoint completed');
-    } catch (error: any) {
-        debugError('SQLCipher checkpoint error:', error);
-        throw error;
-    }
+        });
+    });
 }
 
 /**
