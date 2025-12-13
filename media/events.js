@@ -309,7 +309,7 @@ function reloadDatabaseConnection() {
 
   showConfirmDialog({
     message:
-      "Hard reload will refresh the UI.\n\nContinue? Your current state will be saved and restored when possible.",
+      "Hard reload will refresh the UI.\n\nContinue? Non-sensitive UI state will be saved and restored when possible. For safety, encryption keys and query text are not persisted.",
     confirmText: "Reload",
     cancelText: "Cancel",
     onConfirm: persistThenReload,
@@ -425,7 +425,6 @@ function buildFallbackReloadSnapshot() {
   const safeState = {};
   [
     "databasePath",
-    "encryptionKey",
     "openTables",
     "activeTable",
     "selectedTable",
@@ -444,7 +443,8 @@ function buildFallbackReloadSnapshot() {
     }
   });
 
-  // Capture query editor content and view state (cursor/selection/scroll).
+  // Capture query editor view state (cursor/selection/scroll) only.
+  // Avoid persisting query text (may contain secrets).
   /** @type {any} */
   let queryEditorSnapshot = null;
   try {
@@ -452,14 +452,13 @@ function buildFallbackReloadSnapshot() {
     const editor = qe && qe.editor ? qe.editor : null;
     if (editor && typeof editor.getValue === "function") {
       queryEditorSnapshot = {
-        value: editor.getValue(),
         viewState:
           typeof editor.saveViewState === "function"
             ? editor.saveViewState()
             : null,
       };
     } else if (qe && typeof qe.getValue === "function") {
-      queryEditorSnapshot = { value: qe.getValue(), viewState: null };
+      queryEditorSnapshot = { viewState: null };
     }
   } catch (_) {
     // ignore
@@ -469,6 +468,15 @@ function buildFallbackReloadSnapshot() {
   let normalizedState = safeState;
   try {
     normalizedState = JSON.parse(JSON.stringify(safeState));
+  } catch (_) {
+    // ignore
+  }
+
+  // Ensure we never persist encryptionKey, even if it was added by future changes.
+  try {
+    if (normalizedState && typeof normalizedState === "object") {
+      delete normalizedState.encryptionKey;
+    }
   } catch (_) {
     // ignore
   }
@@ -543,6 +551,18 @@ function restoreFallbackReloadSnapshotOnce() {
     return;
   }
 
+  // Sanitize older snapshots defensively (never restore secrets).
+  try {
+    if (snapshot && snapshot.state && typeof snapshot.state === "object") {
+      delete snapshot.state.encryptionKey;
+    }
+    if (snapshot && snapshot.queryEditor && typeof snapshot.queryEditor === "object") {
+      delete snapshot.queryEditor.value;
+    }
+  } catch (_) {
+    // ignore
+  }
+
   // Remove immediately to avoid repeat restores; keep it in-memory for delayed editor init.
   clearFallbackReloadSnapshot();
   win.__pendingFallbackReloadSnapshot = snapshot;
@@ -581,18 +601,6 @@ function restorePendingQueryEditorSnapshot() {
     }
 
     try {
-      const currentValue =
-        typeof editor.getValue === "function" ? editor.getValue() : "";
-      const nextValue =
-        typeof snapshot.queryEditor.value === "string"
-          ? snapshot.queryEditor.value
-          : "";
-
-      // Avoid clobbering any value that already exists.
-      if ((!currentValue || currentValue.trim().length === 0) && nextValue) {
-        editor.setValue(nextValue);
-      }
-
       if (
         snapshot.queryEditor.viewState &&
         typeof editor.restoreViewState === "function"
@@ -1453,7 +1461,9 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
     return;
   }
 
-  const viewState = window.getTabViewState(effectiveKey);
+  const rawViewState = window.getTabViewState(effectiveKey);
+  const viewState =
+    rawViewState && typeof rawViewState === "object" ? rawViewState : {};
 
   // Restore pinned columns (before sizing/positioning).
   if (viewState && Array.isArray(viewState.pinnedColumns)) {
@@ -1647,12 +1657,16 @@ function updateSidebarSelection(tableKey) {
     el.classList.remove("selected");
   });
 
-  // CSS.escape isn't supported everywhere; fallback to a cheap escape.
-  const safeKey =
-    typeof CSS !== "undefined" && CSS.escape ? CSS.escape(tableKey) : tableKey.replace(/"/g, '\\"');
-  const next = list.querySelector(`.table-item[data-table="${safeKey}"]`);
-  if (next) {
-    next.classList.add("selected");
+  const desiredKey = String(tableKey);
+  const items = list.querySelectorAll(".table-item[data-table]");
+  for (const item of items) {
+    if (!(item instanceof HTMLElement)) {
+      continue;
+    }
+    if (item.dataset && item.dataset.table === desiredKey) {
+      item.classList.add("selected");
+      break;
+    }
   }
 }
 
