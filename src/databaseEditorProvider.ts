@@ -166,6 +166,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 case 'generateERDiagram':
                     this.handleERDiagramRequest(webviewPanel, document.uri.fsPath, e.key);
                     return;
+                case 'downloadBlob':
+                    void this.handleDownloadBlobRequest(webviewPanel, document.uri.fsPath, e.requestId, e.filename, e.mime, e.dataBase64);
+                    return;
             }
         });
 
@@ -226,7 +229,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; img-src ${webview.cspSource} data:; worker-src blob: ${webview.cspSource}; child-src blob:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; img-src ${webview.cspSource} data: blob:; worker-src blob: ${webview.cspSource}; child-src blob:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${cssLinks}
                 <title>SQLite IntelliView</title>
@@ -383,6 +386,92 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
+    }
+
+    private async handleDownloadBlobRequest(
+        webviewPanel: vscode.WebviewPanel,
+        databasePath: string,
+        requestId: unknown,
+        filename: unknown,
+        mime: unknown,
+        dataBase64: unknown
+    ): Promise<void> {
+        try {
+            const reqId = typeof requestId === 'string' && requestId.trim().length > 0 ? requestId.trim() : undefined;
+            const safeName = typeof filename === 'string' && filename.trim().length > 0
+                ? path.basename(filename.trim())
+                : 'blob.bin';
+            const safeMime = typeof mime === 'string' && mime.trim().length > 0
+                ? mime.trim()
+                : 'application/octet-stream';
+            const payload = typeof dataBase64 === 'string' ? dataBase64 : '';
+
+            if (!payload) {
+                webviewPanel.webview.postMessage({
+                    type: 'downloadBlobResult',
+                    requestId: reqId,
+                    success: false,
+                    message: 'No blob data provided.'
+                });
+                return;
+            }
+
+            const buffer = Buffer.from(payload, 'base64');
+            if (!buffer || buffer.length === 0) {
+                webviewPanel.webview.postMessage({
+                    type: 'downloadBlobResult',
+                    requestId: reqId,
+                    success: false,
+                    message: 'Blob data was empty.'
+                });
+                return;
+            }
+
+            const defaultDir = path.dirname(databasePath);
+            const defaultUri = vscode.Uri.file(path.join(defaultDir, safeName));
+
+            const ext = path.extname(safeName).replace('.', '').toLowerCase();
+            const filters: Record<string, string[]> = {};
+            if (ext) {
+                filters[ext.toUpperCase()] = [ext];
+            }
+            filters['All Files'] = ['*'];
+
+            const target = await vscode.window.showSaveDialog({
+                defaultUri,
+                saveLabel: 'Save Blob',
+                filters
+            });
+
+            if (!target) {
+                webviewPanel.webview.postMessage({
+                    type: 'downloadBlobResult',
+                    requestId: reqId,
+                    success: false,
+                    canceled: true
+                });
+                return;
+            }
+
+            await fs.promises.writeFile(target.fsPath, buffer);
+
+            webviewPanel.webview.postMessage({
+                type: 'downloadBlobResult',
+                requestId: reqId,
+                success: true,
+                bytes: buffer.length,
+                path: target.fsPath,
+                mime: safeMime
+            });
+        } catch (error) {
+            this.debugError('downloadBlob', 'Failed to save blob:', error);
+            webviewPanel.webview.postMessage({
+                type: 'downloadBlobResult',
+                requestId: (typeof requestId === 'string' && requestId.trim().length > 0) ? requestId.trim() : undefined,
+                success: false,
+                message: (error && typeof error === 'object' && 'message' in error) ? (error as any).message : String(error)
+            });
+        }
     }
 
     private async handleDatabaseInfoRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, key?: string) {

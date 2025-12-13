@@ -98,6 +98,39 @@
   font-style: italic;
 }
 
+/* ===== BLOB CELLS (THUMBNAILS / LABELS) ===== */
+.data-table .cell-content-blob {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.data-table .cell-content-blob .blob-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid var(--vscode-panel-border);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.data-table .cell-content-blob .blob-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  flex: 0 0 auto;
+}
+.data-table .cell-content-blob .blob-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 /* Virtualized table rows (spacers + loading row) */
 .data-table tbody tr.virtual-spacer {
   background: transparent !important;

@@ -368,6 +368,28 @@ function handleExtensionMessage(event) {
         showError(message.error || "Failed to load database");
       }
       break;
+    case "downloadBlobResult":
+      if (typeof hideLoading === "function") {
+        hideLoading();
+      }
+      if (message && message.canceled) {
+        // no-op (user canceled save dialog)
+        break;
+      }
+      if (message && message.success) {
+        if (typeof showSuccess !== "undefined") {
+          const bytes =
+            typeof message.bytes === "number" ? message.bytes : undefined;
+          showSuccess(
+            bytes ? `Blob saved (${bytes.toLocaleString()} bytes)` : "Blob saved"
+          );
+        }
+      } else {
+        if (typeof showError !== "undefined") {
+          showError(message.message || "Failed to save blob");
+        }
+      }
+      break;
     default:
       if (window.debug) {
         window.debug.debug(`[Events] Unknown message type: ${message.type}`);

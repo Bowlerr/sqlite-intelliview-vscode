@@ -192,3 +192,35 @@
 .json-viewer-dialog .confirm-dialog-row-data {
   max-height: 60vh;
 }
+
+.blob-viewer-dialog {
+  max-width: 980px;
+  width: 95%;
+  max-height: 85vh;
+}
+.blob-viewer-dialog .blob-viewer-content {
+  max-height: 60vh;
+}
+.blob-viewer-dialog .blob-viewer-image {
+  display: block;
+  max-width: 100%;
+  max-height: 58vh;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+}
+.blob-viewer-dialog .blob-viewer-hex {
+  margin: 0;
+  white-space: pre;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.blob-viewer-dialog .blob-viewer-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}

@@ -15,6 +15,9 @@ const PAGINATION_CONFIG = {
 const CELL_RENDER_LIMIT = 200; // visible characters
 const CELL_ORIGINAL_LIMIT = 2000; // stored in DOM attributes (for editing)
 
+// BLOB rendering: keep thumbnails small to avoid UI jank.
+const BLOB_THUMB_MAX_BYTES = 64 * 1024; // 64KB
+
 // Simple row virtualization (keeps DOM small for large pages).
 const VIRTUALIZATION_CONFIG = {
   // Auto-enable when the current page is large enough to cause noticeable jank.
@@ -49,6 +52,150 @@ function getVirtualizationStash() {
     win.__virtualTableStash = new Map();
   }
   return /** @type {Map<string, any>} */ (win.__virtualTableStash);
+}
+
+function getTableDataStash() {
+  /** @type {any} */ const win = typeof window !== "undefined" ? window : {};
+  if (!win.__tableDataStash) {
+    win.__tableDataStash = new Map();
+  }
+  return /** @type {Map<string, any>} */ (win.__tableDataStash);
+}
+
+function stashTableData(tableId, payload) {
+  try {
+    const stash = getTableDataStash();
+    stash.set(tableId, payload);
+    // Prevent unbounded growth since table IDs are time-based.
+    const maxEntries = 25;
+    while (stash.size > maxEntries) {
+      const firstKey = stash.keys().next().value;
+      if (firstKey === undefined) {
+        break;
+      }
+      stash.delete(firstKey);
+    }
+  } catch (_) {
+    // best-effort only
+  }
+}
+
+function normalizeBlobValue(value) {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  if (Array.isArray(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    return Uint8Array.from(value);
+  }
+  // Node Buffer serialized form (rare, but can happen depending on transport)
+  if (
+    typeof value === "object" &&
+    value &&
+    value.type === "Buffer" &&
+    Array.isArray(value.data)
+  ) {
+    return Uint8Array.from(value.data);
+  }
+  return null;
+}
+
+function detectImageMime(bytes) {
+  if (!bytes || bytes.length < 4) {
+    return "";
+  }
+  // PNG
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  // JPEG
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  // GIF
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return "image/gif";
+  }
+  // WebP: RIFF....WEBP
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  // BMP
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return "image/bmp";
+  }
+  // SVG (best-effort; treat as UTF-8 text)
+  try {
+    const head = new TextDecoder("utf-8", { fatal: false }).decode(
+      bytes.subarray(0, Math.min(bytes.length, 256))
+    );
+    if (head.trim().startsWith("<svg")) {
+      return "image/svg+xml";
+    }
+  } catch (_) {
+    // ignore
+  }
+  return "";
+}
+
+function formatBytes(bytes) {
+  const b = typeof bytes === "number" && bytes >= 0 ? bytes : 0;
+  if (b < 1024) {
+    return `${b} B`;
+  }
+  const kb = b / 1024;
+  if (kb < 1024) {
+    return `${Math.round(kb * 10) / 10} KB`;
+  }
+  const mb = kb / 1024;
+  if (mb < 1024) {
+    return `${Math.round(mb * 10) / 10} MB`;
+  }
+  const gb = mb / 1024;
+  return `${Math.round(gb * 10) / 10} GB`;
+}
+
+function uint8ToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, /** @type {any} */ (chunk));
+  }
+  return btoa(binary);
 }
 
 function normalizeEnhancedTableWrapper(el) {
@@ -194,6 +341,14 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     tableName,
     options
   );
+
+  // Keep the current page rows in-memory for context menu actions (e.g., BLOB viewing/copy).
+  stashTableData(tableId, {
+    pageData,
+    columns,
+    startIndex,
+    tableName,
+  });
 
   if (virtualize) {
     // Stash the current page rows in-memory so the virtualizer can hydrate after insertion.
@@ -467,6 +622,8 @@ function renderTableCellHtml(
   let fkInfo = foreignKeyMap.get(columnName);
   let fkTable = null;
   let fkColumn = null;
+  const blobBytes = normalizeBlobValue(cell);
+  const isBlob = !!blobBytes;
 
   // Fallback: try to extract FK info from column metadata if not present
   if (!isForeignKey && Array.isArray(columns) && options && options.columns) {
@@ -498,6 +655,24 @@ function renderTableCellHtml(
   if (cell === null || cell === undefined) {
     cellContentHtml =
       '<div class="cell-content" data-original-value=""><em>NULL</em></div>';
+  } else if (isBlob && blobBytes) {
+    const sizeText = formatBytes(blobBytes.length);
+    const mime = detectImageMime(blobBytes);
+    const isImage = !!mime;
+    const canThumb = isImage && blobBytes.length <= BLOB_THUMB_MAX_BYTES;
+    const thumbHtml = canThumb
+      ? `<img class="blob-thumb" alt="Image blob preview" src="data:${mime};base64,${uint8ToBase64(
+          blobBytes
+        )}" />`
+      : `<span class="blob-icon" aria-hidden="true">${
+          isImage ? "🖼️" : "🧩"
+        }</span>`;
+    const label = `${isImage ? "Image" : "BLOB"} ${sizeText}`;
+    cellContentHtml = `<div class="cell-content cell-content-blob" data-original-value="" data-blob="true" data-blob-size="${blobBytes.length}"${
+      mime ? ` data-blob-mime="${escapeHtmlFast(mime)}"` : ""
+    }>${thumbHtml}<span class="blob-label">${escapeHtmlFast(
+      label
+    )}</span></div>`;
   } else {
     const raw = String(cell);
     const original =
@@ -515,13 +690,20 @@ function renderTableCellHtml(
     )}"${truncatedAttr}>${escapeHtmlFast(display)}</div>`;
   }
 
+  const cellEditable = isEditable && !isBlob;
+  const ariaValue = isBlob && blobBytes
+    ? `BLOB (${formatBytes(blobBytes.length)})`
+    : cell !== null
+    ? String(cell).substring(0, 50)
+    : "null";
+
   return `
             <td data-column="${cellIndex}" 
                 class="data-cell${fkClass}" 
                 role="gridcell"
                 tabindex="0"
-                ${isEditable ? `data-editable="true"` : ""}
-                ${isEditable ? `data-row-index="${globalIndex}"` : ""}
+                ${cellEditable ? `data-editable="true"` : ""}
+                ${cellEditable ? `data-row-index="${globalIndex}"` : ""}
                 data-column-name="${
                   columns ? columns[cellIndex] : `col_${cellIndex}`
                 }"
@@ -530,12 +712,12 @@ function renderTableCellHtml(
                     ? `data-fk-table="${fkTable}" data-fk-column="${fkColumn}"`
                     : ""
                 }
-                aria-label="Row ${globalIndex + 1}, Column ${cellIndex + 1}: ${
-    cell !== null ? String(cell).substring(0, 50) : "null"
-  }${isForeignKey ? " (Foreign Key)" : ""}">
+                aria-label="Row ${globalIndex + 1}, Column ${
+    cellIndex + 1
+  }: ${ariaValue}${isForeignKey ? " (Foreign Key)" : ""}">
               ${cellContentHtml}
               ${
-                isEditable
+                cellEditable
                   ? `<div class="cell-editing-controls" style="display: none;">
                 <input type="text" class="cell-input" />
                 <button class="cell-save-btn" title="Save changes">✓</button>

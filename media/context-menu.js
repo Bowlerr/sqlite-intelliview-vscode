@@ -54,6 +54,19 @@ function createContextMenuElement() {
       <span>Copy Formatted JSON</span>
     </div>
     <div class="context-menu-separator context-menu-separator-json" style="display: none;"></div>
+    <div class="context-menu-item context-menu-item-blob" data-action="view-blob" style="display: none;">
+      <span class="icon">🧩</span>
+      <span>View Blob</span>
+    </div>
+    <div class="context-menu-item context-menu-item-blob" data-action="copy-blob-base64" style="display: none;">
+      <span class="icon">📋</span>
+      <span>Copy Blob (Base64)</span>
+    </div>
+    <div class="context-menu-item context-menu-item-blob" data-action="copy-blob-hex" style="display: none;">
+      <span class="icon">📋</span>
+      <span>Copy Blob (Hex)</span>
+    </div>
+    <div class="context-menu-separator context-menu-separator-blob" style="display: none;"></div>
     <div class="context-menu-item" data-action="copy-row">
       <span class="icon">📄</span>
       <span>Copy Row</span>
@@ -238,6 +251,56 @@ function showContextMenuAt(x, y) {
     }
   }
 
+  // Show/hide BLOB actions
+  const blobViewItem = contextMenu.querySelector('[data-action="view-blob"]');
+  const blobCopyB64Item = contextMenu.querySelector(
+    '[data-action="copy-blob-base64"]'
+  );
+  const blobCopyHexItem = contextMenu.querySelector(
+    '[data-action="copy-blob-hex"]'
+  );
+  const blobSeparator = contextMenu.querySelector(
+    ".context-menu-separator-blob"
+  );
+
+  const blobInfo = currentCell ? getBlobInfoForCell(currentCell) : null;
+  const hasBlob = !!blobInfo;
+
+  if (blobViewItem && blobCopyB64Item && blobCopyHexItem && blobSeparator) {
+    if (hasBlob) {
+      blobViewItem.style.display = "flex";
+      blobCopyB64Item.style.display = "flex";
+      blobCopyHexItem.style.display = "flex";
+      blobSeparator.style.display = "block";
+
+      // Update label/icon for images
+      if (blobInfo && blobInfo.isImage) {
+        const icon = blobViewItem.querySelector(".icon");
+        if (icon) {
+          icon.textContent = "🖼️";
+        }
+        const textSpan = blobViewItem.querySelector("span:last-child");
+        if (textSpan) {
+          textSpan.textContent = "View Image";
+        }
+      } else {
+        const icon = blobViewItem.querySelector(".icon");
+        if (icon) {
+          icon.textContent = "🧩";
+        }
+        const textSpan = blobViewItem.querySelector("span:last-child");
+        if (textSpan) {
+          textSpan.textContent = "View Blob";
+        }
+      }
+    } else {
+      blobViewItem.style.display = "none";
+      blobCopyB64Item.style.display = "none";
+      blobCopyHexItem.style.display = "none";
+      blobSeparator.style.display = "none";
+    }
+  }
+
   // Position the context menu
   contextMenu.style.left = x + "px";
   contextMenu.style.top = y + "px";
@@ -353,6 +416,15 @@ function executeContextMenuAction(action) {
     case "copy-cell-json":
       copyCellAsFormattedJson();
       break;
+    case "view-blob":
+      viewCellAsBlob();
+      break;
+    case "copy-blob-base64":
+      copyCellBlobAsBase64();
+      break;
+    case "copy-blob-hex":
+      copyCellBlobAsHex();
+      break;
     case "copy-row":
       copyRowData();
       break;
@@ -399,10 +471,20 @@ function copyRowData() {
   }
 
   const cells = currentRow.querySelectorAll("td");
-  const rowData = Array.from(cells).map((cell) => getCellDisplayValue(cell));
+  let hadLargeBlob = false;
+  const rowData = Array.from(cells).map((cell) => {
+    const res = getCellCopyValue(/** @type {HTMLTableCellElement} */ (cell), {
+      mode: "tsv",
+    });
+    hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
+    return typeof res.value === "string" ? res.value : "";
+  });
   const rowText = rowData.join("\t"); // Tab-separated values
 
-  copyToClipboard(rowText, "Row data copied");
+  copyToClipboard(
+    rowText,
+    `Row data copied${hadLargeBlob ? " (some blobs omitted)" : ""}`
+  );
 }
 
 /**
@@ -434,24 +516,39 @@ function copyColumnData() {
 
   // Get all cell values in the column
   const columnData = [headerText];
+  let hadLargeBlob = false;
   if (vs && vs.enabled === true) {
     (vs.order || []).forEach((sourceIndex) => {
       const row = vs.pageData[sourceIndex];
-      const cell = Array.isArray(row) ? row[columnIndex] : null;
-      columnData.push(cell === null || cell === undefined ? "" : String(cell));
+      const v = Array.isArray(row) ? row[columnIndex] : null;
+      const bytes = normalizeBlobValue(v);
+      if (bytes) {
+        const mime = detectImageMime(bytes);
+        const isImage = !!mime;
+        const out = blobToCopyText(bytes, mime, { includeDataUrl: isImage });
+        hadLargeBlob = hadLargeBlob || out.truncated === true;
+        columnData.push(out.text);
+      } else {
+        columnData.push(v === null || v === undefined ? "" : String(v));
+      }
     });
   } else {
     const rows = table.querySelectorAll("tbody tr");
     rows.forEach((row) => {
       const cell = row.cells[columnIndex];
       if (cell) {
-        columnData.push(getCellDisplayValue(cell));
+        const res = getCellCopyValue(cell, { mode: "tsv" });
+        hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
+        columnData.push(typeof res.value === "string" ? res.value : "");
       }
     });
   }
 
   const columnText = columnData.join("\n");
-  copyToClipboard(columnText, "Column data copied");
+  copyToClipboard(
+    columnText,
+    `Column data copied${hadLargeBlob ? " (some blobs omitted)" : ""}`
+  );
 }
 
 /**
@@ -475,10 +572,16 @@ function copyRowDataAsJSON() {
 
   // Get row data
   const cells = currentRow.querySelectorAll("td");
+  let hadLargeBlob = false;
   const rowData = Array.from(cells).map((cell) => {
-    const value = getCellDisplayValue(cell);
-    // Convert empty strings back to null for JSON representation
-    return value === "" ? null : value;
+    const res = getCellCopyValue(/** @type {HTMLTableCellElement} */ (cell), {
+      mode: "json",
+    });
+    hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
+    if (typeof res.value === "string") {
+      return res.value === "" ? null : res.value;
+    }
+    return res.value;
   });
 
   // Create JSON object
@@ -491,7 +594,10 @@ function copyRowDataAsJSON() {
 
   // Convert to formatted JSON
   const jsonString = JSON.stringify(rowObject, null, 2);
-  copyToClipboard(jsonString, "Row data copied as JSON");
+  copyToClipboard(
+    jsonString,
+    `Row data copied as JSON${hadLargeBlob ? " (some blobs omitted)" : ""}`
+  );
 }
 
 /**
@@ -517,18 +623,25 @@ function copyTableDataAsJSON() {
   );
 
   const tableData = [];
+  let hadLargeBlob = false;
 
   if (vs && vs.enabled === true) {
     (vs.order || []).forEach((sourceIndex) => {
       const row = vs.pageData[sourceIndex];
-      const rowData = Array.isArray(row)
-        ? row.map((val) => (val === null || val === undefined ? null : String(val)))
-        : [];
-
       const rowObject = {};
       columnNames.forEach((columnName, index) => {
-        if (index < rowData.length) {
-          rowObject[columnName] = rowData[index];
+        const v = Array.isArray(row) ? row[index] : null;
+        const bytes = normalizeBlobValue(v);
+        if (bytes) {
+          const mime = detectImageMime(bytes);
+          const jsonVal = blobToJsonValue(bytes, mime);
+          hadLargeBlob = hadLargeBlob || jsonVal.truncated === true;
+          rowObject[columnName] = jsonVal;
+        } else {
+          rowObject[columnName] =
+            v === null || v === undefined || String(v) === ""
+              ? null
+              : String(v);
         }
       });
       tableData.push(rowObject);
@@ -539,9 +652,15 @@ function copyTableDataAsJSON() {
     rows.forEach((row) => {
       const cells = row.querySelectorAll("td");
       const rowData = Array.from(cells).map((cell) => {
-        const value = getCellDisplayValue(cell);
-        // Convert empty strings back to null for JSON representation
-        return value === "" ? null : value;
+        const res = getCellCopyValue(
+          /** @type {HTMLTableCellElement} */ (cell),
+          { mode: "json" }
+        );
+        hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
+        if (typeof res.value === "string") {
+          return res.value === "" ? null : res.value;
+        }
+        return res.value;
       });
 
       const rowObject = {};
@@ -558,7 +677,9 @@ function copyTableDataAsJSON() {
   const jsonString = JSON.stringify(tableData, null, 2);
   copyToClipboard(
     jsonString,
-    `Table data copied as JSON (${tableData.length} rows)`
+    `Table data copied as JSON (${tableData.length} rows)${
+      hadLargeBlob ? " (some blobs omitted)" : ""
+    }`
   );
 }
 
@@ -574,6 +695,49 @@ function getCellDisplayValue(cell) {
     return textContent.trim() === "NULL" ? "" : textContent.trim();
   }
   return cell.textContent?.trim() || "";
+}
+
+/**
+ * Get a cell's underlying value from in-memory state (supports BLOBs).
+ * @param {HTMLTableCellElement} cell
+ * @returns {any}
+ */
+function getCellUnderlyingValue(cell) {
+  const table = cell.closest(".data-table");
+  const wrapper = table && table.closest(".enhanced-table-wrapper");
+  if (!wrapper) {
+    return null;
+  }
+
+  const colIndex = parseInt(
+    cell.getAttribute("data-column") || String(cell.cellIndex),
+    10
+  );
+  const rowEl = cell.closest("tr");
+  const localIndex = parseInt(rowEl?.getAttribute("data-local-index") || "", 10);
+  if (!Number.isFinite(colIndex) || !Number.isFinite(localIndex)) {
+    return null;
+  }
+
+  /** @type {any} */ const vs = /** @type {any} */ (wrapper).__virtualTableState;
+  if (vs && vs.enabled === true && Array.isArray(vs.pageData)) {
+    const row = vs.pageData[localIndex];
+    if (Array.isArray(row) && colIndex >= 0 && colIndex < row.length) {
+      return row[colIndex];
+    }
+  }
+
+  const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+  /** @type {any} */ const stash = /** @type {any} */ (window).__tableDataStash;
+  const payload = tableId && stash && typeof stash.get === "function" ? stash.get(tableId) : null;
+  if (payload && Array.isArray(payload.pageData)) {
+    const row = payload.pageData[localIndex];
+    if (Array.isArray(row) && colIndex >= 0 && colIndex < row.length) {
+      return row[colIndex];
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -709,6 +873,516 @@ function viewCellAsJson() {
     formattedJson: jsonInfo.formatted,
     truncated: jsonInfo.truncated,
   });
+}
+
+function normalizeBlobValue(value) {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
+  ) {
+    return Uint8Array.from(value);
+  }
+  if (
+    typeof value === "object" &&
+    value &&
+    value.type === "Buffer" &&
+    Array.isArray(value.data)
+  ) {
+    return Uint8Array.from(value.data);
+  }
+  return null;
+}
+
+function detectImageMime(bytes) {
+  if (!bytes || bytes.length < 4) {
+    return "";
+  }
+  // PNG
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  // JPEG
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  // GIF
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return "image/gif";
+  }
+  // WebP: RIFF....WEBP
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  // BMP
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return "image/bmp";
+  }
+  // SVG (best-effort)
+  try {
+    const head = new TextDecoder("utf-8", { fatal: false }).decode(
+      bytes.subarray(0, Math.min(bytes.length, 256))
+    );
+    if (head.trim().startsWith("<svg")) {
+      return "image/svg+xml";
+    }
+  } catch (_) {
+    // ignore
+  }
+  return "";
+}
+
+function formatBytes(bytes) {
+  const b = typeof bytes === "number" && bytes >= 0 ? bytes : 0;
+  if (b < 1024) {
+    return `${b} B`;
+  }
+  const kb = b / 1024;
+  if (kb < 1024) {
+    return `${Math.round(kb * 10) / 10} KB`;
+  }
+  const mb = kb / 1024;
+  if (mb < 1024) {
+    return `${Math.round(mb * 10) / 10} MB`;
+  }
+  const gb = mb / 1024;
+  return `${Math.round(gb * 10) / 10} GB`;
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, /** @type {any} */ (chunk));
+  }
+  return btoa(binary);
+}
+
+function bytesToHex(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    const v = bytes[i];
+    out += (v < 16 ? "0" : "") + v.toString(16);
+  }
+  return out;
+}
+
+const MAX_BLOB_COPY_BYTES_BASE64 = 5 * 1024 * 1024; // 5MB per cell (avoids UI hangs)
+
+function blobToCopyText(bytes, mime, { includeDataUrl }) {
+  const sizeText = formatBytes(bytes.length);
+  if (bytes.length > MAX_BLOB_COPY_BYTES_BASE64) {
+    return { text: `<BLOB ${sizeText}>`, truncated: true, sizeText };
+  }
+  const b64 = bytesToBase64(bytes);
+  if (includeDataUrl && mime) {
+    return { text: `data:${mime};base64,${b64}`, truncated: false, sizeText };
+  }
+  return { text: `base64:${b64}`, truncated: false, sizeText };
+}
+
+function blobToJsonValue(bytes, mime) {
+  const sizeText = formatBytes(bytes.length);
+  if (bytes.length > MAX_BLOB_COPY_BYTES_BASE64) {
+    return {
+      __type: "blob",
+      bytes: bytes.length,
+      mime: mime || null,
+      truncated: true,
+    };
+  }
+  return {
+    __type: "blob",
+    bytes: bytes.length,
+    mime: mime || null,
+    base64: bytesToBase64(bytes),
+    sizeText,
+  };
+}
+
+function getCellCopyValue(cell, { mode }) {
+  const underlying = getCellUnderlyingValue(cell);
+  const bytes = normalizeBlobValue(underlying);
+  if (bytes) {
+    const mime = detectImageMime(bytes);
+    const isImage = !!mime;
+    if (mode === "json") {
+      const value = blobToJsonValue(bytes, mime);
+      return { value, hadLargeBlob: value && value.truncated === true };
+    }
+    const out = blobToCopyText(bytes, mime, { includeDataUrl: isImage });
+    return { value: out.text, hadLargeBlob: out.truncated === true };
+  }
+
+  const text = getCellDisplayValue(cell);
+  return { value: text.trim() === "NULL" ? "" : text, hadLargeBlob: false };
+}
+
+function sanitizeFilenamePart(text) {
+  return String(text || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+}
+
+function extensionForMime(mime) {
+  switch (mime) {
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+      return "jpg";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    case "image/bmp":
+      return "bmp";
+    case "image/svg+xml":
+      return "svg";
+    default:
+      return "bin";
+  }
+}
+
+function getBlobInfoForCell(cell) {
+  const underlying = getCellUnderlyingValue(cell);
+  const bytes = normalizeBlobValue(underlying);
+  if (!bytes) {
+    return null;
+  }
+  const mime = detectImageMime(bytes);
+  return {
+    bytes,
+    mime,
+    isImage: !!mime,
+    sizeText: formatBytes(bytes.length),
+  };
+}
+
+function createHexDump(bytes, maxBytes) {
+  const limit = Math.max(0, Math.min(bytes.length, maxBytes));
+  const slice = bytes.subarray(0, limit);
+  const lines = [];
+  for (let offset = 0; offset < slice.length; offset += 16) {
+    const chunk = slice.subarray(offset, offset + 16);
+    let hex = "";
+    let ascii = "";
+    for (let i = 0; i < 16; i++) {
+      if (i < chunk.length) {
+        const b = chunk[i];
+        hex += (b < 16 ? "0" : "") + b.toString(16) + " ";
+        ascii += b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
+      } else {
+        hex += "   ";
+        ascii += " ";
+      }
+    }
+    const off = offset.toString(16).padStart(8, "0");
+    lines.push(`${off}  ${hex} ${ascii}`);
+  }
+  return lines.join("\n");
+}
+
+function downloadBytes(bytes, filename, mime) {
+  try {
+    const blob = new Blob([bytes], { type: mime || "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "blob.bin";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    if (typeof showError === "function") {
+      showError("Failed to download blob.");
+    }
+  }
+}
+
+function requestDownloadBytes(bytes, filename, mime) {
+  const maxBytes = 20 * 1024 * 1024; // 20MB (keeps message passing reasonable)
+  if (bytes && bytes.length > maxBytes) {
+    if (typeof showError === "function") {
+      showError(`Blob too large to download from the viewer (${formatBytes(bytes.length)}).`);
+    }
+    return;
+  }
+
+  if (window.vscode && typeof window.vscode.postMessage === "function") {
+    try {
+      if (typeof showLoading === "function") {
+        const name = filename ? String(filename) : "blob";
+        showLoading(`Saving ${escapeHtmlForInnerHtml(name)}…`);
+      }
+      const requestId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `blob_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      window.vscode.postMessage({
+        type: "downloadBlob",
+        requestId,
+        filename: filename || "blob.bin",
+        mime: mime || "application/octet-stream",
+        dataBase64: bytesToBase64(bytes || new Uint8Array()),
+      });
+      return;
+    } catch (_) {
+      // fall back to browser download
+    }
+  }
+
+  if (typeof hideLoading === "function") {
+    hideLoading();
+  }
+  downloadBytes(bytes, filename, mime);
+}
+
+function copyCellBlobAsBase64() {
+  if (!currentCell) {
+    return;
+  }
+  const info = getBlobInfoForCell(currentCell);
+  if (!info) {
+    if (typeof showError === "function") {
+      showError("Cell is not a blob.");
+    }
+    return;
+  }
+  const maxBytes = 5 * 1024 * 1024; // 5MB
+  if (info.bytes.length > maxBytes) {
+    if (typeof showError === "function") {
+      showError(`Blob too large to copy as base64 (${info.sizeText}).`);
+    }
+    return;
+  }
+  copyToClipboard(
+    bytesToBase64(info.bytes),
+    `Blob copied as base64 (${info.sizeText})`
+  );
+}
+
+function copyCellBlobAsHex() {
+  if (!currentCell) {
+    return;
+  }
+  const info = getBlobInfoForCell(currentCell);
+  if (!info) {
+    if (typeof showError === "function") {
+      showError("Cell is not a blob.");
+    }
+    return;
+  }
+  const maxBytes = 1 * 1024 * 1024; // 1MB
+  if (info.bytes.length > maxBytes) {
+    if (typeof showError === "function") {
+      showError(`Blob too large to copy as hex (${info.sizeText}).`);
+    }
+    return;
+  }
+  copyToClipboard(
+    bytesToHex(info.bytes),
+    `Blob copied as hex (${info.sizeText})`
+  );
+}
+
+function viewCellAsBlob() {
+  if (!currentCell) {
+    return;
+  }
+  const info = getBlobInfoForCell(currentCell);
+  if (!info) {
+    if (typeof showError === "function") {
+      showError("Cell is not a blob.");
+    }
+    return;
+  }
+  const columnName =
+    currentCell.getAttribute("data-column-name") ||
+    currentCell.dataset.columnName ||
+    "";
+
+  const title = columnName
+    ? `${info.isImage ? "Image" : "Blob"} Viewer — ${columnName}`
+    : `${info.isImage ? "Image" : "Blob"} Viewer`;
+
+  showBlobViewerDialog({
+    title,
+    bytes: info.bytes,
+    mime: info.mime || "application/octet-stream",
+    isImage: info.isImage,
+    sizeText: info.sizeText,
+  });
+}
+
+function showBlobViewerDialog(opts) {
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-dialog-overlay";
+
+  const dialog = document.createElement("div");
+  dialog.className = "confirm-dialog blob-viewer-dialog";
+
+  const titleEl = document.createElement("h3");
+  titleEl.className = "confirm-dialog-title";
+  titleEl.textContent = opts.title || "Blob Viewer";
+
+  const metaEl = document.createElement("div");
+  metaEl.className = "confirm-dialog-table-info blob-viewer-meta";
+  metaEl.textContent = `Size: ${opts.sizeText}${
+    opts.isImage ? ` • ${opts.mime}` : ""
+  }`;
+
+  const contentEl = document.createElement("div");
+  contentEl.className = "confirm-dialog-row-data blob-viewer-content";
+
+  let objectUrl = "";
+  if (opts.isImage) {
+    const img = document.createElement("img");
+    img.className = "blob-viewer-image";
+    img.alt = "Image blob preview";
+    try {
+      objectUrl = URL.createObjectURL(new Blob([opts.bytes], { type: opts.mime }));
+      img.src = objectUrl;
+    } catch (_) {
+      // ignore
+    }
+    contentEl.appendChild(img);
+  } else {
+    const maxPreview = 64 * 1024; // 64KB
+    const pre = document.createElement("pre");
+    pre.className = "blob-viewer-hex";
+    pre.textContent = createHexDump(opts.bytes, maxPreview);
+    contentEl.appendChild(pre);
+
+    if (opts.bytes.length > maxPreview) {
+      const note = document.createElement("div");
+      note.className = "blob-viewer-note";
+      note.textContent = `Preview truncated to ${formatBytes(maxPreview)}.`;
+      contentEl.appendChild(note);
+    }
+  }
+
+  const buttonsEl = document.createElement("div");
+  buttonsEl.className = "confirm-dialog-buttons blob-viewer-buttons";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "secondary-button";
+  closeBtn.textContent = "Close";
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.className = "secondary-button";
+  downloadBtn.textContent = "Download";
+
+  const copyB64Btn = document.createElement("button");
+  copyB64Btn.className = "secondary-button";
+  copyB64Btn.textContent = "Copy Base64";
+
+  const copyHexBtn = document.createElement("button");
+  copyHexBtn.className = "primary-button";
+  copyHexBtn.textContent = "Copy Hex";
+
+  buttonsEl.appendChild(closeBtn);
+  buttonsEl.appendChild(downloadBtn);
+  buttonsEl.appendChild(copyB64Btn);
+  buttonsEl.appendChild(copyHexBtn);
+
+  dialog.appendChild(titleEl);
+  dialog.appendChild(metaEl);
+  dialog.appendChild(contentEl);
+  dialog.appendChild(buttonsEl);
+  overlay.appendChild(dialog);
+
+  const close = () => {
+    overlay.remove();
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      close();
+    }
+  });
+
+  const handleEscape = (e) => {
+    if (e.key === "Escape") {
+      close();
+      document.removeEventListener("keydown", handleEscape);
+    }
+  };
+  document.addEventListener("keydown", handleEscape);
+
+  downloadBtn.addEventListener("click", () => {
+    const base = sanitizeFilenamePart(opts.title || "blob");
+    const ext = extensionForMime(opts.isImage ? opts.mime : "");
+    requestDownloadBytes(opts.bytes, `${base}.${ext}`, opts.mime);
+  });
+  copyB64Btn.addEventListener("click", () => {
+    const maxBytes = 5 * 1024 * 1024;
+    if (opts.bytes.length > maxBytes) {
+      if (typeof showError === "function") {
+        showError(`Blob too large to copy as base64 (${opts.sizeText}).`);
+      }
+      return;
+    }
+    copyToClipboard(bytesToBase64(opts.bytes), `Base64 copied (${opts.sizeText})`);
+  });
+  copyHexBtn.addEventListener("click", () => {
+    const maxBytes = 1 * 1024 * 1024;
+    if (opts.bytes.length > maxBytes) {
+      if (typeof showError === "function") {
+        showError(`Blob too large to copy as hex (${opts.sizeText}).`);
+      }
+      return;
+    }
+    copyToClipboard(bytesToHex(opts.bytes), `Hex copied (${opts.sizeText})`);
+  });
+
+  document.body.appendChild(overlay);
+  copyHexBtn.focus();
 }
 
 /**
