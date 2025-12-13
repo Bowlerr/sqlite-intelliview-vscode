@@ -432,9 +432,27 @@
         );
       }
       // Schema fetch can be expensive; only fetch it when Schema tab is active.
-      const stateForSchema =
-        typeof window.getCurrentState === "function" ? window.getCurrentState() : {};
-      if (stateForSchema.activeTab === "schema") {
+      let schemaIsActive = false;
+      try {
+        const activeEl = document.querySelector(".tab.active");
+        const domTab =
+          activeEl && activeEl instanceof HTMLElement ? activeEl.dataset.tab : null;
+        if (domTab) {
+          schemaIsActive = domTab === "schema";
+        } else {
+          const stateForSchema =
+            typeof window.getCurrentState === "function"
+              ? window.getCurrentState()
+              : {};
+          schemaIsActive = stateForSchema.activeTab === "schema";
+        }
+      } catch (_) {
+        const stateForSchema =
+          typeof window.getCurrentState === "function" ? window.getCurrentState() : {};
+        schemaIsActive = stateForSchema.activeTab === "schema";
+      }
+
+      if (schemaIsActive) {
         requestTableSchema(tableKey);
       }
       requestTableData(tableKey, page, pageSize);

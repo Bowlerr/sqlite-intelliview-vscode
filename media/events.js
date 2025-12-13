@@ -523,7 +523,36 @@ function handleDatabaseInfo(message) {
       displayTablesList(message.tables);
     }
 
+    // Determine the active main panel tab from the DOM (source of truth on startup),
+    // then sync state so table-selection logic loads the correct data/schema.
+    let activeMainTab = "schema";
+    try {
+      const activeEl = document.querySelector(".tab.active");
+      const domTab = activeEl && activeEl instanceof HTMLElement ? activeEl.dataset.tab : null;
+      if (domTab) {
+        activeMainTab = domTab;
+      } else if (typeof window.getCurrentState === "function") {
+        const s = window.getCurrentState();
+        if (s && typeof s.activeTab === "string") {
+          activeMainTab = s.activeTab;
+        }
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    if (typeof window.getCurrentState === "function" && typeof window.updateState === "function") {
+      const s = window.getCurrentState();
+      if (s && s.activeTab !== activeMainTab) {
+        window.updateState(
+          { activeTab: activeMainTab },
+          { renderTabs: false, renderSidebar: false, persistState: "debounced" }
+        );
+      }
+    }
+
     // Ensure the first table is opened on initial connect.
+    let didOpenFirstTable = false;
     if (
       Array.isArray(message.tables) &&
       message.tables.length > 0 &&
@@ -539,6 +568,62 @@ function handleDatabaseInfo(message) {
             : message.tables[0].name;
         if (first) {
           window.openTableTab(first);
+          didOpenFirstTable = true;
+        }
+      }
+    }
+
+    // If we already had persisted open tabs, nothing triggers an initial schema/data request.
+    // Load what the user is currently looking at (schema/data) for the selected table.
+    if (!didOpenFirstTable && typeof window.getCurrentState === "function") {
+      const state = window.getCurrentState();
+      const selected =
+        state.selectedTable ||
+        state.activeTable ||
+        (Array.isArray(state.openTables) ? state.openTables[0]?.key : null) ||
+        (Array.isArray(message.tables) && message.tables.length > 0
+          ? typeof message.tables[0] === "string"
+            ? message.tables[0]
+            : message.tables[0].name
+          : null);
+
+      if (selected && typeof window.updateState === "function") {
+        if (!state.selectedTable || !state.activeTable) {
+          window.updateState(
+            { selectedTable: selected, activeTable: selected },
+            { renderTabs: false, renderSidebar: false }
+          );
+        }
+      }
+
+      // Only real tables have schema.
+      const isResultTab = typeof selected === "string" && selected.startsWith("Results (");
+      if (!isResultTab && selected && window.vscode && typeof window.vscode.postMessage === "function") {
+        if (activeMainTab === "schema") {
+          window.vscode.postMessage({
+            type: "getTableSchema",
+            tableName: selected,
+            key: state.encryptionKey || "",
+          });
+        } else if (activeMainTab === "data") {
+          const vs =
+            typeof window.getTabViewState === "function"
+              ? window.getTabViewState(selected)
+              : null;
+          const page = vs && typeof vs.page === "number" ? vs.page : 1;
+          const pageSize =
+            vs && typeof vs.pageSize === "number"
+              ? vs.pageSize
+              : typeof state.pageSize === "number"
+              ? state.pageSize
+              : 100;
+          window.vscode.postMessage({
+            type: "getTableData",
+            tableName: selected,
+            key: state.encryptionKey || "",
+            page,
+            pageSize,
+          });
         }
       }
     }
