@@ -45,6 +45,15 @@ function createContextMenuElement() {
       <span class="icon">📋</span>
       <span>Copy Cell</span>
     </div>
+    <div class="context-menu-item context-menu-item-json" data-action="view-json" style="display: none;">
+      <span class="icon">{}</span>
+      <span>View JSON</span>
+    </div>
+    <div class="context-menu-item context-menu-item-json" data-action="copy-cell-json" style="display: none;">
+      <span class="icon">📋</span>
+      <span>Copy Formatted JSON</span>
+    </div>
+    <div class="context-menu-separator context-menu-separator-json" style="display: none;"></div>
     <div class="context-menu-item" data-action="copy-row">
       <span class="icon">📄</span>
       <span>Copy Row</span>
@@ -104,11 +113,30 @@ function handleContextMenu(e) {
 
   // Don't show context menu on schema tables (read-only), but allow for query results
   const table = cell.closest(".data-table");
-  const tableWrapper = table?.closest(".enhanced-table-wrapper");
   const tableId = table?.id;
 
   if (tableId && tableId.includes("schema")) {
     // Allow default context menu for schema tables only
+    return;
+  }
+
+  showContextMenuForCell(e, /** @type {HTMLTableCellElement} */ (cell));
+}
+
+/**
+ * Show context menu for a specific cell (used by delegated and per-cell listeners)
+ * @param {MouseEvent} e - Mouse event
+ * @param {HTMLTableCellElement} cell - Target table cell
+ */
+function showContextMenuForCell(e, cell) {
+  if (!cell) {
+    return;
+  }
+
+  // Don't show context menu on schema tables (read-only), but allow for query results
+  const table = cell.closest(".data-table");
+  const tableId = table?.id;
+  if (tableId && tableId.includes("schema")) {
     return;
   }
 
@@ -124,7 +152,7 @@ function handleContextMenu(e) {
   cell.classList.add("context-menu-target");
 
   // Show context menu
-  showContextMenu(e.clientX, e.clientY);
+  showContextMenuAt(e.clientX, e.clientY);
 }
 
 /**
@@ -132,7 +160,7 @@ function handleContextMenu(e) {
  * @param {number} x - X coordinate
  * @param {number} y - Y coordinate
  */
-function showContextMenu(x, y) {
+function showContextMenuAt(x, y) {
   if (!contextMenu) {
     return;
   }
@@ -183,6 +211,30 @@ function showContextMenu(x, y) {
     } else {
       fkMenuItem.style.display = "none";
       fkSeparator.style.display = "none";
+    }
+  }
+
+  // Show/hide JSON actions
+  const jsonMenuItem = contextMenu.querySelector('[data-action="view-json"]');
+  const jsonCopyItem = contextMenu.querySelector(
+    '[data-action="copy-cell-json"]'
+  );
+  const jsonSeparator = contextMenu.querySelector(
+    ".context-menu-separator-json"
+  );
+
+  const jsonInfo = currentCell ? getJsonInfoForCell(currentCell) : null;
+  const hasJson = !!(jsonInfo && jsonInfo.parsed);
+
+  if (jsonMenuItem && jsonCopyItem && jsonSeparator) {
+    if (hasJson) {
+      jsonMenuItem.style.display = "flex";
+      jsonCopyItem.style.display = "flex";
+      jsonSeparator.style.display = "block";
+    } else {
+      jsonMenuItem.style.display = "none";
+      jsonCopyItem.style.display = "none";
+      jsonSeparator.style.display = "none";
     }
   }
 
@@ -294,6 +346,12 @@ function executeContextMenuAction(action) {
   switch (action) {
     case "copy-cell":
       copyCellValue();
+      break;
+    case "view-json":
+      viewCellAsJson();
+      break;
+    case "copy-cell-json":
+      copyCellAsFormattedJson();
       break;
     case "copy-row":
       copyRowData();
@@ -516,6 +574,278 @@ function getCellDisplayValue(cell) {
     return textContent.trim() === "NULL" ? "" : textContent.trim();
   }
   return cell.textContent?.trim() || "";
+}
+
+/**
+ * Get the best-available raw cell value (prefers virtualized backing data).
+ * @param {HTMLTableCellElement} cell
+ * @returns {{ value: string, truncated: boolean }}
+ */
+function getCellRawValue(cell) {
+  const cellContent = cell.querySelector(".cell-content");
+  if (cellContent) {
+    const original = cellContent.getAttribute("data-original-value") || "";
+    const truncated = cellContent.getAttribute("data-original-truncated") === "true";
+    const isNull =
+      cellContent.querySelector("em") &&
+      (cellContent.textContent || "").trim() === "NULL";
+    // Prefer DOM-backed original when not truncated (keeps edits in-sync even under virtualization).
+    if (!truncated) {
+      return { value: isNull ? "" : original, truncated: false };
+    }
+  }
+
+  const table = cell.closest(".data-table");
+  const wrapper = table && table.closest(".enhanced-table-wrapper");
+  /** @type {any} */ const vs = wrapper && wrapper.__virtualTableState;
+
+  const colIndex = parseInt(
+    cell.getAttribute("data-column") || String(cell.cellIndex),
+    10
+  );
+
+  if (vs && vs.enabled === true) {
+    const rowEl = cell.closest("tr");
+    const localIndex = parseInt(
+      rowEl?.getAttribute("data-local-index") || "",
+      10
+    );
+    if (Number.isFinite(localIndex) && localIndex >= 0) {
+      const row = Array.isArray(vs.pageData) ? vs.pageData[localIndex] : null;
+      if (Array.isArray(row) && colIndex >= 0 && colIndex < row.length) {
+        const v = row[colIndex];
+        if (v === null || v === undefined) {
+          return { value: "", truncated: false };
+        }
+        return { value: String(v), truncated: false };
+      }
+    }
+  }
+
+  if (cellContent) {
+    const original = cellContent.getAttribute("data-original-value") || "";
+    const isNull =
+      cellContent.querySelector("em") &&
+      (cellContent.textContent || "").trim() === "NULL";
+    return { value: isNull ? "" : original, truncated: true };
+  }
+
+  return { value: getCellDisplayValue(cell), truncated: false };
+}
+
+/**
+ * Attempt to parse a cell value as JSON and return formatted output.
+ * @param {HTMLTableCellElement} cell
+ * @returns {{ parsed: any, formatted: string, truncated: boolean } | null}
+ */
+function getJsonInfoForCell(cell) {
+  const raw = getCellRawValue(cell);
+  const text = (raw.value || "").trim();
+  if (!text) {
+    return null;
+  }
+
+  const first = text[0];
+  if (first !== "{" && first !== "[") {
+    return null;
+  }
+
+  // Guard against pathological values (keeps the webview responsive).
+  if (text.length > 2_000_000) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed === null || typeof parsed !== "object") {
+      return null;
+    }
+    return { parsed, formatted: JSON.stringify(parsed, null, 2), truncated: raw.truncated };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Copy current cell as formatted JSON (if parseable).
+ */
+function copyCellAsFormattedJson() {
+  if (!currentCell) {
+    return;
+  }
+  const jsonInfo = getJsonInfoForCell(currentCell);
+  if (!jsonInfo) {
+    if (typeof showError === "function") {
+      showError("Cell is not valid JSON.");
+    }
+    return;
+  }
+  const suffix = jsonInfo.truncated ? " (truncated)" : "";
+  copyToClipboard(jsonInfo.formatted, `Formatted JSON copied${suffix}`);
+}
+
+/**
+ * Open a readable JSON viewer for the current cell (if parseable).
+ */
+function viewCellAsJson() {
+  if (!currentCell) {
+    return;
+  }
+  const jsonInfo = getJsonInfoForCell(currentCell);
+  if (!jsonInfo) {
+    if (typeof showError === "function") {
+      showError("Cell is not valid JSON.");
+    }
+    return;
+  }
+
+  const columnName =
+    currentCell.getAttribute("data-column-name") ||
+    currentCell.dataset.columnName ||
+    "";
+
+  showJsonViewerDialog({
+    title: columnName ? `JSON Viewer — ${columnName}` : "JSON Viewer",
+    formattedJson: jsonInfo.formatted,
+    truncated: jsonInfo.truncated,
+  });
+}
+
+/**
+ * Escape HTML for insertion via innerHTML (keeps quotes intact for regex tokenization).
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtmlForInnerHtml(text) {
+  return String(text).replace(/[&<>]/g, (ch) => {
+    switch (ch) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      default:
+        return ch;
+    }
+  });
+}
+
+/**
+ * Format JSON with syntax highlighting (safe to insert via innerHTML).
+ * @param {string} jsonString - The JSON string to format
+ * @returns {string} HTML formatted JSON with syntax highlighting
+ */
+function formatJsonWithSyntaxHighlighting(jsonString) {
+  const escaped = escapeHtmlForInnerHtml(jsonString);
+  const tokenRegex =
+    /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(?:\\s*:)?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|[{}\[\],:])/g;
+
+  return escaped.replace(tokenRegex, (match) => {
+    if (match === "{" || match === "}" || match === "[" || match === "]" || match === "," || match === ":") {
+      return `<span class="json-punctuation">${match}</span>`;
+    }
+    if (match === "true" || match === "false") {
+      return `<span class="json-boolean">${match}</span>`;
+    }
+    if (match === "null") {
+      return `<span class="json-null">${match}</span>`;
+    }
+    if (match[0] === '"') {
+      const isKey = match.endsWith(":");
+      if (isKey) {
+        const key = match.slice(0, -1);
+        return `<span class="json-key">${key}</span><span class="json-punctuation">:</span>`;
+      }
+      return `<span class="json-string">${match}</span>`;
+    }
+    return `<span class="json-number">${match}</span>`;
+  });
+}
+
+/**
+ * Show a JSON viewer dialog.
+ * @param {{ title: string, formattedJson: string, truncated: boolean }} opts
+ */
+function showJsonViewerDialog(opts) {
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-dialog-overlay";
+
+  const dialog = document.createElement("div");
+  dialog.className = "confirm-dialog json-viewer-dialog";
+
+  const titleEl = document.createElement("h3");
+  titleEl.className = "confirm-dialog-title";
+  titleEl.textContent = opts.title || "JSON Viewer";
+
+  const infoEl = document.createElement("div");
+  infoEl.className = "confirm-dialog-table-info";
+  infoEl.textContent = opts.truncated
+    ? "Note: value was truncated in the table view."
+    : "Tip: use Copy Formatted JSON from the context menu.";
+
+  const jsonEl = document.createElement("div");
+  jsonEl.className = "confirm-dialog-row-data json-viewer-json";
+  jsonEl.innerHTML = formatJsonWithSyntaxHighlighting(opts.formattedJson);
+
+  const buttonsEl = document.createElement("div");
+  buttonsEl.className = "confirm-dialog-buttons";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "secondary-button";
+  closeBtn.textContent = "Close";
+
+  const copyMinBtn = document.createElement("button");
+  copyMinBtn.className = "secondary-button";
+  copyMinBtn.textContent = "Copy Minified";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "primary-button";
+  copyBtn.textContent = "Copy Formatted";
+
+  buttonsEl.appendChild(closeBtn);
+  buttonsEl.appendChild(copyMinBtn);
+  buttonsEl.appendChild(copyBtn);
+
+  dialog.appendChild(titleEl);
+  dialog.appendChild(infoEl);
+  dialog.appendChild(jsonEl);
+  dialog.appendChild(buttonsEl);
+  overlay.appendChild(dialog);
+
+  const close = () => {
+    overlay.remove();
+  };
+
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      close();
+    }
+  });
+
+  const handleEscape = (e) => {
+    if (e.key === "Escape") {
+      close();
+      document.removeEventListener("keydown", handleEscape);
+    }
+  };
+  document.addEventListener("keydown", handleEscape);
+
+  copyBtn.addEventListener("click", () => {
+    copyToClipboard(opts.formattedJson, "Formatted JSON copied");
+  });
+  copyMinBtn.addEventListener("click", () => {
+    try {
+      const minified = JSON.stringify(JSON.parse(opts.formattedJson));
+      copyToClipboard(minified, "Minified JSON copied");
+    } catch {
+      copyToClipboard(opts.formattedJson, "Formatted JSON copied");
+    }
+  });
+
+  document.body.appendChild(overlay);
+  copyBtn.focus();
 }
 
 /**
@@ -1102,33 +1432,6 @@ function showCustomConfirmDialog(message, onConfirm) {
 }
 
 /**
- * Format JSON with syntax highlighting
- * @param {string} jsonString - The JSON string to format
- * @returns {string} HTML formatted JSON with syntax highlighting
- */
-function formatJsonWithSyntaxHighlighting(jsonString) {
-  // Apply syntax highlighting first, then escape HTML
-  let formatted = jsonString
-    // Highlight keys (property names)
-    .replace(
-      /("[\w\s_-]+")(\s*:)/g,
-      '<span class="json-key">$1</span><span class="json-punctuation">$2</span>'
-    )
-    // Highlight string values
-    .replace(/:\s*(".*?")/g, ': <span class="json-string">$1</span>')
-    // Highlight numbers
-    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
-    // Highlight null values
-    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
-    // Highlight boolean values
-    .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
-    // Highlight punctuation
-    .replace(/([{}[\],])/g, '<span class="json-punctuation">$1</span>');
-
-  return formatted;
-}
-
-/**
  * Show enhanced confirmation dialog with better formatting
  * @param {string} message - The confirmation message
  * @param {Function} onConfirm - Callback for when user confirms
@@ -1551,6 +1854,7 @@ function scrollToTargetRow(targetRow) {
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).initializeContextMenu = initializeContextMenu;
   /** @type {any} */ (window).hideContextMenu = hideContextMenu;
+  /** @type {any} */ (window).showContextMenu = showContextMenuForCell;
   /** @type {any} */ (window).copyCellValue = copyCellValue;
   /** @type {any} */ (window).copyRowData = copyRowData;
   /** @type {any} */ (window).copyRowDataAsJSON = copyRowDataAsJSON;

@@ -182,3 +182,13 @@
 .vscode-high-contrast .confirm-dialog-btn:focus {
   outline: 2px solid var(--vscode-contrastActiveBorder);
 }
+
+/* ===== JSON VIEWER (CELL) ===== */
+.json-viewer-dialog {
+  max-width: 960px;
+  width: 95%;
+  max-height: 85vh;
+}
+.json-viewer-dialog .confirm-dialog-row-data {
+  max-height: 60vh;
+}
