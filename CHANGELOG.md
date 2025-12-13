@@ -293,7 +293,7 @@ This release represents a major maturity milestone for the extension, with signi
 - 📝 **Monaco-powered Query Editor**: The SQL query editor now uses Monaco Editor for a modern, full-featured experience
   - Syntax highlighting, autocompletion, and SQL snippets
   - Dynamic table/column name completions (auto-populated from your database)
-  - Floating action buttons and keyboard shortcuts (Ctrl+Enter to execute, Ctrl+K to clear, Ctrl+Shift+R to refresh, Ctrl+Alt+R for emergency fix)
+  - Floating action buttons and keyboard shortcuts (Ctrl+Enter to execute, Ctrl+K to clear, Ctrl+Shift+R to refresh, Ctrl+Alt+R / Cmd+Option+R to hard reload the database connection)
   - Results now appear in a modern modal dialog with advanced styling and animations
   - Improved accessibility and keyboard navigation
 - 🖼️ **Query Results Modal**: Query results are now displayed in a modal dialog, not inline, for a cleaner and more focused workflow

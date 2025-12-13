@@ -563,17 +563,6 @@ window.getQueryEditorStatus = function () {
   return { error: "Query editor not available" };
 };
 
-// Add keyboard shortcut to refresh editor (Ctrl+Shift+R / Cmd+Shift+R)
-document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "R") {
-    e.preventDefault();
-    if (window.debug) {
-      window.debug.debug("QueryEditor", "Manual editor refresh triggered");
-    }
-    window.refreshQueryEditor();
-  }
-});
-
 if (window.debug) {
   window.debug.debug("QueryEditor", "Global helper functions loaded");
   window.debug.debug(
@@ -590,7 +579,7 @@ if (window.debug) {
   );
   window.debug.debug(
     "QueryEditor",
-    "  - Ctrl+Shift+R / Cmd+Shift+R - Refresh editor shortcut"
+    "  - window.refreshQueryEditor() - Manual refresh helper"
   );
 }
 
@@ -622,20 +611,6 @@ window.emergencyFixEditor = function () {
   }
 };
 
-// Add emergency keyboard shortcut (Ctrl+Alt+R / Cmd+Alt+R)
-document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "R") {
-    e.preventDefault();
-    if (window.debug) {
-      window.debug.debug(
-        "QueryEditor",
-        "Emergency editor fix triggered via keyboard"
-      );
-    }
-    window.emergencyFixEditor();
-  }
-});
-
 if (window.debug) {
   window.debug.debug("QueryEditor", "Emergency functions loaded");
   window.debug.debug(
@@ -644,7 +619,7 @@ if (window.debug) {
   );
   window.debug.debug(
     "QueryEditor",
-    "  - Ctrl+Alt+R / Cmd+Alt+R - Emergency keyboard shortcut"
+    "  - window.emergencyFixEditor() - Emergency recovery helper"
   );
 }
 

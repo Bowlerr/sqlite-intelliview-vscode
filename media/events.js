@@ -49,7 +49,9 @@ function initializeEventListeners() {
   }
   // Register global event listeners only once per webview lifecycle
   window.addEventListener("message", handleExtensionMessage);
-  document.addEventListener("keydown", handleGlobalKeyboard);
+  // Use capture so shortcuts still work when focused components (e.g. Monaco) stop bubbling.
+  document.removeEventListener("keydown", handleGlobalKeyboard);
+  document.addEventListener("keydown", handleGlobalKeyboard, true);
 
   const elements = getAllDOMElements ? getAllDOMElements() : {};
 
@@ -142,14 +144,21 @@ function initializeEventListeners() {
  * @param {KeyboardEvent} e - Keyboard event
  */
 function handleGlobalKeyboard(e) {
+  const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+  const keyLower = typeof e.key === "string" ? e.key.toLowerCase() : "";
+  const isKeyR = e.code === "KeyR" || keyLower === "r";
+
   // Ctrl/Cmd + Enter to execute query
-  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+  const isEnter =
+    e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter";
+  if (isCtrlOrCmd && isEnter) {
     e.preventDefault();
     handleExecuteQuery();
   }
 
   // Ctrl/Cmd + K to clear query
-  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+  const isKeyK = e.code === "KeyK" || keyLower === "k";
+  if (isCtrlOrCmd && isKeyK) {
     e.preventDefault();
     // Clear query through the Monaco editor if available
     if (window.queryEditor && window.queryEditor.clearEditor) {
@@ -158,7 +167,8 @@ function handleGlobalKeyboard(e) {
   }
 
   // Ctrl/Cmd + F to focus search in active table
-  if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+  const isKeyF = e.code === "KeyF" || keyLower === "f";
+  if (isCtrlOrCmd && isKeyF) {
     const activeTable = document.querySelector(".enhanced-table-wrapper");
     if (activeTable) {
       e.preventDefault();
@@ -169,9 +179,71 @@ function handleGlobalKeyboard(e) {
     }
   }
 
+  // Ctrl/Cmd + Shift + R to refresh database view
+  if (isCtrlOrCmd && e.shiftKey && !e.altKey && isKeyR) {
+    e.preventDefault();
+    refreshDatabaseView();
+  }
+
+  // Ctrl/Cmd + Alt/Option + R to hard reload database connection
+  if (isCtrlOrCmd && e.altKey && !e.shiftKey && isKeyR) {
+    e.preventDefault();
+    reloadDatabaseConnection();
+  }
+
   // Escape to close notifications
-  if (e.key === "Escape") {
+  if (e.key === "Escape" || e.code === "Escape") {
     document.querySelectorAll(".notification").forEach((n) => n.remove());
+  }
+}
+
+function refreshDatabaseView(options = {}) {
+  const includeDatabaseInfo = options.includeDatabaseInfo !== false;
+  const state = typeof getCurrentState === "function" ? getCurrentState() : {};
+  const key = typeof state.encryptionKey === "string" ? state.encryptionKey : "";
+
+  if (
+    includeDatabaseInfo &&
+    window.vscode &&
+    typeof window.vscode.postMessage === "function"
+  ) {
+    window.vscode.postMessage({ type: "requestDatabaseInfo", key });
+  }
+
+  // Best-effort: refresh the currently active/selected table contents too.
+  const tableName = state.selectedTable || state.activeTable || null;
+  if (
+    typeof tableName === "string" &&
+    tableName &&
+    !tableName.startsWith("Results (") &&
+    typeof window.selectTable === "function"
+  ) {
+    const page =
+      typeof state.currentPage === "number" && state.currentPage > 0
+        ? state.currentPage
+        : 1;
+    const pageSize =
+      typeof state.pageSize === "number" && state.pageSize > 0
+        ? state.pageSize
+        : 100;
+    window.selectTable(tableName, page, pageSize);
+  }
+}
+
+function reloadDatabaseConnection() {
+  const state = typeof getCurrentState === "function" ? getCurrentState() : {};
+  const key = typeof state.encryptionKey === "string" ? state.encryptionKey : "";
+
+  if (window.vscode && typeof window.vscode.postMessage === "function") {
+    window.vscode.postMessage({ type: "reloadDatabase", key });
+    return;
+  }
+
+  // Fallback: reload the webview UI if the VS Code API isn't available.
+  try {
+    window.location.reload();
+  } catch (_) {
+    // ignore
   }
 }
 
@@ -207,6 +279,10 @@ function handleExtensionMessage(event) {
   switch (message.type) {
     case "update":
       handleUpdate(message);
+      break;
+    case "databaseReloaded":
+      // Refresh the active table without re-requesting databaseInfo (it was just reloaded).
+      refreshDatabaseView({ includeDatabaseInfo: false });
       break;
     case "databaseInfo":
       handleDatabaseInfo(message);

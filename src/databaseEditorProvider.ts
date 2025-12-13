@@ -5,7 +5,8 @@ import { DatabaseService } from './databaseService';
 import { DatabaseWatcher } from './databaseWatcher';
 
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
-    private static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
+    public static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
+    private static activeProvider: DatabaseEditorProvider | undefined;
     private activeConnections: Map<string, DatabaseService> = new Map();
     /** Track last sync state per database for delta updates */
     private lastSync: Map<string, { table: string; since: string; page: number; pageSize: number; lastPageData?: any[][] }> = new Map();
@@ -43,6 +44,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
+        DatabaseEditorProvider.activeProvider = provider;
         const providerRegistration = vscode.window.registerCustomEditorProvider(
             DatabaseEditorProvider.viewType, 
             provider,
@@ -55,6 +57,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             }
         );
         return providerRegistration;
+    }
+
+    public static getActiveProvider(): DatabaseEditorProvider | undefined {
+        return DatabaseEditorProvider.activeProvider;
     }
 
     constructor(
@@ -126,6 +132,20 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             switch (e.type) {
                 case 'requestDatabaseInfo':
                     this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath, e.key);
+                    return;
+                case 'reloadDatabase':
+                    // Hard reload: close cached connections and re-open from disk.
+                    this.closeConnection(document.uri.fsPath);
+                    void this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath, e.key)
+                        .catch(() => {
+                            // errors are already surfaced via handleDatabaseInfoRequest
+                        })
+                        .finally(() => {
+                            webviewPanel.webview.postMessage({
+                                type: 'databaseReloaded',
+                                databasePath: document.uri.fsPath
+                            });
+                        });
                     return;
                 case 'executeQuery':
                     this.handleQueryExecution(webviewPanel, document.uri.fsPath, e.query, e.key);
@@ -403,6 +423,15 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 message: `Failed to load database: ${error}`
             });
         }
+    }
+
+    public async connectOpenEditor(databasePath: string, key?: string): Promise<boolean> {
+        const panel = this.webviewPanels.get(databasePath);
+        if (!panel) {
+            return false;
+        }
+        await this.handleDatabaseInfoRequest(panel, databasePath, key);
+        return true;
     }
 
     private async handleQueryExecution(webviewPanel: vscode.WebviewPanel, databasePath: string, query: string, key?: string) {
