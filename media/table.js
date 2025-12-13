@@ -139,15 +139,22 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     options.totalRowsKnown === false ||
     options.totalRows !== undefined;
 
-  const totalRowsKnown = typeof totalRows === "number" && totalRows >= 0;
-  const effectiveTotalRows = totalRowsKnown ? totalRows : 0;
-  const totalPages = totalRowsKnown
-    ? Math.ceil(effectiveTotalRows / pageSize)
-    : 1;
-
   // Check if this is a schema table (not editable)
   // Note: Query results should have most table features enabled
   const isSchemaTable = tableName === "schema";
+
+  // Schema tables are small + local; we don't need async counting UI for them.
+  const totalRowsKnown =
+    isSchemaTable || (typeof totalRows === "number" && totalRows >= 0);
+  const effectiveTotalRows = totalRowsKnown
+    ? isSchemaTable
+      ? Array.isArray(data)
+        ? data.length
+        : 0
+      : /** @type {number} */ (totalRows)
+    : 0;
+  const totalPages = totalRowsKnown ? Math.ceil(effectiveTotalRows / pageSize) : 1;
+  const showSchemaStats = !isSchemaTable;
 
   // Determine if editing should be allowed
   const isEditable =
@@ -221,7 +228,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           <input type="text" class="search-input" placeholder="Search table..." />
           <button class="search-clear" title="Clear search">×</button>
         </div>
-        <div class="table-pagination-info">
+        ${
+          showSchemaStats
+            ? `<div class="table-pagination-info">
           <span class="records-info">
             <span class="stat-item">
               <span class="stat-value">${recordsLabel}</span>
@@ -233,16 +242,20 @@ function createDataTable(data, columns, tableName = "", options = {}) {
               <span class="stat-label">Columns</span>
             </span>
           </span>
-        </div>
+        </div>`
+            : ""
+        }
         <div class="table-actions">
           ${
-            isEditable
-              ? `<span class="table-editable-indicator" title="Double-click cells to edit">✏️ Editable</span>`
-              : isQueryResult
+            isQueryResult
               ? `<span class="table-readonly-indicator" title="Query results are read-only">🧮 Query Result</span>`
-              : `<span class="table-readonly-indicator" title="Schema data is read-only">🔒 Read-only</span>`
+              : !isEditable
+              ? `<span class="table-readonly-indicator" title="Table is read-only">🔒 Read-only</span>`
+              : ``
           }
-          <div class="page-size-selector">
+          ${
+            showSchemaStats
+              ? `<div class="page-size-selector">
             <label for="page-size-${tableId}">Show:</label>
             <select id="page-size-${tableId}" class="page-size-select">
               ${PAGINATION_CONFIG.pageSizeOptions
@@ -255,7 +268,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                 .join("")}
             </select>
           </div>
-          <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>
+          <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>`
+              : ""
+          }
         </div>
       </div>
       <div class="table-scroll-container">
@@ -342,7 +357,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           </tbody>
         </table>
       </div>
-      <div class="table-footer">
+      ${
+        showSchemaStats
+          ? `<div class="table-footer">
         <div class="table-info">
           <span class="visible-rows">${visibleRowsLabel}</span>
           <span class="selected-info"></span>
@@ -354,7 +371,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
               : ""
           }
         </div>
-      </div>
+      </div>`
+          : ""
+      }
     </div>
   `;
 }

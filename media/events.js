@@ -169,12 +169,49 @@ function handleGlobalKeyboard(e) {
   // Ctrl/Cmd + F to focus search in active table
   const isKeyF = e.code === "KeyF" || keyLower === "f";
   if (isCtrlOrCmd && isKeyF) {
-    const activeTable = document.querySelector(".enhanced-table-wrapper");
-    if (activeTable) {
-      e.preventDefault();
-      const searchInput = activeTable.querySelector(".search-input");
-      if (searchInput && searchInput.focus) {
+    // VS Code may also bind Cmd/Ctrl+F; best-effort capture inside the webview.
+    e.preventDefault();
+    e.stopPropagation();
+
+    const findSearchInput = () => {
+      const activePanel = document.querySelector(".tab-panel.active");
+      if (activePanel) {
+        const input = activePanel.querySelector(".search-input");
+        if (input) {
+          return input;
+        }
+      }
+      const dataPanel = document.getElementById("data-panel");
+      if (dataPanel) {
+        const input = dataPanel.querySelector(".search-input");
+        if (input) {
+          return input;
+        }
+      }
+      return document.querySelector(".search-input");
+    };
+
+    const searchInput = findSearchInput();
+    if (searchInput && searchInput instanceof HTMLInputElement) {
+      searchInput.focus();
+      searchInput.select();
+    }
+  }
+
+  // "/" to focus table search (works even when Cmd/Ctrl+F is intercepted by VS Code).
+  if (!isCtrlOrCmd && !e.altKey && keyLower === "/") {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (target && target.matches("input, textarea, [contenteditable='true']")) {
+      return;
+    }
+    const dataPanel = document.getElementById("data-panel");
+    if (dataPanel && dataPanel.classList.contains("active")) {
+      const searchInput = dataPanel.querySelector(".search-input");
+      if (searchInput && searchInput instanceof HTMLInputElement) {
+        e.preventDefault();
+        e.stopPropagation();
         searchInput.focus();
+        searchInput.select();
       }
     }
   }
@@ -1799,7 +1836,29 @@ function initializeTableEvents(tableWrapper) {
     }
     const searchInput = tableWrapper.querySelector(".search-input");
     const clearBtn = tableWrapper.querySelector(".search-clear");
+    const controlsBar = tableWrapper.querySelector(".table-controls");
     if (searchInput) {
+      // Expand search and hide other controls while focused.
+      if (controlsBar && controlsBar.getAttribute("data-search-focus") !== "true") {
+        controlsBar.setAttribute("data-search-focus", "true");
+        searchInput.addEventListener("focus", () => {
+          controlsBar.classList.add("search-is-focused");
+        });
+        searchInput.addEventListener("blur", () => {
+          // Delay to allow focus to move; only collapse if focus truly left the input.
+          setTimeout(() => {
+            const activeEl =
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+            if (activeEl === searchInput) {
+              return;
+            }
+            controlsBar.classList.remove("search-is-focused");
+          }, 0);
+        });
+      }
+
       searchInput.addEventListener("input", (e) => {
         const searchTerm = e.target.value;
         if (typeof filterTable !== "undefined") {
@@ -1821,6 +1880,10 @@ function initializeTableEvents(tableWrapper) {
           searchInput.value = "";
           if (typeof filterTable !== "undefined") {
             filterTable(tableWrapper, "");
+          }
+          // Keep the expanded focused state while clearing.
+          if (controlsBar && typeof searchInput.focus === "function") {
+            searchInput.focus();
           }
         }
         const tableKey = tableWrapper.getAttribute("data-table");

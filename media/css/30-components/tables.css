@@ -170,7 +170,21 @@
   align-items: center;
   position: relative;
   flex: 1;
+  min-width: 220px;
   max-width: 350px;
+  transition: max-width 0.18s ease;
+}
+
+/* Focused search mode: expand search + temporarily hide other controls */
+#data-panel .table-controls.search-is-focused {
+  grid-template-columns: 1fr;
+}
+.table-controls.search-is-focused .table-search {
+  max-width: 100%;
+}
+.table-controls.search-is-focused .table-pagination-info,
+.table-controls.search-is-focused .table-actions {
+  display: none !important;
 }
 .search-input {
   width: 100%;
