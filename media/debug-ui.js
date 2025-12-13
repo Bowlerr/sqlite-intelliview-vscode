@@ -140,8 +140,12 @@ function createDebugControls() {
 
 // Add keyboard shortcut to toggle debug controls (Ctrl/Cmd + Shift + D)
 if (typeof document !== "undefined") {
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "D") {
+  document.addEventListener(
+    "keydown",
+    (e) => {
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    const isKeyD = e.code === "KeyD" || e.key === "d" || e.key === "D";
+    if (isCtrlOrCmd && e.shiftKey && !e.altKey && isKeyD) {
       e.preventDefault();
       const existing = document.getElementById("debug-controls");
       if (existing) {
@@ -159,7 +163,9 @@ if (typeof document !== "undefined") {
         }
       }
     }
-  });
+    },
+    true
+  );
 }
 
 // Expose function globally

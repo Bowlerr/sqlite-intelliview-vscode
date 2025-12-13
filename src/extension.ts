@@ -34,11 +34,13 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register commands
 	const openDatabaseCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.openDatabase', async (uri?: vscode.Uri) => {
-		let databasePath: string;
+		const isDatabaseFile = (target: vscode.Uri) => {
+			return ['.db', '.sqlite', '.sqlite3'].some(ext => target.fsPath.toLowerCase().endsWith(ext));
+		};
 
-		if (uri) {
-			databasePath = uri.fsPath;
-		} else {
+		let dbUri: vscode.Uri | undefined = uri;
+
+		if (!dbUri) {
 			const result = await vscode.window.showOpenDialog({
 				canSelectFiles: true,
 				canSelectFolders: false,
@@ -53,19 +55,22 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			databasePath = result[0].fsPath;
+			dbUri = result[0];
 		}
 
-		// Open the database file with our custom editor
+		if (!isDatabaseFile(dbUri)) {
+			vscode.window.showWarningMessage('Selected file is not a recognized database file');
+			return;
+		}
+
+		// Open with our custom editor (opening as text will often succeed but won't use the SQLite UI).
+		await vscode.commands.executeCommand('vscode.openWith', dbUri, DatabaseEditorProvider.viewType);
+
+		// Populate the Database Explorer (best-effort; encrypted DBs will require a key).
 		try {
-			const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(databasePath));
-			await vscode.window.showTextDocument(doc, {
-				preview: false,
-				viewColumn: vscode.ViewColumn.One
-			});
-		} catch (error) {
-			// If opening as text document fails, try to open with custom editor directly
-			await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(databasePath), 'sqlite-intelliview-vscode.databaseEditor');
+			await databaseExplorerProvider.setDatabase(dbUri.fsPath);
+		} catch {
+			// DatabaseExplorerProvider already shows a useful error message.
 		}
 	});
 
@@ -77,20 +82,84 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 
 		if (encryptionKey) {
-			// Get the currently active editor
-			const activeEditor = vscode.window.activeTextEditor;
-			if (activeEditor) {
-				try {
-					await databaseExplorerProvider.setDatabase(activeEditor.document.uri.fsPath, encryptionKey);
-					vscode.window.showInformationMessage('Connected to encrypted database successfully!');
-				} catch (error) {
-					vscode.window.showErrorMessage(`Failed to connect: ${error}`);
+			const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+			const isDatabaseFile = (target: vscode.Uri) => {
+				return ['.db', '.sqlite', '.sqlite3'].some(ext => target.fsPath.toLowerCase().endsWith(ext));
+			};
+			const getActiveDatabaseUri = (): vscode.Uri | undefined => {
+				const editorUri = vscode.window.activeTextEditor?.document.uri;
+				if (editorUri && isDatabaseFile(editorUri)) {
+					return editorUri;
 				}
-			} else {
-				vscode.window.showErrorMessage('No database file is currently open');
+				const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+				const input: any = activeTab?.input;
+				const inputUri: vscode.Uri | undefined = input && input.uri && typeof input.uri.fsPath === 'string' ? input.uri : undefined;
+				if (inputUri && isDatabaseFile(inputUri)) {
+					return inputUri;
+				}
+				return undefined;
+			};
+
+			let dbUri = getActiveDatabaseUri();
+			if (!dbUri) {
+				const picked = await vscode.window.showOpenDialog({
+					canSelectFiles: true,
+					canSelectFolders: false,
+					canSelectMany: false,
+					filters: {
+						'SQLite Database': ['db', 'sqlite', 'sqlite3'],
+						'All Files': ['*']
+					}
+				});
+				if (!picked || picked.length === 0) {
+					return;
+				}
+				dbUri = picked[0];
 			}
-		}
-	});
+
+			if (!isDatabaseFile(dbUri)) {
+				vscode.window.showWarningMessage('Selected file is not a recognized database file');
+				return;
+			}
+
+			// Ensure the database is open in the custom editor.
+			await vscode.commands.executeCommand('vscode.openWith', dbUri, DatabaseEditorProvider.viewType);
+
+			// Update the Database Explorer using the provided key.
+			try {
+				await databaseExplorerProvider.setDatabase(dbUri.fsPath, encryptionKey);
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to connect: ${error}`);
+				return;
+			}
+
+				// Also connect the open webview (best-effort, with a short retry for panel initialization).
+				const provider = DatabaseEditorProvider.getActiveProvider();
+				let connectedOrOpened = false;
+				if (provider) {
+					for (let attempt = 0; attempt < 10; attempt++) {
+						try {
+							const connected = await provider.connectOpenEditor(dbUri.fsPath, encryptionKey);
+							if (connected) {
+								connectedOrOpened = true;
+								break;
+							}
+						} catch {
+							// ignore; will retry
+						}
+						await delay(100);
+					}
+				}
+
+				if (connectedOrOpened) {
+					vscode.window.showInformationMessage('Connected to encrypted database successfully!');
+				} else {
+					vscode.window.showErrorMessage(
+						'Failed to connect the encrypted database editor webview. Try reopening the database editor and running “Connect with SQLCipher Key” again.'
+					);
+				}
+			}
+		});
 
 	const refreshDatabaseCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.refreshDatabase', () => {
 		databaseExplorerProvider.refresh();
@@ -119,18 +188,25 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const checkpointWalCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.checkpointWal', async () => {
-		// Get the currently active editor
-		const activeEditor = vscode.window.activeTextEditor;
-		if (!activeEditor) {
-			vscode.window.showWarningMessage('No database file is currently open');
-			return;
-		}
+		const isDatabasePath = (p: string) => ['.db', '.sqlite', '.sqlite3'].some(ext => p.toLowerCase().endsWith(ext));
+		const getActiveDatabasePath = (): string | undefined => {
+			const editorPath = vscode.window.activeTextEditor?.document.uri.fsPath;
+			if (editorPath && isDatabasePath(editorPath)) {
+				return editorPath;
+			}
+			const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+			const input: any = activeTab?.input;
+			const inputUri: vscode.Uri | undefined = input && input.uri && typeof input.uri.fsPath === 'string' ? input.uri : undefined;
+			const inputPath = inputUri?.fsPath;
+			if (inputPath && isDatabasePath(inputPath)) {
+				return inputPath;
+			}
+			return undefined;
+		};
 
-		const dbPath = activeEditor.document.uri.fsPath;
-		
-		// Check if it's a database file
-		if (!['.db', '.sqlite', '.sqlite3'].some(ext => dbPath.endsWith(ext))) {
-			vscode.window.showWarningMessage('Active file is not a recognized database file');
+		const dbPath = getActiveDatabasePath();
+		if (!dbPath) {
+			vscode.window.showWarningMessage('No database file is currently open');
 			return;
 		}
 

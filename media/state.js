@@ -37,6 +37,142 @@ let currentState = {
 };
 
 /**
+ * Default per-tab view state.
+ * Stored on each openTables[] entry as `viewState`.
+ */
+function getDefaultTabViewState() {
+  return {
+    page: 1,
+    pageSize:
+      typeof currentState.pageSize === "number" && currentState.pageSize > 0
+        ? currentState.pageSize
+        : 100,
+    searchTerm: "",
+    scrollTop: 0,
+    scrollLeft: 0,
+    columnWidths: {},
+    rowHeights: {},
+    pinnedColumns: [],
+    updatedAt: 0,
+  };
+}
+
+function normalizeOpenTables(openTables) {
+  if (!Array.isArray(openTables)) {
+    return [];
+  }
+  return openTables
+    .map((t) => {
+      if (!t) {
+        return null;
+      }
+      if (typeof t === "string") {
+        return { key: t, label: t, isResultTab: false };
+      }
+      if (typeof t === "object" && t.key && t.label) {
+        return t;
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function getActiveTableKey() {
+  return currentState.activeTable || currentState.selectedTable || null;
+}
+
+function getTabByKey(tabKey) {
+  const openTables = Array.isArray(currentState.openTables)
+    ? currentState.openTables
+    : [];
+  return openTables.find((t) => t && t.key === tabKey) || null;
+}
+
+function getTabViewState(tabKey) {
+  const tab = getTabByKey(tabKey);
+  const defaults = getDefaultTabViewState();
+  if (!tab || !tab.viewState || typeof tab.viewState !== "object") {
+    return defaults;
+  }
+  return { ...defaults, ...tab.viewState };
+}
+
+function setTabViewState(tabKey, patch, options = {}) {
+  if (!tabKey || typeof tabKey !== "string") {
+    return;
+  }
+
+  if (Array.isArray(currentState.openTables)) {
+    currentState.openTables = normalizeOpenTables(currentState.openTables);
+  }
+
+  const openTables = Array.isArray(currentState.openTables)
+    ? currentState.openTables
+    : [];
+  const idx = openTables.findIndex((t) => t && t.key === tabKey);
+  if (idx === -1) {
+    return;
+  }
+
+  const defaults = getDefaultTabViewState();
+  const existing =
+    openTables[idx].viewState && typeof openTables[idx].viewState === "object"
+      ? openTables[idx].viewState
+      : {};
+
+  const patchObject = patch && typeof patch === "object" ? patch : {};
+  const mergedColumnWidths = {
+    ...(defaults.columnWidths || {}),
+    ...((existing && existing.columnWidths) || {}),
+    ...((patchObject && patchObject.columnWidths) || {}),
+  };
+  const mergedRowHeights = {
+    ...(defaults.rowHeights || {}),
+    ...((existing && existing.rowHeights) || {}),
+    ...((patchObject && patchObject.rowHeights) || {}),
+  };
+
+  // Prevent persisted state from ballooning (large objects make vscode.setState slow).
+  const pruneToLastKeys = (obj, maxKeys) => {
+    try {
+      const keys = Object.keys(obj || {});
+      if (keys.length <= maxKeys) {
+        return obj || {};
+      }
+      const keep = keys.slice(-maxKeys);
+      const next = {};
+      keep.forEach((k) => {
+        next[k] = obj[k];
+      });
+      return next;
+    } catch (_) {
+      return obj || {};
+    }
+  };
+
+  const prunedColumnWidths = pruneToLastKeys(mergedColumnWidths, 2000);
+  const prunedRowHeights = pruneToLastKeys(mergedRowHeights, 500);
+
+  openTables[idx].viewState = {
+    ...defaults,
+    ...existing,
+    ...patchObject,
+    columnWidths: prunedColumnWidths,
+    rowHeights: prunedRowHeights,
+    updatedAt: Date.now(),
+  };
+
+  updateState(
+    { openTables },
+    {
+      renderTabs: options.renderTabs === true,
+      renderSidebar: options.renderSidebar === true,
+      persistState: options.persistState || "debounced",
+    }
+  );
+}
+
+/**
  * Get the current state
  * @returns {object} Current state object
  */
@@ -44,13 +180,61 @@ function getCurrentState() {
   return currentState;
 }
 
+function getPersistableState(state) {
+  if (!state || typeof state !== "object") {
+    return state;
+  }
+
+  // VS Code webview state should be small + JSON-serializable.
+  // Large/non-serializable caches (like `tableCache` holding row data / Maps)
+  // will cause severe slowness and can break persistence.
+  const { tableCache, ...rest } = state;
+
+  // Query result tabs depend on in-memory `tableCache` for data, so persisting them
+  // leads to “ghost tabs” after reload. Drop them from persisted state.
+  if (Array.isArray(rest.openTables)) {
+    const normalized = normalizeOpenTables(rest.openTables);
+    rest.openTables = normalized.filter((t) => !t.isResultTab);
+
+    const active = rest.activeTable || rest.selectedTable || null;
+    if (active && rest.openTables.some((t) => t.key === active) === false) {
+      const fallback = rest.openTables[0]?.key || null;
+      rest.activeTable = fallback;
+      rest.selectedTable = fallback;
+    }
+  }
+
+  return rest;
+}
+
+let persistTimer = null;
+function schedulePersistState(delayMs = 500) {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    if (
+      typeof window !== "undefined" &&
+      window.vscode &&
+      typeof window.vscode.setState === "function"
+    ) {
+      window.vscode.setState(getPersistableState(currentState));
+    }
+  }, delayMs);
+}
+
 /**
  * Update the current state
  * @param {object} newState - New state values to merge
- * @param {object} options - Update options { renderTabs: boolean, renderSidebar: boolean }
+ * @param {object} options - Update options { renderTabs: boolean, renderSidebar: boolean, persistState: 'immediate'|'debounced'|'none' }
  */
 function updateState(newState, options = {}) {
-  const { renderTabs = true, renderSidebar = true } = options;
+  const {
+    renderTabs = true,
+    renderSidebar = true,
+    persistState = "immediate",
+  } = options;
 
   // Store previous state for comparison
   const prevOpenTables = currentState.openTables;
@@ -58,7 +242,11 @@ function updateState(newState, options = {}) {
     currentState.activeTable || currentState.selectedTable;
   const prevAllTables = currentState.allTables;
 
-  currentState = { ...currentState, ...newState };
+  const merged = { ...currentState, ...newState };
+  if (newState && "openTables" in newState) {
+    merged.openTables = normalizeOpenTables(merged.openTables);
+  }
+  currentState = merged;
 
   // Debug logging for encryption key changes
   if (newState.encryptionKey !== undefined) {
@@ -70,8 +258,15 @@ function updateState(newState, options = {}) {
   }
 
   // Save state to VS Code
-  if (typeof vscode !== "undefined") {
-    vscode.setState(currentState);
+  if (persistState === "debounced") {
+    schedulePersistState();
+  } else if (
+    persistState !== "none" &&
+    typeof window !== "undefined" &&
+    window.vscode &&
+    typeof window.vscode.setState === "function"
+  ) {
+    window.vscode.setState(getPersistableState(currentState));
   }
 
   // Optimized rendering logic - only render when necessary
@@ -208,10 +403,56 @@ function hasArrayChanged(prevArray, currentArray) {
  * Initialize state from VS Code saved state
  */
 function initializeState() {
-  if (typeof vscode !== "undefined") {
-    const savedState = vscode.getState();
+  if (
+    typeof window !== "undefined" &&
+    window.vscode &&
+    typeof window.vscode.getState === "function"
+  ) {
+    const savedState = window.vscode.getState();
     if (savedState) {
       currentState = { ...currentState, ...savedState };
+      // Normalize openTables in case older state stored strings.
+      currentState.openTables = normalizeOpenTables(currentState.openTables);
+
+      // Prune persisted per-tab sizing maps on load (large objects make initial load very slow).
+      if (Array.isArray(currentState.openTables)) {
+        currentState.openTables = currentState.openTables.map((t) => {
+          if (!t || typeof t !== "object") {
+            return t;
+          }
+          const vs = t.viewState && typeof t.viewState === "object" ? t.viewState : null;
+          if (!vs) {
+            return t;
+          }
+          const pruneToLastKeys = (obj, maxKeys) => {
+            try {
+              const keys = Object.keys(obj || {});
+              if (keys.length <= maxKeys) {
+                return obj || {};
+              }
+              const keep = keys.slice(-maxKeys);
+              const next = {};
+              keep.forEach((k) => {
+                next[k] = obj[k];
+              });
+              return next;
+            } catch (_) {
+              return obj || {};
+            }
+          };
+          return {
+            ...t,
+            viewState: {
+              ...vs,
+              columnWidths: pruneToLastKeys(vs.columnWidths, 2000),
+              rowHeights: pruneToLastKeys(vs.rowHeights, 500),
+            },
+          };
+        });
+      }
+
+      // Persist the pruned state in the background to prevent repeated slow startups.
+      schedulePersistState(750);
     }
     // If openTables is empty and allTables has tables, initialize openTables with the first table
     if (
@@ -275,8 +516,12 @@ function resetState() {
     allTables: [],
   };
 
-  if (typeof vscode !== "undefined") {
-    vscode.setState(currentState);
+  if (
+    typeof window !== "undefined" &&
+    window.vscode &&
+    typeof window.vscode.setState === "function"
+  ) {
+    window.vscode.setState(getPersistableState(currentState));
   }
 }
 
@@ -336,13 +581,6 @@ function reorderTabs(fromIndex, toIndex) {
   window.debug.info("State", "Tab reorder completed successfully");
 }
 
-// Ensure vscode is available globally for state.js
-// @ts-ignore
-var vscode =
-  typeof window !== "undefined" && window["vscode"]
-    ? window["vscode"]
-    : undefined;
-
 // Export functions for use in other modules
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
@@ -352,6 +590,11 @@ if (typeof module !== "undefined" && module.exports) {
     resetState,
     // SortableJS integration functions
     reorderTabs,
+    // Per-tab view state helpers
+    getActiveTableKey,
+    getTabByKey,
+    getTabViewState,
+    setTabViewState,
   };
 }
 
@@ -363,4 +606,9 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).resetState = resetState;
   // SortableJS integration functions
   /** @type {any} */ (window).reorderTabs = reorderTabs;
+  // Per-tab view state helpers
+  /** @type {any} */ (window).getActiveTableKey = getActiveTableKey;
+  /** @type {any} */ (window).getTabByKey = getTabByKey;
+  /** @type {any} */ (window).getTabViewState = getTabViewState;
+  /** @type {any} */ (window).setTabViewState = setTabViewState;
 }

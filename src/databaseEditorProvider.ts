@@ -5,7 +5,8 @@ import { DatabaseService } from './databaseService';
 import { DatabaseWatcher } from './databaseWatcher';
 
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
-    private static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
+    public static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
+    private static activeProvider: DatabaseEditorProvider | undefined;
     private activeConnections: Map<string, DatabaseService> = new Map();
     /** Track last sync state per database for delta updates */
     private lastSync: Map<string, { table: string; since: string; page: number; pageSize: number; lastPageData?: any[][] }> = new Map();
@@ -13,9 +14,59 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     private webviewPanels: Map<string, vscode.WebviewPanel> = new Map();
     /** cache full pages keyed by `${db}:${table}:${page}:${pageSize}` → QueryResult.values */
     private lastPageCache = new Map<string, any[][]>();
+    /** cache row counts keyed by `${db}:${table}` → COUNT(*) */
+    private rowCountCache = new Map<string, number>();
+    /** cache table info keyed by `${db}:${table}` → ColumnInfo[] */
+    private tableInfoCache = new Map<string, any[]>();
+    /** cache foreign keys keyed by `${db}:${table}` → ForeignKeyInfo[] */
+    private foreignKeysCache = new Map<string, any[]>();
 
     /** Development mode logging helper */
     private isDevelopment = process.env.NODE_ENV === 'development' || vscode.env.appName.includes('Dev');
+
+    private getTableCacheKey(databasePath: string, tableName: string): string {
+        return `${databasePath}:${tableName}`;
+    }
+
+    private invalidateCachesForTable(databasePath: string, tableName: string): void {
+        if (!databasePath || !tableName) {
+            return;
+        }
+        const key = this.getTableCacheKey(databasePath, tableName);
+        this.rowCountCache.delete(key);
+        this.tableInfoCache.delete(key);
+        this.foreignKeysCache.delete(key);
+    }
+
+    private invalidateCachesForTables(databasePath: string, tableNames: Iterable<string>): void {
+        for (const t of tableNames) {
+            if (t) {
+                this.invalidateCachesForTable(databasePath, t);
+            }
+        }
+    }
+
+    private invalidateCachesForDatabase(databasePath: string): void {
+        if (!databasePath) {
+            return;
+        }
+        const prefix = `${databasePath}:`;
+        for (const k of Array.from(this.rowCountCache.keys())) {
+            if (k.startsWith(prefix)) {
+                this.rowCountCache.delete(k);
+            }
+        }
+        for (const k of Array.from(this.tableInfoCache.keys())) {
+            if (k.startsWith(prefix)) {
+                this.tableInfoCache.delete(k);
+            }
+        }
+        for (const k of Array.from(this.foreignKeysCache.keys())) {
+            if (k.startsWith(prefix)) {
+                this.foreignKeysCache.delete(k);
+            }
+        }
+    }
     
     private debugLog(component: string, message: string, ...args: any[]): void {
         if (this.isDevelopment) {
@@ -37,6 +88,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
+        DatabaseEditorProvider.activeProvider = provider;
         const providerRegistration = vscode.window.registerCustomEditorProvider(
             DatabaseEditorProvider.viewType, 
             provider,
@@ -49,6 +101,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             }
         );
         return providerRegistration;
+    }
+
+    public static getActiveProvider(): DatabaseEditorProvider | undefined {
+        return DatabaseEditorProvider.activeProvider;
     }
 
     constructor(
@@ -121,6 +177,20 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 case 'requestDatabaseInfo':
                     this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath, e.key);
                     return;
+                case 'reloadDatabase':
+                    // Hard reload: close cached connections and re-open from disk.
+                    this.closeConnection(document.uri.fsPath);
+                    void this.handleDatabaseInfoRequest(webviewPanel, document.uri.fsPath, e.key)
+                        .catch(() => {
+                            // errors are already surfaced via handleDatabaseInfoRequest
+                        })
+                        .finally(() => {
+                            webviewPanel.webview.postMessage({
+                                type: 'databaseReloaded',
+                                databasePath: document.uri.fsPath
+                            });
+                        });
+                    return;
                 case 'executeQuery':
                     this.handleQueryExecution(webviewPanel, document.uri.fsPath, e.query, e.key);
                     return;
@@ -139,6 +209,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     return;
                 case 'generateERDiagram':
                     this.handleERDiagramRequest(webviewPanel, document.uri.fsPath, e.key);
+                    return;
+                case 'downloadBlob':
+                    void this.handleDownloadBlobRequest(webviewPanel, document.uri.fsPath, e.requestId, e.filename, e.mime, e.dataBase64);
                     return;
             }
         });
@@ -200,7 +273,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; img-src ${webview.cspSource} data:; worker-src blob: ${webview.cspSource}; child-src blob:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-eval'; img-src ${webview.cspSource} data: blob:; worker-src blob: ${webview.cspSource}; child-src blob:;">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${cssLinks}
                 <title>SQLite IntelliView</title>
@@ -359,6 +432,92 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             </html>`;
     }
 
+    private async handleDownloadBlobRequest(
+        webviewPanel: vscode.WebviewPanel,
+        databasePath: string,
+        requestId: unknown,
+        filename: unknown,
+        mime: unknown,
+        dataBase64: unknown
+    ): Promise<void> {
+        try {
+            const reqId = typeof requestId === 'string' && requestId.trim().length > 0 ? requestId.trim() : undefined;
+            const safeName = typeof filename === 'string' && filename.trim().length > 0
+                ? path.basename(filename.trim())
+                : 'blob.bin';
+            const safeMime = typeof mime === 'string' && mime.trim().length > 0
+                ? mime.trim()
+                : 'application/octet-stream';
+            const payload = typeof dataBase64 === 'string' ? dataBase64 : '';
+
+            if (!payload) {
+                webviewPanel.webview.postMessage({
+                    type: 'downloadBlobResult',
+                    requestId: reqId,
+                    success: false,
+                    message: 'No blob data provided.'
+                });
+                return;
+            }
+
+            const buffer = Buffer.from(payload, 'base64');
+            if (!buffer || buffer.length === 0) {
+                webviewPanel.webview.postMessage({
+                    type: 'downloadBlobResult',
+                    requestId: reqId,
+                    success: false,
+                    message: 'Blob data was empty.'
+                });
+                return;
+            }
+
+            const defaultDir = path.dirname(databasePath);
+            const defaultUri = vscode.Uri.file(path.join(defaultDir, safeName));
+
+            const ext = path.extname(safeName).replace('.', '').toLowerCase();
+            const filters: Record<string, string[]> = {};
+            if (ext) {
+                filters[ext.toUpperCase()] = [ext];
+            }
+            filters['All Files'] = ['*'];
+
+            const target = await vscode.window.showSaveDialog({
+                defaultUri,
+                saveLabel: 'Save Blob',
+                filters
+            });
+
+            if (!target) {
+                webviewPanel.webview.postMessage({
+                    type: 'downloadBlobResult',
+                    requestId: reqId,
+                    success: false,
+                    canceled: true
+                });
+                return;
+            }
+
+            await fs.promises.writeFile(target.fsPath, buffer);
+
+            webviewPanel.webview.postMessage({
+                type: 'downloadBlobResult',
+                requestId: reqId,
+                success: true,
+                bytes: buffer.length,
+                path: target.fsPath,
+                mime: safeMime
+            });
+        } catch (error) {
+            this.debugError('downloadBlob', 'Failed to save blob:', error);
+            webviewPanel.webview.postMessage({
+                type: 'downloadBlobResult',
+                requestId: (typeof requestId === 'string' && requestId.trim().length > 0) ? requestId.trim() : undefined,
+                success: false,
+                message: (error && typeof error === 'object' && 'message' in error) ? (error as any).message : String(error)
+            });
+        }
+    }
+
     private async handleDatabaseInfoRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, key?: string) {
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
@@ -399,6 +558,15 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         }
     }
 
+    public async connectOpenEditor(databasePath: string, key?: string): Promise<boolean> {
+        const panel = this.webviewPanels.get(databasePath);
+        if (!panel) {
+            return false;
+        }
+        await this.handleDatabaseInfoRequest(panel, databasePath, key);
+        return true;
+    }
+
     private async handleQueryExecution(webviewPanel: vscode.WebviewPanel, databasePath: string, query: string, key?: string) {
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
@@ -428,22 +596,70 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             
             // Use pagination if provided, otherwise use default behavior
             let result;
-            let totalRowCount = 0;
+            let totalRowCount: number | null = null;
+            let totalRowsKnown = true;
             
             if (page !== undefined && pageSize !== undefined) {
                 // Get paginated data
                 result = await dbService.getTableDataPaginated(tableName, page, pageSize);
-                // Get total row count for pagination controls
-                totalRowCount = await dbService.getRowCount(tableName);
+                // Get total row count for pagination controls (cache + async)
+                const cacheKey = `${databasePath}:${tableName}`;
+                const cachedCount = this.rowCountCache.get(cacheKey);
+                if (typeof cachedCount === 'number') {
+                    totalRowCount = cachedCount;
+                    totalRowsKnown = true;
+                } else {
+                    totalRowCount = null;
+                    totalRowsKnown = false;
+                    // Compute count in background and update UI when ready
+                    dbService.getRowCount(tableName).then(count => {
+                        this.rowCountCache.set(cacheKey, count);
+                        webviewPanel.webview.postMessage({
+                            type: 'tableRowCount',
+                            tableName,
+                            totalRows: count,
+                            page,
+                            pageSize,
+                        });
+                    }).catch(err => {
+                        this.debugWarn('getRowCount', `Failed to compute row count for ${tableName}:`, err);
+                    });
+                }
             } else {
                 result = await dbService.getTableData(tableName);
                 totalRowCount = result.values.length;
+                totalRowsKnown = true;
             }
 
             // Get foreign key information for the table
-            const foreignKeys = await dbService.getForeignKeys(tableName);
-            // Get full column info (with fk metadata)
-            const columnInfo = await dbService.getTableInfo(tableName);
+            const metaKey = `${databasePath}:${tableName}`;
+            let foreignKeys: any[] = this.foreignKeysCache.get(metaKey) || [];
+            if (foreignKeys.length === 0) {
+                try {
+                    foreignKeys = await dbService.getForeignKeys(tableName);
+                    this.foreignKeysCache.set(metaKey, foreignKeys);
+                } catch (err) {
+                    this.debugWarn('getForeignKeys', `Failed to fetch foreign keys for ${tableName}:`, err);
+                    foreignKeys = [];
+                }
+            }
+
+            // Get full column info (with fk metadata); cache + allow async fill for faster first paint.
+            const cachedColumnInfo = this.tableInfoCache.get(metaKey);
+            let columnInfo: any[] | null = Array.isArray(cachedColumnInfo) ? cachedColumnInfo : null;
+            if (!columnInfo) {
+                // Fill in background; UI doesn't need this to render the page.
+                dbService.getTableInfo(tableName).then(info => {
+                    this.tableInfoCache.set(metaKey, info as any[]);
+                    webviewPanel.webview.postMessage({
+                        type: 'tableColumnInfo',
+                        tableName,
+                        columnInfo: info
+                    });
+                }).catch(err => {
+                    this.debugWarn('getTableInfo', `Failed to fetch column info for ${tableName}:`, err);
+                });
+            }
 
             // Fix column headers: alias rowid as _rowid and remove duplicate id columns
             let columns = result.columns;
@@ -472,7 +688,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 columnInfo: columnInfo,
                 page: page,
                 pageSize: pageSize,
-                totalRows: totalRowCount
+                totalRows: totalRowCount,
+                totalRowsKnown
             });
             // cache this page for future diffs ONLY if this is a user-initiated load
             if (setSync) {
@@ -507,6 +724,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             // Update the cell data
             this.debugLog('handleCellUpdateRequest', `Updating cell data with rowid ${rowId}`);
             await dbService.updateCellData(tableName, rowId, columnName, newValue);
+
+            // Invalidate caches for this table so subsequent reads are fresh.
+            this.invalidateCachesForTable(databasePath, tableName);
+
             // Send success response
             webviewPanel.webview.postMessage({
                 type: 'cellUpdateSuccess',
@@ -717,9 +938,16 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
             
-            // Delete the row
-            this.debugLog('DeleteRow', 'Deleting row with identifier:', rowId);
-            await dbService.deleteRow(tableName, rowId);
+            const identifiers = Array.isArray(rowId) ? rowId : [rowId];
+
+            // Delete the row(s)
+            for (const identifier of identifiers) {
+                this.debugLog('DeleteRow', 'Deleting row with identifier:', identifier);
+                await dbService.deleteRow(tableName, identifier);
+            }
+
+            // Invalidate caches for this table so subsequent reads are fresh.
+            this.invalidateCachesForTable(databasePath, tableName);
             
             // Send success response
             webviewPanel.webview.postMessage({
@@ -839,6 +1067,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     public async handleExternalDatabaseChange(databasePath: string) {
+        // External changes can modify data and schema; clear all cached metadata/counts for this DB.
+        this.invalidateCachesForDatabase(databasePath);
+
         this.closeConnection(databasePath);
         const panel = this.webviewPanels.get(databasePath);
         const sync = this.lastSync.get(databasePath);
@@ -852,6 +1083,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         const db = await this.getOrCreateConnection(databasePath);
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
         const newTotalCount = await db.getRowCount(table);
+        this.rowCountCache.set(this.getTableCacheKey(databasePath, table), newTotalCount);
         console.info('New page data fetched', { newResult, newTotalCount });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;

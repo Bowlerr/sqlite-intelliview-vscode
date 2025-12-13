@@ -234,7 +234,11 @@ function switchTab(tabName) {
           }
         }
       }
-    } else if (currentState.selectedTable && typeof vscode !== "undefined") {
+    } else if (
+      currentState.selectedTable &&
+      window.vscode &&
+      typeof window.vscode.postMessage === "function"
+    ) {
       // Use persisted pageSize from state if available
       const pageSize =
         typeof currentState.pageSize === "number" &&
@@ -244,7 +248,7 @@ function switchTab(tabName) {
             PAGINATION_CONFIG.defaultPageSize
           ? PAGINATION_CONFIG.defaultPageSize
           : 100;
-      vscode.postMessage({
+      window.vscode.postMessage({
         type: "getTableData",
         tableName: currentState.selectedTable,
         key: currentState.encryptionKey || "",

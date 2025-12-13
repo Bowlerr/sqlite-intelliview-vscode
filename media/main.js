@@ -1,51 +1,3 @@
-// Utility: Attach sidebar table item click handlers to call window.selectTable
-function attachSidebarTableHandlers() {
-  const items = document.querySelectorAll(".table-item[data-table]");
-  items.forEach((item) => {
-    item.onclick = (e) => {
-      const tableName = item.dataset.table;
-      if (tableName && typeof window.selectTable === "function") {
-        window.selectTable(tableName);
-      }
-    };
-  });
-}
-// Observe state changes to update table tabs UI
-function updateTableTabsUI() {
-  if (
-    typeof window.getCurrentState === "function" &&
-    typeof window.renderTableTabs === "function"
-  ) {
-    const state = window.getCurrentState();
-    window.renderTableTabs(state.openTables || [], state.activeTable || null);
-  }
-}
-
-// Patch updateState to also update tabs UI
-if (typeof window.updateState === "function") {
-  const origUpdateState = window.updateState;
-  window.updateState = function (newState) {
-    origUpdateState(newState);
-    updateTableTabsUI();
-  };
-}
-
-// Initial render on load
-document.addEventListener("DOMContentLoaded", updateTableTabsUI);
-// Polyfill state functions for compatibility
-if (
-  typeof window.getCurrentState !== "function" &&
-  typeof getCurrentState === "function"
-) {
-  window.getCurrentState = getCurrentState;
-}
-if (
-  typeof window.updateState !== "function" &&
-  typeof updateState === "function"
-) {
-  window.updateState = updateState;
-}
-
 (function () {
   // @ts-check
 
@@ -61,103 +13,15 @@ if (
     );
   }
 
-  // --- Sidebar maximize logic ---
-  function maximizeSidebar() {
-    if (
-      window.resizableSidebar &&
-      typeof window.resizableSidebar.setMinimized === "function"
-    ) {
-      window.resizableSidebar.setMinimized(false);
-    }
-  }
-  // Listen for messages from extension/backend
-  window.addEventListener("message", (event) => {
-    const message = event.data;
-    if (!message) {
-      return;
-    }
-    if (
-      message.type === "maximizeSidebar" ||
-      message.type === "databaseLoadError" ||
-      (message.type === "error" &&
-        typeof message.message === "string" &&
-        message.message.includes("Database appears to be encrypted"))
-    ) {
-      maximizeSidebar();
-    }
-
-    // --- Handle database info (list of tables) ---
-    if (message.type === "databaseInfo" && Array.isArray(message.tables)) {
-      if (typeof window.updateState === "function") {
-        window.updateState({ allTables: message.tables });
-        if (message.tables.length > 0) {
-          const firstTableName = message.tables[0];
-          const state =
-            typeof window.getCurrentState === "function"
-              ? window.getCurrentState()
-              : {};
-          const openTables = Array.isArray(state.openTables)
-            ? state.openTables
-            : [];
-          if (
-            !openTables.find((t) => t.key === firstTableName) &&
-            typeof window.openTableTab === "function"
-          ) {
-            window.openTableTab(firstTableName);
-          }
-          // Always refresh tabs and sidebar using allTables
-          if (typeof window.renderTableTabs === "function") {
-            window.renderTableTabs(
-              window.getCurrentState().openTables,
-              window.getCurrentState().activeTable ||
-                window.getCurrentState().selectedTable ||
-                ""
-            );
-          }
-          if (
-            typeof window.displayTablesList === "function" &&
-            Array.isArray(window.getCurrentState().allTables)
-          ) {
-            window.displayTablesList(window.getCurrentState().allTables);
-          }
-        }
-      }
-    }
-
-    // --- Handle table data response ---
-    if (message.type === "tableData") {
-      // Update pagination state immediately on data receipt
-      /** @type {any} */
-      const win = window;
-      if (typeof win.updateState === "function") {
-        win.updateState({
-          currentPage: message.page,
-          pageSize: message.pageSize,
-        });
-      }
-      // Use backend-provided page, pageSize, totalRows, and columns for rendering
-      displayTableData(
-        message.data,
-        message.tableName,
-        message.page || 1,
-        message.pageSize || 100,
-        message.totalRows || (message.data ? message.data.length : 0),
-        message.columns // pass columns from backend
-      );
-      return;
-    }
-  });
-
   // Export tab functions globally for table-tabs.js and other modules
 
-  // Defer global assignments and sidebar handler attachment to after all scripts are loaded
+  // Defer global assignments to after all scripts are loaded
   setTimeout(() => {
     if (typeof window !== "undefined") {
       window.openTableTab = openTableTab;
       window.switchTableTab = switchTableTab;
       window.closeTableTab = closeTableTab;
       window.selectTable = selectTable;
-      attachSidebarTableHandlers();
     }
   }, 0);
 
@@ -184,6 +48,18 @@ if (
         // Initialize modules (functions from loaded JS files)
         if (typeof window.initializeState === "function") {
           window.initializeState();
+        }
+
+        // Render table tabs from persisted state (if any)
+        if (
+          typeof window.getCurrentState === "function" &&
+          typeof window.renderTableTabs === "function"
+        ) {
+          const state = window.getCurrentState();
+          window.renderTableTabs(
+            state.openTables || [],
+            state.activeTable || state.selectedTable || ""
+          );
         }
 
         if (typeof initializeDOMElements === "function") {
@@ -282,8 +158,7 @@ if (
         // Load initial data
         loadInitialData();
 
-        // Attach sidebar table handlers after all scripts loaded
-        setTimeout(attachSidebarTableHandlers, 300);
+        // Sidebar table click handlers are attached by displayTablesList in events.js
       } catch (error) {
         window.debug.error("main", "Error during initialization:", error);
         if (typeof showError === "function") {
@@ -301,6 +176,10 @@ if (
      * Add a table to open tabs (if not already open) and make it active
      */
     function openTableTab(tableName, page = 1, pageSize = 100) {
+      if (typeof window.captureCurrentDataViewState === "function") {
+        window.captureCurrentDataViewState();
+      }
+      const hasExplicitPaging = arguments.length >= 2;
       window.debug.debug("main", "[openTableTab] called with:", tableName, {
         page,
         pageSize,
@@ -324,7 +203,18 @@ if (
         if (/^results \(\d{4}-\d{2}-\d{2}/i.test(label)) {
           isResultTab = true;
         }
-        tabObj = { key, label, isResultTab };
+        tabObj = {
+          key,
+          label,
+          isResultTab,
+          viewState: {
+            page,
+            pageSize,
+            searchTerm: "",
+            scrollTop: 0,
+            scrollLeft: 0,
+          },
+        };
         openTables.push(tabObj);
         if (typeof window.updateState === "function") {
           window.updateState({
@@ -335,6 +225,23 @@ if (
         }
         selectTableInternal(tabObj.key, page, pageSize);
       } else {
+        const vs =
+          typeof window.getTabViewState === "function"
+            ? window.getTabViewState(tabObj.key)
+            : tabObj.viewState || {};
+        const desiredPage = hasExplicitPaging ? page : vs.page || 1;
+        const desiredPageSize = hasExplicitPaging
+          ? pageSize
+          : vs.pageSize || 100;
+
+        if (hasExplicitPaging) {
+          tabObj.viewState = {
+            ...(tabObj.viewState || {}),
+            page: desiredPage,
+            pageSize: desiredPageSize,
+            scrollTop: 0,
+          };
+        }
         // If already open, just activate and select
         if (typeof window.updateState === "function") {
           window.updateState({
@@ -343,7 +250,7 @@ if (
             selectedTable: tabObj.key,
           });
         }
-        selectTableInternal(tabObj.key, page, pageSize);
+        selectTableInternal(tabObj.key, desiredPage, desiredPageSize);
       }
     }
 
@@ -351,6 +258,9 @@ if (
      * Remove a table from open tabs
      */
     function closeTableTab(tableKey) {
+      if (typeof window.captureCurrentDataViewState === "function") {
+        window.captureCurrentDataViewState();
+      }
       const state =
         typeof window.getCurrentState === "function"
           ? window.getCurrentState()
@@ -366,13 +276,8 @@ if (
       }
       // Remove query result data from cache if this is a result tab
       if (tableKey && tableKey.startsWith("Results (")) {
-        if (state.tableCache instanceof Map && state.tableCache.has(tableKey)) {
-          state.tableCache.delete(tableKey);
-        } else if (
-          typeof state.tableCache === "object" &&
-          state.tableCache[tableKey]
-        ) {
-          delete state.tableCache[tableKey];
+        if (window._resultCache instanceof Map) {
+          window._resultCache.delete(tableKey);
         }
       }
       if (typeof window.updateState === "function") {
@@ -380,21 +285,26 @@ if (
           openTables,
           activeTable: newActive,
           selectedTable: newActive,
-          tableCache: state.tableCache,
         });
       }
-      // Core trigger: re-render tabs and sidebar
-      if (typeof window.renderTableTabs === "function") {
-        window.renderTableTabs(openTables, newActive || "");
-      }
-      if (
-        typeof window.displayTablesList === "function" &&
-        Array.isArray(state.allTables)
-      ) {
-        window.displayTablesList(state.allTables);
+
+      // Only re-render sidebar list when result tabs list changes.
+      if (tableKey && tableKey.startsWith("Results (")) {
+        if (
+          typeof window.displayTablesList === "function" &&
+          Array.isArray(state.allTables)
+        ) {
+          window.displayTablesList(state.allTables);
+        }
+      } else if (typeof window.updateSidebarSelection === "function" && newActive) {
+        window.updateSidebarSelection(newActive);
       }
       if (newActive) {
-        selectTableInternal(newActive);
+        const vs =
+          typeof window.getTabViewState === "function"
+            ? window.getTabViewState(newActive)
+            : {};
+        selectTableInternal(newActive, vs.page || 1, vs.pageSize || 100);
       } else {
         // Optionally clear data view if no tabs open
         const dataContent = document.getElementById("data-content");
@@ -408,30 +318,27 @@ if (
      * Switch to an already open table tab
      */
     function switchTableTab(tableKey) {
+      if (typeof window.captureCurrentDataViewState === "function") {
+        window.captureCurrentDataViewState();
+      }
+      const vs =
+        typeof window.getTabViewState === "function"
+          ? window.getTabViewState(tableKey)
+          : {};
+      const desiredPage = vs.page || 1;
+      const desiredPageSize = vs.pageSize || 100;
+
       if (typeof window.updateState === "function") {
         window.updateState({
           activeTable: tableKey,
           selectedTable: tableKey,
         });
       }
-
-      // Core trigger: explicitly refresh tabs and sidebar after switching
-      if (typeof window.renderTableTabs === "function") {
-        const state =
-          typeof window.getCurrentState === "function"
-            ? window.getCurrentState()
-            : {};
-        window.renderTableTabs(state.openTables || [], tableKey);
-      }
-      if (typeof window.displayTablesList === "function") {
-        const state =
-          typeof window.getCurrentState === "function"
-            ? window.getCurrentState()
-            : {};
-        window.displayTablesList(state.allTables || []);
+      if (typeof window.updateSidebarSelection === "function") {
+        window.updateSidebarSelection(tableKey);
       }
 
-      selectTableInternal(tableKey);
+      selectTableInternal(tableKey, desiredPage, desiredPageSize);
     }
 
     /**
@@ -457,35 +364,23 @@ if (
       }
 
       // Highlight selected table - improved logic for both normal tables and result tabs
-      const tableElements = document.querySelectorAll(".table-item");
-      tableElements.forEach((el) => {
-        el.classList.remove("selected");
-        // Check both data-table attribute and textContent for exact matches
-        const dataTable = el.getAttribute("data-table");
-        if (
-          dataTable === tableKey ||
-          (el.textContent && el.textContent.trim() === tableKey)
-        ) {
-          el.classList.add("selected");
-        }
-      });
+      if (typeof window.updateSidebarSelection === "function") {
+        window.updateSidebarSelection(tableKey);
+      }
 
       // If this is a query result tab, render from cache
       if (tableKey && tableKey.startsWith("Results (")) {
-        if (typeof window.getCurrentState === "function") {
+        let result = null;
+        if (window._resultCache instanceof Map && window._resultCache.has(tableKey)) {
+          result = window._resultCache.get(tableKey);
+        } else if (typeof window.getCurrentState === "function") {
           const state = window.getCurrentState();
-          let result = null;
-          if (
-            state.tableCache instanceof Map &&
-            state.tableCache.has(tableKey)
-          ) {
+          if (state.tableCache instanceof Map && state.tableCache.has(tableKey)) {
             result = state.tableCache.get(tableKey);
-          } else if (
-            typeof state.tableCache === "object" &&
-            state.tableCache[tableKey]
-          ) {
+          } else if (typeof state.tableCache === "object" && state.tableCache[tableKey]) {
             result = state.tableCache[tableKey];
           }
+        }
           if (result && result.data && result.columns) {
             // Use createDataTable if available
             const createDataTableFn =
@@ -514,14 +409,52 @@ if (
               if (tableWrapper && typeof initializeTableEvents === "function") {
                 initializeTableEvents(tableWrapper);
               }
+
+              const wrapperEl =
+                dataContent.querySelector(".enhanced-table-wrapper");
+              if (
+                wrapperEl &&
+                typeof window.applyTabViewStateToWrapper === "function"
+              ) {
+                window.applyTabViewStateToWrapper(wrapperEl, tableKey);
+              }
             }
             return;
-          }
         }
       }
 
       // Otherwise, request table schema and data from backend
-      requestTableSchema(tableKey);
+      if (typeof window.setTabViewState === "function") {
+        window.setTabViewState(
+          tableKey,
+          { page, pageSize },
+          { renderTabs: false, renderSidebar: false }
+        );
+      }
+      // Schema fetch can be expensive; only fetch it when Schema tab is active.
+      let schemaIsActive = false;
+      try {
+        const activeEl = document.querySelector(".tab.active");
+        const domTab =
+          activeEl && activeEl instanceof HTMLElement ? activeEl.dataset.tab : null;
+        if (domTab) {
+          schemaIsActive = domTab === "schema";
+        } else {
+          const stateForSchema =
+            typeof window.getCurrentState === "function"
+              ? window.getCurrentState()
+              : {};
+          schemaIsActive = stateForSchema.activeTab === "schema";
+        }
+      } catch (_) {
+        const stateForSchema =
+          typeof window.getCurrentState === "function" ? window.getCurrentState() : {};
+        schemaIsActive = stateForSchema.activeTab === "schema";
+      }
+
+      if (schemaIsActive) {
+        requestTableSchema(tableKey);
+      }
       requestTableData(tableKey, page, pageSize);
       // Do not switch main tab; stay on the user's current tab
     }

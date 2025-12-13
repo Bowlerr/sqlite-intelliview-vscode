@@ -161,6 +161,14 @@ function showKeyboardShortcuts() {
           <span>Search in table</span>
         </div>
         <div class="shortcut-item">
+          <kbd>Ctrl+Shift+R</kbd> / <kbd>Cmd+Shift+R</kbd>
+          <span>Refresh database view (re-fetch tables/data)</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Ctrl+Alt+R</kbd> / <kbd>Cmd+Option+R</kbd>
+          <span>Hard reload database connection (re-open from disk)</span>
+        </div>
+        <div class="shortcut-item">
           <kbd>Escape</kbd>
           <span>Close notifications</span>
         </div>

@@ -1,5 +1,38 @@
 # Change Log
 
+## [Unreleased]
+
+### ⚡ Performance, UX, and Reliability Improvements
+
+### Added
+
+- ⚡ **Large table rendering performance**: Virtualized table rendering for large pages to keep the DOM small and scrolling/snapping responsive
+- 💾 **Per-tab view state persistence**: Remembers page/page size, search term, scroll position, pinned columns, column widths, and row heights per tab
+- ⌨️ **New keyboard shortcuts**:
+  - <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>: Refresh database view (re-fetch tables/data)
+  - <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Alt</kbd>/<kbd>Option</kbd>+<kbd>R</kbd>: Hard reload database connection (re-open from disk)
+  - <kbd>/</kbd>: Focus table search (helpful when <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> is intercepted by VS Code)
+- 🧠 **Smarter backend caching**: Row counts, table info, and foreign keys are cached, with async updates sent to the webview when available
+- 🧾 **Readable JSON cell viewer**: Right-click JSON cells to `View JSON` in a formatted viewer and `Copy Formatted JSON`
+- 🖼️ **BLOB viewer + image thumbnails**: Image blobs show a small thumbnail; right-click blobs to `View Image/View Blob` and copy as Base64/Hex (or download)
+
+### Changed
+
+- 🧩 **Schema loading is now lazy**: Table schema is requested only when the Schema tab is opened (reduces unnecessary work on Data tab)
+- 🧱 **Table layout + resizing improvements**:
+  - Tables can expand horizontally for column resizing (uses `<colgroup>` to apply widths efficiently)
+  - Resizing and cell-editing handlers are delegated to reduce per-row/per-cell listeners
+  - Cell rendering is truncated for very large values while preserving originals for editing
+- 🧼 **Webview state is kept small**: Large/non-serializable caches are excluded from persisted state and persistence is debounced to avoid slow startups
+- 🗃️ **Database open/connect behavior**:
+  - `Open Database` now opens with the custom editor (`vscode.openWith`)
+  - Encrypted database connect command better targets the active database editor and reconnects the open webview
+
+### Fixed
+
+- 🧷 **Virtualized table compatibility**: Copy column/copy table-as-JSON, export, sorting/filtering, and FK highlight now work when virtualization is enabled
+- 🔐 **VS Code API guards**: Safer checks for `window.vscode.postMessage` across webview scripts to prevent runtime errors outside VS Code
+
 
 ## [0.3.0] - 2025-11-22
 
@@ -293,7 +326,7 @@ This release represents a major maturity milestone for the extension, with signi
 - 📝 **Monaco-powered Query Editor**: The SQL query editor now uses Monaco Editor for a modern, full-featured experience
   - Syntax highlighting, autocompletion, and SQL snippets
   - Dynamic table/column name completions (auto-populated from your database)
-  - Floating action buttons and keyboard shortcuts (Ctrl+Enter to execute, Ctrl+K to clear, Ctrl+Shift+R to refresh, Ctrl+Alt+R for emergency fix)
+  - Floating action buttons and keyboard shortcuts (Ctrl+Enter to execute, Ctrl+K to clear, Ctrl+Shift+R to refresh, Ctrl+Alt+R / Cmd+Option+R to hard reload the database connection)
   - Results now appear in a modern modal dialog with advanced styling and animations
   - Improved accessibility and keyboard navigation
 - 🖼️ **Query Results Modal**: Query results are now displayed in a modal dialog, not inline, for a cleaner and more focused workflow
