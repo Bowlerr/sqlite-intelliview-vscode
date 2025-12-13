@@ -41,7 +41,9 @@
 }
 
 .data-table {
-  width: 100%;
+  /* Allow tables to grow wider than the container so column resizing can expand horizontally. */
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   background: var(--vscode-editor-background);
   border: 1px solid var(--vscode-panel-border);
@@ -86,13 +88,34 @@
   border-left: 3px solid var(--vscode-focusBorder);
 }
 .data-table td {
-  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   position: relative;
 }
 .data-table td em {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+/* Virtualized table rows (spacers + loading row) */
+.data-table tbody tr.virtual-spacer {
+  background: transparent !important;
+  border-left: none !important;
+}
+.data-table tbody tr.virtual-spacer:hover {
+  background: transparent !important;
+  border-left: none !important;
+}
+.data-table tbody tr.virtual-spacer td {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+.data-table tbody tr.virtual-loading td,
+.data-table tbody tr.virtual-empty td {
+  padding: 12px 16px !important;
+  border-right: none !important;
   color: var(--vscode-descriptionForeground);
   font-style: italic;
 }
@@ -112,11 +135,11 @@
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-  display: flex;
+  /* Don't use flex here; flex children are stretched which prevents horizontal overflow resizing. */
+  display: block;
   overflow: auto;
   position: relative;
   isolation: isolate;
-  flex-direction: column;
   z-index: 1;
   scroll-behavior: smooth;
   scrollbar-width: thin;

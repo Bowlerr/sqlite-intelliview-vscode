@@ -360,8 +360,13 @@ function copyColumnData() {
     return;
   }
 
-  const columnIndex = currentCell.cellIndex;
-  const rows = table.querySelectorAll("tbody tr");
+  const columnIndex = parseInt(
+    currentCell.getAttribute("data-column") || String(currentCell.cellIndex),
+    10
+  );
+
+  const tableWrapper = table.closest(".enhanced-table-wrapper");
+  /** @type {any} */ const vs = tableWrapper && tableWrapper.__virtualTableState;
 
   // Get column header
   const header = table.querySelector(`thead th:nth-child(${columnIndex + 1})`);
@@ -371,12 +376,21 @@ function copyColumnData() {
 
   // Get all cell values in the column
   const columnData = [headerText];
-  rows.forEach((row) => {
-    const cell = row.cells[columnIndex];
-    if (cell) {
-      columnData.push(getCellDisplayValue(cell));
-    }
-  });
+  if (vs && vs.enabled === true) {
+    (vs.order || []).forEach((sourceIndex) => {
+      const row = vs.pageData[sourceIndex];
+      const cell = Array.isArray(row) ? row[columnIndex] : null;
+      columnData.push(cell === null || cell === undefined ? "" : String(cell));
+    });
+  } else {
+    const rows = table.querySelectorAll("tbody tr");
+    rows.forEach((row) => {
+      const cell = row.cells[columnIndex];
+      if (cell) {
+        columnData.push(getCellDisplayValue(cell));
+      }
+    });
+  }
 
   const columnText = columnData.join("\n");
   copyToClipboard(columnText, "Column data copied");
@@ -435,34 +449,52 @@ function copyTableDataAsJSON() {
     return;
   }
 
+  const tableWrapper = table.closest(".enhanced-table-wrapper");
+  /** @type {any} */ const vs = tableWrapper && tableWrapper.__virtualTableState;
+
   // Get column headers
   const headers = table.querySelectorAll("thead th");
   const columnNames = Array.from(headers).map((header) =>
     getColumnHeaderText(header)
   );
 
-  // Get all rows
-  const rows = table.querySelectorAll("tbody tr");
   const tableData = [];
 
-  rows.forEach((row) => {
-    const cells = row.querySelectorAll("td");
-    const rowData = Array.from(cells).map((cell) => {
-      const value = getCellDisplayValue(cell);
-      // Convert empty strings back to null for JSON representation
-      return value === "" ? null : value;
-    });
+  if (vs && vs.enabled === true) {
+    (vs.order || []).forEach((sourceIndex) => {
+      const row = vs.pageData[sourceIndex];
+      const rowData = Array.isArray(row)
+        ? row.map((val) => (val === null || val === undefined ? null : String(val)))
+        : [];
 
-    // Create row object
-    const rowObject = {};
-    columnNames.forEach((columnName, index) => {
-      if (index < rowData.length) {
-        rowObject[columnName] = rowData[index];
-      }
+      const rowObject = {};
+      columnNames.forEach((columnName, index) => {
+        if (index < rowData.length) {
+          rowObject[columnName] = rowData[index];
+        }
+      });
+      tableData.push(rowObject);
     });
+  } else {
+    // Get all rows (DOM-backed)
+    const rows = table.querySelectorAll("tbody tr");
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll("td");
+      const rowData = Array.from(cells).map((cell) => {
+        const value = getCellDisplayValue(cell);
+        // Convert empty strings back to null for JSON representation
+        return value === "" ? null : value;
+      });
 
-    tableData.push(rowObject);
-  });
+      const rowObject = {};
+      columnNames.forEach((columnName, index) => {
+        if (index < rowData.length) {
+          rowObject[columnName] = rowData[index];
+        }
+      });
+      tableData.push(rowObject);
+    });
+  }
 
   // Convert to formatted JSON
   const jsonString = JSON.stringify(tableData, null, 2);
@@ -605,8 +637,13 @@ function getContextMenuActions(cell) {
   // Add copy column action if we have multiple rows
   const table = cell.closest(".data-table");
   if (table) {
-    const rows = table.querySelectorAll("tbody tr");
-    if (rows.length > 1) {
+    const tableWrapper = table.closest(".enhanced-table-wrapper");
+    /** @type {any} */ const vs = tableWrapper && tableWrapper.__virtualTableState;
+    const rowCount =
+      vs && vs.enabled === true
+        ? (vs.order || []).length
+        : table.querySelectorAll("tbody tr").length;
+    if (rowCount > 1) {
       actions.push("copy-column");
       actions.push("copy-table-json");
     }
@@ -1251,7 +1288,7 @@ function navigateToForeignKeyReference() {
   }
 
   // Send message to extension to execute a query for the referenced row in the referenced table
-  if (typeof vscode !== "undefined") {
+  if (window.vscode && typeof window.vscode.postMessage === "function") {
     // Generate a SQL query to find rows in the referenced table that match this foreign key value
     // Handle different data types appropriately for SQL
     let queryValue = foreignKeyInfo.value;
@@ -1270,7 +1307,7 @@ function navigateToForeignKeyReference() {
     const query = `SELECT * FROM "${foreignKeyInfo.referencedTable}" WHERE "${foreignKeyInfo.referencedColumn}" = ${formattedValue} LIMIT 100;`;
 
     // Execute the query to create a new query results tab
-    vscode.postMessage({
+    window.vscode.postMessage({
       type: "executeQuery",
       query: query,
       key: getCurrentEncryptionKey(),
@@ -1324,7 +1361,14 @@ function highlightForeignKeyTarget(tableWrapper) {
   }
 
   const foreignKeyInfo = window.pendingForeignKeyHighlight;
-  const table = tableWrapper.querySelector(".data-table");
+  const wrapper =
+    tableWrapper && tableWrapper.classList && tableWrapper.classList.contains("enhanced-table-wrapper")
+      ? tableWrapper
+      : tableWrapper && tableWrapper.querySelector
+      ? tableWrapper.querySelector(".enhanced-table-wrapper") || tableWrapper.closest(".enhanced-table-wrapper")
+      : null;
+
+  const table = (wrapper || tableWrapper).querySelector(".data-table");
 
   if (!table) {
     return;
@@ -1346,6 +1390,34 @@ function highlightForeignKeyTarget(tableWrapper) {
 
   if (targetColumnIndex === -1) {
     return;
+  }
+
+  // If the table is virtualized, search the in-memory rows and scroll to the match
+  // so the row is actually rendered before we try to highlight it.
+  /** @type {any} */ const vs = wrapper && wrapper.__virtualTableState;
+  if (vs && vs.enabled === true) {
+    const desired = String(foreignKeyInfo.value ?? "").trim();
+    let pos = -1;
+    for (let i = 0; i < (vs.order || []).length; i++) {
+      const sourceIndex = vs.order[i];
+      const row = vs.pageData[sourceIndex];
+      const cell = Array.isArray(row) ? row[targetColumnIndex] : null;
+      const cellText = String(cell ?? "").trim();
+      if (cellText === desired) {
+        pos = i;
+        break;
+      }
+    }
+
+    if (pos !== -1) {
+      const scrollContainer = wrapper.querySelector(".table-scroll-container");
+      if (scrollContainer && Array.isArray(vs.prefix) && vs.prefix[pos] !== undefined) {
+        scrollContainer.scrollTop = Math.max(0, Math.floor(vs.prefix[pos]));
+        if (typeof window.refreshVirtualTable === "function") {
+          window.refreshVirtualTable(wrapper);
+        }
+      }
+    }
   }
 
   // Find the row with the matching value

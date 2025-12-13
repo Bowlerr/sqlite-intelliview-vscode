@@ -13,6 +13,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     private webviewPanels: Map<string, vscode.WebviewPanel> = new Map();
     /** cache full pages keyed by `${db}:${table}:${page}:${pageSize}` → QueryResult.values */
     private lastPageCache = new Map<string, any[][]>();
+    /** cache row counts keyed by `${db}:${table}` → COUNT(*) */
+    private rowCountCache = new Map<string, number>();
+    /** cache table info keyed by `${db}:${table}` → ColumnInfo[] */
+    private tableInfoCache = new Map<string, any[]>();
+    /** cache foreign keys keyed by `${db}:${table}` → ForeignKeyInfo[] */
+    private foreignKeysCache = new Map<string, any[]>();
 
     /** Development mode logging helper */
     private isDevelopment = process.env.NODE_ENV === 'development' || vscode.env.appName.includes('Dev');
@@ -428,22 +434,70 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             
             // Use pagination if provided, otherwise use default behavior
             let result;
-            let totalRowCount = 0;
+            let totalRowCount: number | null = null;
+            let totalRowsKnown = true;
             
             if (page !== undefined && pageSize !== undefined) {
                 // Get paginated data
                 result = await dbService.getTableDataPaginated(tableName, page, pageSize);
-                // Get total row count for pagination controls
-                totalRowCount = await dbService.getRowCount(tableName);
+                // Get total row count for pagination controls (cache + async)
+                const cacheKey = `${databasePath}:${tableName}`;
+                const cachedCount = this.rowCountCache.get(cacheKey);
+                if (typeof cachedCount === 'number') {
+                    totalRowCount = cachedCount;
+                    totalRowsKnown = true;
+                } else {
+                    totalRowCount = null;
+                    totalRowsKnown = false;
+                    // Compute count in background and update UI when ready
+                    dbService.getRowCount(tableName).then(count => {
+                        this.rowCountCache.set(cacheKey, count);
+                        webviewPanel.webview.postMessage({
+                            type: 'tableRowCount',
+                            tableName,
+                            totalRows: count,
+                            page,
+                            pageSize,
+                        });
+                    }).catch(err => {
+                        this.debugWarn('getRowCount', `Failed to compute row count for ${tableName}:`, err);
+                    });
+                }
             } else {
                 result = await dbService.getTableData(tableName);
                 totalRowCount = result.values.length;
+                totalRowsKnown = true;
             }
 
             // Get foreign key information for the table
-            const foreignKeys = await dbService.getForeignKeys(tableName);
-            // Get full column info (with fk metadata)
-            const columnInfo = await dbService.getTableInfo(tableName);
+            const metaKey = `${databasePath}:${tableName}`;
+            let foreignKeys: any[] = this.foreignKeysCache.get(metaKey) || [];
+            if (foreignKeys.length === 0) {
+                try {
+                    foreignKeys = await dbService.getForeignKeys(tableName);
+                    this.foreignKeysCache.set(metaKey, foreignKeys);
+                } catch (err) {
+                    this.debugWarn('getForeignKeys', `Failed to fetch foreign keys for ${tableName}:`, err);
+                    foreignKeys = [];
+                }
+            }
+
+            // Get full column info (with fk metadata); cache + allow async fill for faster first paint.
+            const cachedColumnInfo = this.tableInfoCache.get(metaKey);
+            let columnInfo: any[] | null = Array.isArray(cachedColumnInfo) ? cachedColumnInfo : null;
+            if (!columnInfo) {
+                // Fill in background; UI doesn't need this to render the page.
+                dbService.getTableInfo(tableName).then(info => {
+                    this.tableInfoCache.set(metaKey, info as any[]);
+                    webviewPanel.webview.postMessage({
+                        type: 'tableColumnInfo',
+                        tableName,
+                        columnInfo: info
+                    });
+                }).catch(err => {
+                    this.debugWarn('getTableInfo', `Failed to fetch column info for ${tableName}:`, err);
+                });
+            }
 
             // Fix column headers: alias rowid as _rowid and remove duplicate id columns
             let columns = result.columns;
@@ -472,7 +526,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 columnInfo: columnInfo,
                 page: page,
                 pageSize: pageSize,
-                totalRows: totalRowCount
+                totalRows: totalRowCount,
+                totalRowsKnown
             });
             // cache this page for future diffs ONLY if this is a user-initiated load
             if (setSync) {
@@ -852,6 +907,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         const db = await this.getOrCreateConnection(databasePath);
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
         const newTotalCount = await db.getRowCount(table);
+        this.rowCountCache.set(`${databasePath}:${table}`, newTotalCount);
         console.info('New page data fetched', { newResult, newTotalCount });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;

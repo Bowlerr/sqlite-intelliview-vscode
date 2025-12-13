@@ -22,25 +22,44 @@ function initializeResizing(tableWrapper) {
     return;
   }
 
-  // Column resize handles
-  const columnResizeHandles = tableWrapper.querySelectorAll(
-    ".column-resize-handle"
-  );
-  columnResizeHandles.forEach((handle) => {
-    handle.addEventListener("mousedown", startColumnResize);
-  });
+  // Delegated listener (significantly faster than attaching to every cell/row).
+  const wrapperEl = /** @type {HTMLElement} */ (tableWrapper);
+  if (wrapperEl.getAttribute("data-resize-delegated") !== "true") {
+    wrapperEl.setAttribute("data-resize-delegated", "true");
+    wrapperEl.addEventListener("mousedown", (e) => {
+      if (!(e instanceof MouseEvent)) {
+        return;
+      }
 
-  // Row resize using pseudo-elements - attach to the rows themselves
-  const rows = tableWrapper.querySelectorAll(".resizable-row");
-  rows.forEach((row) => {
-    row.addEventListener("mousedown", handleRowResizeStart);
-  });
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (!target) {
+        return;
+      }
 
-  // Column resize on table cells - attach to all data cells
-  const dataCells = tableWrapper.querySelectorAll(".data-table td");
-  dataCells.forEach((cell) => {
-    cell.addEventListener("mousedown", handleCellColumnResizeStart);
-  });
+      const handle = target.closest(".column-resize-handle");
+      if (handle && handle instanceof HTMLElement) {
+        startColumnResizeFromHandle(e, handle);
+        return;
+      }
+
+      const row = target.closest("tr.resizable-row");
+      if (row && row instanceof HTMLElement) {
+        const rect = row.getBoundingClientRect();
+        if (e.clientY > rect.bottom - 10) {
+          startRowResizeFromRow(e, row);
+          return;
+        }
+      }
+
+      const cell = target.closest("td[data-column]");
+      if (cell && cell instanceof HTMLElement) {
+        const rect = cell.getBoundingClientRect();
+        if (e.clientX > rect.right - 6) {
+          startColumnResizeFromCell(e, cell);
+        }
+      }
+    });
+  }
 
   // Global mouse events (add only once)
   if (!document.body.hasAttribute("data-resize-listeners")) {
@@ -108,6 +127,89 @@ function startColumnResize(e) {
   }
 }
 
+function startColumnResizeFromHandle(e, handleEl) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  isResizing = true;
+  currentResizeType = "column";
+  startX = e.clientX;
+
+  const columnIndex = parseInt(handleEl.dataset.column || "0");
+  const table = handleEl.closest(".data-table");
+  const header = table?.querySelector(`th[data-column="${columnIndex}"]`);
+
+  if (header) {
+    currentResizeTarget = /** @type {HTMLElement} */ (header);
+    startWidth = header.offsetWidth;
+
+    document.body.style.cursor = "col-resize";
+    currentResizeTarget.classList.add("resizing");
+
+    if (window.debug) {
+      window.debug.debug(
+        `Started column resize (delegated): ${columnIndex}, ${startWidth}`
+      );
+    }
+  }
+}
+
+function startRowResizeFromRow(e, rowEl) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  isResizing = true;
+  currentResizeType = "row";
+  startY = e.clientY;
+
+  currentResizeTarget = rowEl;
+  startHeight = rowEl.offsetHeight;
+
+  document.body.style.cursor = "row-resize";
+  rowEl.classList.add("resizing");
+
+  if (window.debug) {
+    const rowIndex = parseInt(rowEl.dataset.rowIndex || "0", 10);
+    window.debug.debug(
+      `Started row resize (delegated): ${rowIndex}, ${startHeight}`
+    );
+  }
+}
+
+function startColumnResizeFromCell(e, cellEl) {
+  const columnIndex = parseInt(cellEl.dataset.column || "0");
+  const table = cellEl.closest(".data-table");
+  const header = /** @type {HTMLElement} */ (
+    table?.querySelector(`th[data-column="${columnIndex}"]`)
+  );
+
+  if (!header) {
+    return;
+  }
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  isResizing = true;
+  currentResizeType = "column";
+  startX = e.clientX;
+
+  currentResizeTarget = header;
+  startWidth = header.offsetWidth;
+
+  document.body.style.cursor = "col-resize";
+  header.classList.add("resizing");
+  if (table) {
+    table.classList.add("resizing");
+  }
+
+  if (window.debug) {
+    window.debug.debug(
+      `Started column resize from cell (delegated): ${columnIndex}, ${startWidth}`
+    );
+  }
+}
+
 /**
  * Start row resize
  * @param {MouseEvent} e - Mouse event
@@ -154,14 +256,15 @@ function handleResize(e) {
     currentResizeTarget.style.width = newWidth + "px";
     currentResizeTarget.style.minWidth = newWidth + "px";
 
-    // Update corresponding cells in the same column
+    // Prefer <colgroup> to apply widths without touching every cell (much faster).
     const columnIndex = currentResizeTarget.dataset.column;
     const table = currentResizeTarget.closest(".data-table");
-    const cells = table.querySelectorAll(`td[data-column="${columnIndex}"]`);
-    cells.forEach((cell) => {
-      cell.style.width = newWidth + "px";
-      cell.style.minWidth = newWidth + "px";
-    });
+    if (table && columnIndex) {
+      const col = table.querySelector(`colgroup col[data-column="${columnIndex}"]`);
+      if (col && col instanceof HTMLElement) {
+        col.style.width = newWidth + "px";
+      }
+    }
 
     // Update CSS custom property for pinned column positioning
     if (currentResizeTarget.classList.contains("pinned")) {
@@ -180,13 +283,6 @@ function handleResize(e) {
 
     currentResizeTarget.style.height = newHeight + "px";
     currentResizeTarget.style.minHeight = newHeight + "px";
-
-    // Update all cells in the row
-    const cells = currentResizeTarget.querySelectorAll("td");
-    cells.forEach((cell) => {
-      cell.style.height = newHeight + "px";
-      cell.style.minHeight = newHeight + "px";
-    });
   }
 }
 
@@ -211,9 +307,68 @@ function endResize(e) {
       table.classList.remove("resizing");
     }
 
-    // Show success message
+    // Persist sizing to per-tab viewState (best-effort)
+    try {
+      const tableWrapper = currentResizeTarget.closest(".enhanced-table-wrapper");
+      const tabKey =
+        tableWrapper &&
+        (tableWrapper.getAttribute("data-table") || tableWrapper.dataset.table);
+
+      if (tabKey && typeof window.setTabViewState === "function") {
+        if (currentResizeType === "column") {
+          const header = currentResizeTarget;
+          const columnName =
+            header.getAttribute("data-column-name") ||
+            header.dataset.columnName ||
+            null;
+          const width = header.offsetWidth;
+          const changed =
+            typeof startWidth === "number" && startWidth > 0
+              ? Math.abs(width - startWidth) >= 2
+              : true;
+          if (columnName && width && changed) {
+            const patch = { columnWidths: { [columnName]: width } };
+            window.setTabViewState(tabKey, patch, {
+              renderTabs: false,
+              renderSidebar: false,
+            });
+          }
+        } else if (currentResizeType === "row") {
+          const row = currentResizeTarget;
+          const rowIndex =
+            row && row.getAttribute ? row.getAttribute("data-row-index") : null;
+          const height = row && row.offsetHeight ? row.offsetHeight : 0;
+          const changed =
+            typeof startHeight === "number" && startHeight > 0
+              ? Math.abs(height - startHeight) >= 2
+              : true;
+          if (rowIndex && height && changed) {
+            const patch = { rowHeights: { [rowIndex]: height } };
+            window.setTabViewState(tabKey, patch, {
+              renderTabs: false,
+              renderSidebar: false,
+            });
+
+            // Keep virtualization metrics (spacer heights) in sync after resizing.
+            if (typeof window.refreshVirtualTable === "function" && tableWrapper) {
+              window.refreshVirtualTable(tableWrapper);
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // ignore persistence errors (e.g. during teardown)
+    }
+
+    // Show success message only when there was a meaningful change.
     const resizeType = currentResizeType === "column" ? "Column" : "Row";
-    if (typeof showSuccess !== "undefined") {
+    const didChange =
+      currentResizeType === "column"
+        ? Math.abs((currentResizeTarget.offsetWidth || 0) - (startWidth || 0)) >=
+          2
+        : Math.abs((currentResizeTarget.offsetHeight || 0) - (startHeight || 0)) >=
+          2;
+    if (didChange && typeof showSuccess !== "undefined") {
       showSuccess(`${resizeType} resized successfully`);
     }
   }
