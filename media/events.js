@@ -53,6 +53,10 @@ function initializeEventListeners() {
   document.removeEventListener("keydown", handleGlobalKeyboard);
   document.addEventListener("keydown", handleGlobalKeyboard, true);
 
+  // If we previously hard-reloaded (non-VS Code fallback), restore any snapshot
+  // before we start wiring up UI behaviors.
+  restoreFallbackReloadSnapshotOnce();
+
   const elements = getAllDOMElements ? getAllDOMElements() : {};
 
   // Connect button
@@ -277,11 +281,336 @@ function reloadDatabaseConnection() {
   }
 
   // Fallback: reload the webview UI if the VS Code API isn't available.
+  const doReload = () => {
+    try {
+      window.location.reload();
+    } catch (_) {
+      // ignore
+    }
+  };
+
+  const persistThenReload = () => {
+    const saved = persistFallbackReloadSnapshot();
+    if (saved) {
+      doReload();
+      return;
+    }
+
+    // If we couldn't persist, require an explicit second confirmation.
+    showConfirmDialog({
+      message:
+        "Could not save your current state before reloading.\n\nReload anyway? Unsaved query/editor content may be lost.",
+      confirmText: "Reload Anyway",
+      cancelText: "Cancel",
+      onConfirm: doReload,
+      onCancel: clearFallbackReloadSnapshot,
+    });
+  };
+
+  showConfirmDialog({
+    message:
+      "Hard reload will refresh the UI.\n\nContinue? Your current state will be saved and restored when possible.",
+    confirmText: "Reload",
+    cancelText: "Cancel",
+    onConfirm: persistThenReload,
+    onCancel: clearFallbackReloadSnapshot,
+  });
+}
+
+const FALLBACK_RELOAD_SNAPSHOT_KEY = "sqlite-intelliview:reloadSnapshot:v1";
+
+function showConfirmDialog({
+  message,
+  confirmText,
+  cancelText,
+  onConfirm,
+  onCancel,
+}) {
   try {
-    window.location.reload();
+    const overlay = document.createElement("div");
+    overlay.className = "confirm-dialog-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "confirm-dialog";
+
+    const messageEl = document.createElement("div");
+    messageEl.className = "confirm-dialog-message";
+    messageEl.textContent = String(message || "");
+
+    const buttonsEl = document.createElement("div");
+    buttonsEl.className = "confirm-dialog-buttons";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "confirm-dialog-btn confirm-dialog-btn-cancel";
+    cancelBtn.textContent = cancelText || "Cancel";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.className = "confirm-dialog-btn confirm-dialog-btn-confirm";
+    confirmBtn.textContent = confirmText || "OK";
+
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(confirmBtn);
+    dialog.appendChild(messageEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+
+    const closeDialog = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+
+    const cancel = () => {
+      closeDialog();
+      if (typeof onCancel === "function") {
+        onCancel();
+      }
+    };
+
+    const confirm = () => {
+      closeDialog();
+      if (typeof onConfirm === "function") {
+        onConfirm();
+      }
+    };
+
+    cancelBtn.addEventListener("click", cancel);
+    confirmBtn.addEventListener("click", confirm);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        cancel();
+      }
+    });
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancel();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+
+    document.body.appendChild(overlay);
+    confirmBtn.focus();
+  } catch (_) {
+    // Last resort: native confirm.
+    if (typeof window.confirm === "function") {
+      const ok = window.confirm(String(message || ""));
+      if (ok) {
+        if (typeof onConfirm === "function") {
+          onConfirm();
+        }
+      } else if (typeof onCancel === "function") {
+        onCancel();
+      }
+    } else if (typeof onConfirm === "function") {
+      onConfirm();
+    }
+  }
+}
+
+function clearFallbackReloadSnapshot() {
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(FALLBACK_RELOAD_SNAPSHOT_KEY);
+    }
   } catch (_) {
     // ignore
   }
+}
+
+function buildFallbackReloadSnapshot() {
+  const state = typeof getCurrentState === "function" ? getCurrentState() : {};
+
+  // `getCurrentState()` contains non-serializable caches (e.g. Maps). Persist only a safe subset.
+  const safeState = {};
+  [
+    "databasePath",
+    "encryptionKey",
+    "openTables",
+    "activeTable",
+    "selectedTable",
+    "activeTab",
+    "isConnected",
+    "connectionError",
+    "queryHistory",
+    "currentPage",
+    "pageSize",
+    "allTables",
+    "tabOrder",
+    "tabGroups",
+  ].forEach((k) => {
+    if (state && Object.prototype.hasOwnProperty.call(state, k)) {
+      safeState[k] = state[k];
+    }
+  });
+
+  // Capture query editor content and view state (cursor/selection/scroll).
+  /** @type {any} */
+  let queryEditorSnapshot = null;
+  try {
+    const qe = /** @type {any} */ (window).queryEditor;
+    const editor = qe && qe.editor ? qe.editor : null;
+    if (editor && typeof editor.getValue === "function") {
+      queryEditorSnapshot = {
+        value: editor.getValue(),
+        viewState:
+          typeof editor.saveViewState === "function"
+            ? editor.saveViewState()
+            : null,
+      };
+    } else if (qe && typeof qe.getValue === "function") {
+      queryEditorSnapshot = { value: qe.getValue(), viewState: null };
+    }
+  } catch (_) {
+    // ignore
+  }
+
+  // Normalize via JSON round-trip (drops unsupported types).
+  let normalizedState = safeState;
+  try {
+    normalizedState = JSON.parse(JSON.stringify(safeState));
+  } catch (_) {
+    // ignore
+  }
+
+  let normalizedQuery = queryEditorSnapshot;
+  try {
+    normalizedQuery = queryEditorSnapshot
+      ? JSON.parse(JSON.stringify(queryEditorSnapshot))
+      : null;
+  } catch (_) {
+    normalizedQuery = null;
+  }
+
+  return {
+    version: 1,
+    savedAt: Date.now(),
+    state: normalizedState,
+    queryEditor: normalizedQuery,
+  };
+}
+
+function persistFallbackReloadSnapshot() {
+  try {
+    if (typeof sessionStorage === "undefined") {
+      return false;
+    }
+    const snapshot = buildFallbackReloadSnapshot();
+    sessionStorage.setItem(
+      FALLBACK_RELOAD_SNAPSHOT_KEY,
+      JSON.stringify(snapshot)
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function restoreFallbackReloadSnapshotOnce() {
+  /** @type {any} */ const win = window;
+  if (win.__fallbackReloadSnapshotRestored === true) {
+    return;
+  }
+  win.__fallbackReloadSnapshotRestored = true;
+
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
+
+  let raw = "";
+  try {
+    raw = sessionStorage.getItem(FALLBACK_RELOAD_SNAPSHOT_KEY) || "";
+  } catch (_) {
+    raw = "";
+  }
+  if (!raw) {
+    return;
+  }
+
+  /** @type {any} */
+  let snapshot = null;
+  try {
+    snapshot = JSON.parse(raw);
+  } catch (_) {
+    clearFallbackReloadSnapshot();
+    return;
+  }
+
+  const maxAgeMs = 10 * 60 * 1000;
+  const savedAt = snapshot && typeof snapshot.savedAt === "number" ? snapshot.savedAt : 0;
+  if (!snapshot || snapshot.version !== 1 || (savedAt && Date.now() - savedAt > maxAgeMs)) {
+    clearFallbackReloadSnapshot();
+    return;
+  }
+
+  // Remove immediately to avoid repeat restores; keep it in-memory for delayed editor init.
+  clearFallbackReloadSnapshot();
+  win.__pendingFallbackReloadSnapshot = snapshot;
+
+  // Restore basic state early (query editor restores later once Monaco is ready).
+  try {
+    if (snapshot.state && typeof window.updateState === "function") {
+      window.updateState(snapshot.state, {
+        renderTabs: true,
+        renderSidebar: true,
+        persistState: "none",
+      });
+    }
+  } catch (_) {
+    // ignore
+  }
+
+  restorePendingQueryEditorSnapshot();
+}
+
+function restorePendingQueryEditorSnapshot() {
+  /** @type {any} */ const win = window;
+  const snapshot = win.__pendingFallbackReloadSnapshot;
+  if (!snapshot || !snapshot.queryEditor) {
+    return;
+  }
+
+  const attemptRestore = (attempt) => {
+    const qe = /** @type {any} */ (window).queryEditor;
+    const editor = qe && qe.editor ? qe.editor : null;
+    if (!editor || typeof editor.getValue !== "function") {
+      if (attempt < 120) {
+        setTimeout(() => attemptRestore(attempt + 1), 100);
+      }
+      return;
+    }
+
+    try {
+      const currentValue =
+        typeof editor.getValue === "function" ? editor.getValue() : "";
+      const nextValue =
+        typeof snapshot.queryEditor.value === "string"
+          ? snapshot.queryEditor.value
+          : "";
+
+      // Avoid clobbering any value that already exists.
+      if ((!currentValue || currentValue.trim().length === 0) && nextValue) {
+        editor.setValue(nextValue);
+      }
+
+      if (
+        snapshot.queryEditor.viewState &&
+        typeof editor.restoreViewState === "function"
+      ) {
+        editor.restoreViewState(snapshot.queryEditor.viewState);
+      }
+
+      if (typeof editor.focus === "function") {
+        editor.focus();
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      win.__pendingFallbackReloadSnapshot = null;
+    }
+  };
+
+  attemptRestore(0);
 }
 
 /**

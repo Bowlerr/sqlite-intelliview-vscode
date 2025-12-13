@@ -23,6 +23,50 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
     /** Development mode logging helper */
     private isDevelopment = process.env.NODE_ENV === 'development' || vscode.env.appName.includes('Dev');
+
+    private getTableCacheKey(databasePath: string, tableName: string): string {
+        return `${databasePath}:${tableName}`;
+    }
+
+    private invalidateCachesForTable(databasePath: string, tableName: string): void {
+        if (!databasePath || !tableName) {
+            return;
+        }
+        const key = this.getTableCacheKey(databasePath, tableName);
+        this.rowCountCache.delete(key);
+        this.tableInfoCache.delete(key);
+        this.foreignKeysCache.delete(key);
+    }
+
+    private invalidateCachesForTables(databasePath: string, tableNames: Iterable<string>): void {
+        for (const t of tableNames) {
+            if (t) {
+                this.invalidateCachesForTable(databasePath, t);
+            }
+        }
+    }
+
+    private invalidateCachesForDatabase(databasePath: string): void {
+        if (!databasePath) {
+            return;
+        }
+        const prefix = `${databasePath}:`;
+        for (const k of Array.from(this.rowCountCache.keys())) {
+            if (k.startsWith(prefix)) {
+                this.rowCountCache.delete(k);
+            }
+        }
+        for (const k of Array.from(this.tableInfoCache.keys())) {
+            if (k.startsWith(prefix)) {
+                this.tableInfoCache.delete(k);
+            }
+        }
+        for (const k of Array.from(this.foreignKeysCache.keys())) {
+            if (k.startsWith(prefix)) {
+                this.foreignKeysCache.delete(k);
+            }
+        }
+    }
     
     private debugLog(component: string, message: string, ...args: any[]): void {
         if (this.isDevelopment) {
@@ -680,6 +724,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             // Update the cell data
             this.debugLog('handleCellUpdateRequest', `Updating cell data with rowid ${rowId}`);
             await dbService.updateCellData(tableName, rowId, columnName, newValue);
+
+            // Invalidate caches for this table so subsequent reads are fresh.
+            this.invalidateCachesForTable(databasePath, tableName);
+
             // Send success response
             webviewPanel.webview.postMessage({
                 type: 'cellUpdateSuccess',
@@ -890,9 +938,16 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
             
-            // Delete the row
-            this.debugLog('DeleteRow', 'Deleting row with identifier:', rowId);
-            await dbService.deleteRow(tableName, rowId);
+            const identifiers = Array.isArray(rowId) ? rowId : [rowId];
+
+            // Delete the row(s)
+            for (const identifier of identifiers) {
+                this.debugLog('DeleteRow', 'Deleting row with identifier:', identifier);
+                await dbService.deleteRow(tableName, identifier);
+            }
+
+            // Invalidate caches for this table so subsequent reads are fresh.
+            this.invalidateCachesForTable(databasePath, tableName);
             
             // Send success response
             webviewPanel.webview.postMessage({
@@ -1012,6 +1067,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     public async handleExternalDatabaseChange(databasePath: string) {
+        // External changes can modify data and schema; clear all cached metadata/counts for this DB.
+        this.invalidateCachesForDatabase(databasePath);
+
         this.closeConnection(databasePath);
         const panel = this.webviewPanels.get(databasePath);
         const sync = this.lastSync.get(databasePath);
@@ -1025,7 +1083,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         const db = await this.getOrCreateConnection(databasePath);
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
         const newTotalCount = await db.getRowCount(table);
-        this.rowCountCache.set(`${databasePath}:${table}`, newTotalCount);
+        this.rowCountCache.set(this.getTableCacheKey(databasePath, table), newTotalCount);
         console.info('New page data fetched', { newResult, newTotalCount });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;

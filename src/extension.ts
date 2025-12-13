@@ -133,25 +133,33 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			// Also connect the open webview (best-effort, with a short retry for panel initialization).
-			const provider = DatabaseEditorProvider.getActiveProvider();
-			if (provider) {
-				for (let attempt = 0; attempt < 10; attempt++) {
-					try {
-						const connected = await provider.connectOpenEditor(dbUri.fsPath, encryptionKey);
-						if (connected) {
-							break;
+				// Also connect the open webview (best-effort, with a short retry for panel initialization).
+				const provider = DatabaseEditorProvider.getActiveProvider();
+				let connectedOrOpened = false;
+				if (provider) {
+					for (let attempt = 0; attempt < 10; attempt++) {
+						try {
+							const connected = await provider.connectOpenEditor(dbUri.fsPath, encryptionKey);
+							if (connected) {
+								connectedOrOpened = true;
+								break;
+							}
+						} catch {
+							// ignore; will retry
 						}
-					} catch {
-						// ignore; will retry
+						await delay(100);
 					}
-					await delay(100);
+				}
+
+				if (connectedOrOpened) {
+					vscode.window.showInformationMessage('Connected to encrypted database successfully!');
+				} else {
+					vscode.window.showErrorMessage(
+						'Failed to connect the encrypted database editor webview. Try reopening the database editor and running “Connect with SQLCipher Key” again.'
+					);
 				}
 			}
-
-			vscode.window.showInformationMessage('Connected to encrypted database successfully!');
-		}
-	});
+		});
 
 	const refreshDatabaseCommand = vscode.commands.registerCommand('sqlite-intelliview-vscode.refreshDatabase', () => {
 		databaseExplorerProvider.refresh();
