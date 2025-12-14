@@ -1465,6 +1465,95 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
   const viewState =
     rawViewState && typeof rawViewState === "object" ? rawViewState : {};
 
+  // Restore persisted sort (client-side; affects current page only).
+  if (viewState && viewState.sort && typeof viewState.sort === "object") {
+    const dir =
+      viewState.sort.dir === "asc" || viewState.sort.dir === "desc"
+        ? viewState.sort.dir
+        : null;
+    const columnName =
+      typeof viewState.sort.columnName === "string"
+        ? viewState.sort.columnName
+        : null;
+
+    const table = tableWrapper.querySelector(".data-table");
+    if (table && dir && columnName) {
+      /** @type {any} */ const vs = /** @type {any} */ (tableWrapper).__virtualTableState;
+      if (vs && vs.enabled === true) {
+        const idx = Array.isArray(vs.columns) ? vs.columns.indexOf(columnName) : -1;
+        if (idx >= 0) {
+          vs.sort = { columnName, columnIndex: idx, dir };
+          table.querySelectorAll("th").forEach((th) => {
+            th.dataset.sort = "none";
+            const indicator = th.querySelector(".sort-indicator");
+            if (indicator) {
+              indicator.textContent = "⇅";
+            }
+          });
+          const header = table.querySelector(`th[data-column="${idx}"]`);
+          if (header) {
+            header.dataset.sort = dir;
+            const indicator = header.querySelector(".sort-indicator");
+            if (indicator) {
+              indicator.textContent = dir === "asc" ? "↑" : "↓";
+            }
+          }
+          if (typeof window.refreshVirtualTable === "function") {
+            window.refreshVirtualTable(tableWrapper);
+          }
+        }
+      } else {
+        const header = table.querySelector(`th[data-column-name="${columnName}"]`);
+        const colIndex = header
+          ? parseInt(header.getAttribute("data-column") || "-1", 10)
+          : -1;
+        if (header && colIndex >= 0) {
+          table.querySelectorAll("th").forEach((th) => {
+            th.dataset.sort = "none";
+            const indicator = th.querySelector(".sort-indicator");
+            if (indicator) {
+              indicator.textContent = "⇅";
+            }
+          });
+          header.dataset.sort = dir;
+          const indicator = header.querySelector(".sort-indicator");
+          if (indicator) {
+            indicator.textContent = dir === "asc" ? "↑" : "↓";
+          }
+          const tbody = table.querySelector("tbody");
+          if (tbody) {
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const cmp =
+              typeof window.compareValues === "function"
+                ? window.compareValues
+                : (a, b, direction) =>
+                    direction === "asc"
+                      ? String(a).localeCompare(String(b))
+                      : String(b).localeCompare(String(a));
+            rows.sort((a, b) => {
+              const aCell = a.querySelector(`td[data-column="${colIndex}"]`);
+              const bCell = b.querySelector(`td[data-column="${colIndex}"]`);
+              const aValue =
+                typeof window.getCellValue === "function"
+                  ? window.getCellValue(aCell)
+                  : aCell && aCell.textContent
+                  ? aCell.textContent.trim()
+                  : "";
+              const bValue =
+                typeof window.getCellValue === "function"
+                  ? window.getCellValue(bCell)
+                  : bCell && bCell.textContent
+                  ? bCell.textContent.trim()
+                  : "";
+              return cmp(aValue ?? "", bValue ?? "", dir);
+            });
+            rows.forEach((row) => tbody.appendChild(row));
+          }
+        }
+      }
+    }
+  }
+
   // Restore pinned columns (before sizing/positioning).
   if (viewState && Array.isArray(viewState.pinnedColumns)) {
     const pinnedSet = new Set(viewState.pinnedColumns.filter(Boolean));

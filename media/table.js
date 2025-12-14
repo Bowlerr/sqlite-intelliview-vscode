@@ -90,7 +90,10 @@ function normalizeBlobValue(value) {
   if (value instanceof ArrayBuffer) {
     return new Uint8Array(value);
   }
-  if (Array.isArray(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+  if (
+    Array.isArray(value) &&
+    value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
+  ) {
     return Uint8Array.from(value);
   }
   // Node Buffer serialized form (rare, but can happen depending on transport)
@@ -300,7 +303,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         : 0
       : /** @type {number} */ (totalRows)
     : 0;
-  const totalPages = totalRowsKnown ? Math.ceil(effectiveTotalRows / pageSize) : 1;
+  const totalPages = totalRowsKnown
+    ? Math.ceil(effectiveTotalRows / pageSize)
+    : 1;
   const showSchemaStats = !isSchemaTable;
 
   // Determine if editing should be allowed
@@ -380,7 +385,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}">
       <div class="table-controls">
         <div class="table-search">
-          <input type="text" class="search-input" placeholder="Search table..." />
+          <input type="text" class="search-input" placeholder="Search table page..." />
           <button class="search-clear" title="Clear search">×</button>
         </div>
         ${
@@ -668,7 +673,9 @@ function renderTableCellHtml(
           isImage ? "🖼️" : "🧩"
         }</span>`;
     const label = `${isImage ? "Image" : "BLOB"} ${sizeText}`;
-    cellContentHtml = `<div class="cell-content cell-content-blob" data-original-value="" data-blob="true" data-blob-size="${blobBytes.length}"${
+    cellContentHtml = `<div class="cell-content cell-content-blob" data-original-value="" data-blob="true" data-blob-size="${
+      blobBytes.length
+    }"${
       mime ? ` data-blob-mime="${escapeHtmlFast(mime)}"` : ""
     }>${thumbHtml}<span class="blob-label">${escapeHtmlFast(
       label
@@ -691,11 +698,12 @@ function renderTableCellHtml(
   }
 
   const cellEditable = isEditable && !isBlob;
-  const ariaValue = isBlob && blobBytes
-    ? `BLOB (${formatBytes(blobBytes.length)})`
-    : cell !== null
-    ? String(cell).substring(0, 50)
-    : "null";
+  const ariaValue =
+    isBlob && blobBytes
+      ? `BLOB (${formatBytes(blobBytes.length)})`
+      : cell !== null
+      ? String(cell).substring(0, 50)
+      : "null";
 
   return `
             <td data-column="${cellIndex}" 
@@ -883,7 +891,8 @@ function initializeVirtualTable(tableWrapperOrContainer) {
     columnFilter: /** @type {null | { columnIndex: number, value: string }} */ (
       null
     ),
-    sort: /** @type {{ columnIndex: number|null, dir: 'none'|'asc'|'desc' }} */ ({
+    sort: /** @type {{ columnName?: string|null, columnIndex: number|null, dir: 'none'|'asc'|'desc' }} */ ({
+      columnName: null,
       columnIndex: null,
       dir: "none",
     }),
@@ -913,6 +922,24 @@ function initializeVirtualTable(tableWrapperOrContainer) {
   // Store state on the wrapper (in-memory only).
   /** @type {any} */ (wrapper).__virtualTableState = vs;
   wrapper.setAttribute("data-virtual-initialized", "true");
+
+  // Restore persisted sort for virtualized tables (by column name).
+  if (viewState && viewState.sort && typeof viewState.sort === "object") {
+    const dir =
+      viewState.sort.dir === "asc" || viewState.sort.dir === "desc"
+        ? viewState.sort.dir
+        : "none";
+    const colName =
+      typeof viewState.sort.columnName === "string"
+        ? viewState.sort.columnName
+        : null;
+    if (colName && dir !== "none") {
+      const idx = Array.isArray(vs.columns) ? vs.columns.indexOf(colName) : -1;
+      if (idx >= 0) {
+        vs.sort = { columnName: colName, columnIndex: idx, dir };
+      }
+    }
+  }
 
   // Attach a throttled scroll listener for re-rendering.
   if (scrollContainer.getAttribute("data-virtual-scroll") !== "true") {
@@ -1005,26 +1032,36 @@ function recomputeVirtualMetrics(vs) {
 
   if (
     vs.sort &&
-    vs.sort.dir !== "none" &&
-    typeof vs.sort.columnIndex === "number"
+    vs.sort.dir !== "none"
   ) {
-    const colIdx = vs.sort.columnIndex;
-    const dir = vs.sort.dir;
-    const cmp =
-      typeof window.compareValues === "function"
-        ? window.compareValues
-        : (a, b, direction) =>
-            direction === "asc"
-              ? String(a).localeCompare(String(b))
-              : String(b).localeCompare(String(a));
+    // Best-effort: derive index from columnName if needed
+    if (typeof vs.sort.columnIndex !== "number") {
+      if (vs.sort.columnName && Array.isArray(vs.columns)) {
+        const nextIdx = vs.columns.indexOf(vs.sort.columnName);
+        if (nextIdx >= 0) {
+          vs.sort.columnIndex = nextIdx;
+        }
+      }
+    }
+    if (typeof vs.sort.columnIndex === "number") {
+      const colIdx = vs.sort.columnIndex;
+      const dir = vs.sort.dir;
+      const cmp =
+        typeof window.compareValues === "function"
+          ? window.compareValues
+          : (a, b, direction) =>
+              direction === "asc"
+                ? String(a).localeCompare(String(b))
+                : String(b).localeCompare(String(a));
 
-    order.sort((aIdx, bIdx) => {
-      const aRow = vs.pageData[aIdx];
-      const bRow = vs.pageData[bIdx];
-      const aVal = Array.isArray(aRow) ? aRow[colIdx] : "";
-      const bVal = Array.isArray(bRow) ? bRow[colIdx] : "";
-      return cmp(aVal ?? "", bVal ?? "", dir);
-    });
+      order.sort((aIdx, bIdx) => {
+        const aRow = vs.pageData[aIdx];
+        const bRow = vs.pageData[bIdx];
+        const aVal = Array.isArray(aRow) ? aRow[colIdx] : "";
+        const bVal = Array.isArray(bRow) ? bRow[colIdx] : "";
+        return cmp(aVal ?? "", bVal ?? "", dir);
+      });
+    }
   }
 
   vs.order = order;
@@ -1237,7 +1274,9 @@ function syncColumnWidthsForVirtual(vs) {
     if (!width || !Number.isFinite(width)) {
       return;
     }
-    const colEl = vs.table.querySelector(`colgroup col[data-column="${colIdx}"]`);
+    const colEl = vs.table.querySelector(
+      `colgroup col[data-column="${colIdx}"]`
+    );
     if (colEl && colEl instanceof HTMLElement) {
       colEl.style.width = `${width}px`;
     }
@@ -1358,9 +1397,29 @@ function sortTableByColumn(table, columnIndex) {
       indicator.textContent = newSort === "asc" ? "↑" : "↓";
     }
 
-    vs.sort = { columnIndex, dir: /** @type {'asc'|'desc'} */ (newSort) };
+    const columnName = header.getAttribute("data-column-name") || null;
+    vs.sort = {
+      columnName,
+      columnIndex,
+      dir: /** @type {'asc'|'desc'} */ (newSort),
+    };
     recomputeVirtualMetrics(vs);
     virtualRender(vs, { force: true });
+
+    // Persist sort for this tab (by column name)
+    try {
+      const tabKey =
+        wrapper && (wrapper.getAttribute("data-table") || wrapper.dataset.table);
+      if (tabKey && typeof window.setTabViewState === "function" && columnName) {
+        window.setTabViewState(
+          tabKey,
+          { sort: { columnName, dir: newSort } },
+          { renderTabs: false, renderSidebar: false, persistState: "debounced" }
+        );
+      }
+    } catch (_) {
+      // ignore
+    }
 
     if (typeof showSuccess !== "undefined") {
       showSuccess(
@@ -1418,6 +1477,23 @@ function sortTableByColumn(table, columnIndex) {
 
   // Re-append sorted rows
   rows.forEach((row) => tbody.appendChild(row));
+
+  // Persist sort for this tab (by column name)
+  try {
+    const wrapper = table.closest(".enhanced-table-wrapper");
+    const tabKey =
+      wrapper && (wrapper.getAttribute("data-table") || wrapper.dataset.table);
+    const columnName = header.getAttribute("data-column-name") || null;
+    if (tabKey && columnName && typeof window.setTabViewState === "function") {
+      window.setTabViewState(
+        tabKey,
+        { sort: { columnName, dir: newSort } },
+        { renderTabs: false, renderSidebar: false, persistState: "debounced" }
+      );
+    }
+  } catch (_) {
+    // ignore
+  }
 
   if (typeof showSuccess !== "undefined") {
     showSuccess(`Table sorted by column ${columnIndex + 1} (${newSort}ending)`);
