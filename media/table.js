@@ -1030,10 +1030,7 @@ function recomputeVirtualMetrics(vs) {
     });
   }
 
-  if (
-    vs.sort &&
-    vs.sort.dir !== "none"
-  ) {
+  if (vs.sort && vs.sort.dir !== "none") {
     // Best-effort: derive index from columnName if needed
     if (typeof vs.sort.columnIndex !== "number") {
       if (vs.sort.columnName && Array.isArray(vs.columns)) {
@@ -1467,8 +1464,13 @@ function sortTableByColumn(table, columnIndex) {
     // Persist sort for this tab (by column name)
     try {
       const tabKey =
-        wrapper && (wrapper.getAttribute("data-table") || wrapper.dataset.table);
-      if (tabKey && typeof window.setTabViewState === "function" && columnName) {
+        wrapper &&
+        (wrapper.getAttribute("data-table") || wrapper.dataset.table);
+      if (
+        tabKey &&
+        typeof window.setTabViewState === "function" &&
+        columnName
+      ) {
         window.setTabViewState(
           tabKey,
           { sort: { columnName, dir: newSort } },
