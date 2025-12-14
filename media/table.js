@@ -1130,13 +1130,40 @@ function virtualRender(vs, { force }) {
   const tbody = vs.tbody;
   const colCount = Array.isArray(vs.columns) ? vs.columns.length : 0;
   const totalRows = Array.isArray(vs.order) ? vs.order.length : 0;
+  const pageRows = Array.isArray(vs.pageData) ? vs.pageData.length : 0;
+  const hasSearch = !!(vs.searchTerm && String(vs.searchTerm).trim().length);
+  const hasColFilter = !!(vs.columnFilter && vs.columnFilter.value);
 
   if (!tbody || colCount <= 0) {
     return;
   }
 
   if (totalRows === 0) {
-    tbody.innerHTML = `<tr class="virtual-empty" role="row"><td colspan="${colCount}">No matching rows.</td></tr>`;
+    const title =
+      hasSearch || hasColFilter
+        ? "No results on this page"
+        : pageRows === 0
+        ? "No rows on this page"
+        : "No rows to show";
+    const descriptionLine1 =
+      hasSearch || hasColFilter
+        ? "Try a different search/filter, clear it, or change page."
+        : "Try changing page or refreshing the table.";
+    const descriptionLine2 =
+      hasSearch || hasColFilter
+        ? "Or use the Query tab to search the whole database with SQL."
+        : "";
+    tbody.innerHTML = `<tr class="virtual-empty" role="row"><td colspan="${colCount}"><div class="table-empty-message"><div class="table-empty-title">${escapeHtmlFast(
+      title
+    )}</div><div class="table-empty-description">${escapeHtmlFast(
+      descriptionLine1
+    )}</div>${
+      descriptionLine2
+        ? `<div class="table-empty-description">${escapeHtmlFast(
+            descriptionLine2
+          )}</div>`
+        : ""
+    }</div></td></tr>`;
     vs.lastStart = -1;
     vs.lastEnd = -1;
     return;
@@ -1322,12 +1349,23 @@ function filterTable(tableWrapper, searchTerm) {
   }
 
   const table = wrapper.querySelector(".data-table");
-  const rows = table.querySelectorAll("tbody tr");
+  const tbody = table ? table.querySelector("tbody") : null;
+  if (!table || !tbody) {
+    return;
+  }
+
+  // Remove any prior empty-state placeholder row.
+  tbody.querySelectorAll("tr.filter-empty-row").forEach((row) => row.remove());
+
+  const rows = tbody.querySelectorAll("tr");
   let visibleCount = 0;
 
   const term = searchTerm.toLowerCase();
 
   rows.forEach((row) => {
+    if (row.classList.contains("filter-empty-row")) {
+      return;
+    }
     const cells = row.querySelectorAll("td");
     let rowMatches = false;
 
@@ -1346,10 +1384,30 @@ function filterTable(tableWrapper, searchTerm) {
     }
   });
 
+  if (visibleCount === 0 && searchTerm) {
+    const colCount = table.querySelectorAll("thead th").length || 1;
+    const emptyRow = document.createElement("tr");
+    emptyRow.className = "filter-empty-row";
+    emptyRow.setAttribute("role", "row");
+    const td = document.createElement("td");
+    td.colSpan = colCount;
+    td.innerHTML = `
+      <div class="table-empty-message">
+        <div class="table-empty-title">No results on this page</div>
+        <div class="table-empty-description">Try a different search term, clear the search, or change page.</div>
+        <div class="table-empty-description">Or use the Query tab to search the whole database with SQL.</div>
+      </div>
+    `;
+    emptyRow.appendChild(td);
+    tbody.prepend(emptyRow);
+  }
+
   // Update row count
-  const visibleRowsSpan = tableWrapper.querySelector(".visible-rows");
+  const visibleRowsSpan = wrapper.querySelector(".visible-rows");
   if (visibleRowsSpan) {
-    const totalRows = rows.length;
+    const totalRows = Array.from(rows).filter(
+      (r) => !r.classList.contains("filter-empty-row")
+    ).length;
     visibleRowsSpan.textContent = `Showing ${visibleCount} of ${totalRows} ${
       pluralize ? pluralize(totalRows, "row") : "rows"
     }`;
@@ -1659,12 +1717,28 @@ function filterTableByColumn(table, columnIndex, filterValue) {
     return;
   }
 
-  const rows = table.querySelectorAll("tbody tr");
+  const tbody = table.querySelector("tbody");
+  if (!tbody) {
+    return;
+  }
+
+  // Remove any prior empty-state placeholder row.
+  tbody.querySelectorAll("tr.filter-empty-row").forEach((row) => row.remove());
+
+  const rows = tbody.querySelectorAll("tr");
   let visibleCount = 0;
 
   rows.forEach((row) => {
+    if (row.classList.contains("filter-empty-row")) {
+      return;
+    }
     const cell = row.querySelector(`td[data-column="${columnIndex}"]`);
-    const cellValue = getCellValue ? getCellValue(cell) : cell.textContent;
+    const rawCellValue = getCellValue
+      ? getCellValue(cell)
+      : cell
+      ? cell.textContent
+      : "";
+    const cellValue = String(rawCellValue ?? "");
     const shouldShow =
       filterValue === "" ||
       cellValue.toLowerCase().includes(filterValue.toLowerCase());
@@ -1677,11 +1751,33 @@ function filterTableByColumn(table, columnIndex, filterValue) {
     }
   });
 
+  if (visibleCount === 0 && filterValue) {
+    const colCount = table.querySelectorAll("thead th").length || 1;
+    const emptyRow = document.createElement("tr");
+    emptyRow.className = "filter-empty-row";
+    emptyRow.setAttribute("role", "row");
+    const td = document.createElement("td");
+    td.colSpan = colCount;
+    td.innerHTML = `
+      <div class="table-empty-message">
+        <div class="table-empty-title">No results on this page</div>
+        <div class="table-empty-description">Try a different filter, clear it, or change page.</div>
+        <div class="table-empty-description">Or use the Query tab to search the whole database with SQL.</div>
+      </div>
+    `;
+    emptyRow.appendChild(td);
+    tbody.prepend(emptyRow);
+  }
+
   // Update row count
   const tableWrapper = table.closest(".enhanced-table-wrapper");
-  const visibleRowsSpan = tableWrapper.querySelector(".visible-rows");
+  const visibleRowsSpan = tableWrapper
+    ? tableWrapper.querySelector(".visible-rows")
+    : null;
   if (visibleRowsSpan) {
-    const totalRows = rows.length;
+    const totalRows = Array.from(rows).filter(
+      (r) => !r.classList.contains("filter-empty-row")
+    ).length;
     visibleRowsSpan.textContent = `Showing ${visibleCount} of ${totalRows} ${
       pluralize ? pluralize(totalRows, "row") : "rows"
     }`;
@@ -1732,7 +1828,7 @@ function exportTableData(tableWrapper) {
 
   const table = wrapper.querySelector(".data-table");
   const visibleRows = table.querySelectorAll(
-    'tbody tr:not([style*="display: none"])'
+    'tbody tr:not([style*="display: none"]):not(.filter-empty-row):not(.virtual-spacer):not(.virtual-loading):not(.virtual-empty)'
   );
 
   // Get headers

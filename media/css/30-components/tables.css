@@ -152,6 +152,31 @@
   color: var(--vscode-descriptionForeground);
   font-style: italic;
 }
+.data-table tbody tr.filter-empty-row {
+  background: transparent !important;
+  border-left: none !important;
+}
+.data-table tbody tr.filter-empty-row:hover {
+  background: transparent !important;
+  border-left: none !important;
+}
+.data-table tbody tr.filter-empty-row td {
+  padding: 12px 16px !important;
+  border-right: none !important;
+  color: var(--vscode-descriptionForeground);
+}
+.table-empty-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.table-empty-title {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+.table-empty-description {
+  color: var(--vscode-descriptionForeground);
+}
 
 .enhanced-table-wrapper {
   border: 1px solid var(--vscode-panel-border);
