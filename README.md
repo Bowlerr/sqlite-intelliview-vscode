@@ -19,11 +19,11 @@ A quick tour of the main workflows (all offline, inside VS Code):
   <tr>
     <td width="50%" valign="top">
       <strong>Browse + edit tables</strong><br/>
-      <img src="images/Database%20Viewer%20-%20normal.gif" width="430" alt="Browse and edit table data"/>
+      <img src="images/Database-Viewer-normal.gif" width="430" alt="Browse and edit table data"/>
     </td>
     <td width="50%" valign="top">
       <strong>Multi-table tabs</strong><br/>
-      <img src="images/Tab%20Organisation.gif" width="430" alt="Open and reorder multiple table tabs"/>
+      <img src="images/Tab-Organisation.gif" width="430" alt="Open and reorder multiple table tabs"/>
     </td>
   </tr>
   <tr>
@@ -63,7 +63,7 @@ A quick tour of the main workflows (all offline, inside VS Code):
     </td>
     <td width="50%" valign="top">
       <strong>External updates</strong><br/>
-      <img src="images/external%20updates.gif" width="430" alt="Auto-refresh on external database changes"/>
+      <img src="images/external-updates.gif" width="430" alt="Auto-refresh on external database changes"/>
     </td>
   </tr>
 </table>
