@@ -1271,33 +1271,6 @@ function handleTableRowCount(message) {
         totalPages,
         tableId
       );
-
-      // Re-attach pagination listeners (similar to delta updates).
-      paginationContainer.querySelectorAll(".pagination-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const action = btn.getAttribute("data-action");
-          const page = btn.getAttribute("data-page");
-          if (page && typeof window.handlePagination === "function") {
-            window.handlePagination(wrapper, "goto", page);
-          } else if (action && typeof window.handlePagination === "function") {
-            window.handlePagination(wrapper, action);
-          }
-        });
-      });
-
-      const pageInput = paginationContainer.querySelector(".page-input");
-      if (pageInput) {
-        pageInput.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            const val = parseInt(pageInput.value, 10);
-            if (!isNaN(val) && typeof window.updateTablePage === "function") {
-              window.updateTablePage(wrapper, val);
-            }
-          }
-        });
-      }
     } else {
       paginationContainer.innerHTML = "";
     }
@@ -1464,6 +1437,95 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
   const rawViewState = window.getTabViewState(effectiveKey);
   const viewState =
     rawViewState && typeof rawViewState === "object" ? rawViewState : {};
+
+  // Restore persisted sort (client-side; affects current page only).
+  if (viewState && viewState.sort && typeof viewState.sort === "object") {
+    const dir =
+      viewState.sort.dir === "asc" || viewState.sort.dir === "desc"
+        ? viewState.sort.dir
+        : null;
+    const columnName =
+      typeof viewState.sort.columnName === "string"
+        ? viewState.sort.columnName
+        : null;
+
+    const table = tableWrapper.querySelector(".data-table");
+    if (table && dir && columnName) {
+      /** @type {any} */ const vs = /** @type {any} */ (tableWrapper).__virtualTableState;
+      if (vs && vs.enabled === true) {
+        const idx = Array.isArray(vs.columns) ? vs.columns.indexOf(columnName) : -1;
+        if (idx >= 0) {
+          vs.sort = { columnName, columnIndex: idx, dir };
+          table.querySelectorAll("th").forEach((th) => {
+            th.dataset.sort = "none";
+            const indicator = th.querySelector(".sort-indicator");
+            if (indicator) {
+              indicator.textContent = "⇅";
+            }
+          });
+          const header = table.querySelector(`th[data-column="${idx}"]`);
+          if (header) {
+            header.dataset.sort = dir;
+            const indicator = header.querySelector(".sort-indicator");
+            if (indicator) {
+              indicator.textContent = dir === "asc" ? "↑" : "↓";
+            }
+          }
+          if (typeof window.refreshVirtualTable === "function") {
+            window.refreshVirtualTable(tableWrapper);
+          }
+        }
+      } else {
+        const header = table.querySelector(`th[data-column-name="${columnName}"]`);
+        const colIndex = header
+          ? parseInt(header.getAttribute("data-column") || "-1", 10)
+          : -1;
+        if (header && colIndex >= 0) {
+          table.querySelectorAll("th").forEach((th) => {
+            th.dataset.sort = "none";
+            const indicator = th.querySelector(".sort-indicator");
+            if (indicator) {
+              indicator.textContent = "⇅";
+            }
+          });
+          header.dataset.sort = dir;
+          const indicator = header.querySelector(".sort-indicator");
+          if (indicator) {
+            indicator.textContent = dir === "asc" ? "↑" : "↓";
+          }
+          const tbody = table.querySelector("tbody");
+          if (tbody) {
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const cmp =
+              typeof window.compareValues === "function"
+                ? window.compareValues
+                : (a, b, direction) =>
+                    direction === "asc"
+                      ? String(a).localeCompare(String(b))
+                      : String(b).localeCompare(String(a));
+            rows.sort((a, b) => {
+              const aCell = a.querySelector(`td[data-column="${colIndex}"]`);
+              const bCell = b.querySelector(`td[data-column="${colIndex}"]`);
+              const aValue =
+                typeof window.getCellValue === "function"
+                  ? window.getCellValue(aCell)
+                  : aCell && aCell.textContent
+                  ? aCell.textContent.trim()
+                  : "";
+              const bValue =
+                typeof window.getCellValue === "function"
+                  ? window.getCellValue(bCell)
+                  : bCell && bCell.textContent
+                  ? bCell.textContent.trim()
+                  : "";
+              return cmp(aValue ?? "", bValue ?? "", dir);
+            });
+            rows.forEach((row) => tbody.appendChild(row));
+          }
+        }
+      }
+    }
+  }
 
   // Restore pinned columns (before sizing/positioning).
   if (viewState && Array.isArray(viewState.pinnedColumns)) {
@@ -2330,25 +2392,100 @@ function initializeTableEvents(tableWrapper) {
       });
     });
     // Pagination controls
-    const paginationBtns = tableWrapper.querySelectorAll(".pagination-btn");
-    paginationBtns.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const tableWrapper = btn.closest(".enhanced-table-wrapper");
-        const action = btn.dataset.action;
-        const page = btn.dataset.page;
+    // Pagination (delegated so it continues working after pagination HTML is regenerated)
+    if (tableWrapper.getAttribute("data-pagination-delegated") !== "true") {
+      tableWrapper.setAttribute("data-pagination-delegated", "true");
 
-        if (typeof handlePagination !== "undefined") {
-          if (page) {
-            // Page number button clicked
-            handlePagination(tableWrapper, "goto", page);
-          } else if (action) {
-            // Navigation button clicked (first/prev/next/last)
-            handlePagination(tableWrapper, action);
+      tableWrapper.addEventListener("click", (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) {
+          return;
+        }
+        const btn = target.closest("button.pagination-btn");
+        if (!btn || !(btn instanceof HTMLElement)) {
+          return;
+        }
+        if (!tableWrapper.contains(btn)) {
+          return;
+        }
+
+        e.preventDefault();
+
+        const wrapper = btn.closest(".enhanced-table-wrapper") || tableWrapper;
+        const page = btn.getAttribute("data-page") || btn.dataset.page || "";
+        const action =
+          btn.getAttribute("data-action") || btn.dataset.action || "";
+
+        if (page && typeof window.handlePagination === "function") {
+          window.handlePagination(wrapper, "goto", page);
+          return;
+        }
+
+        if (!action) {
+          return;
+        }
+
+        if (action === "go") {
+          const container = btn.closest(".page-input-container");
+          const pageInput =
+            (container && container.querySelector(".page-input")) ||
+            wrapper.querySelector(".page-input");
+          const raw =
+            pageInput && "value" in pageInput ? pageInput.value : "";
+          const val = parseInt(String(raw), 10);
+          if (!isNaN(val) && typeof window.updateTablePage === "function") {
+            window.updateTablePage(wrapper, val);
           }
+          return;
+        }
+
+        if (typeof window.handlePagination === "function") {
+          window.handlePagination(wrapper, action);
         }
       });
-    });
+
+      tableWrapper.addEventListener("keydown", (e) => {
+        const ke = /** @type {KeyboardEvent} */ (e);
+        if (ke.key !== "Enter") {
+          return;
+        }
+        const target = ke.target instanceof Element ? ke.target : null;
+        if (!target || !target.classList.contains("page-input")) {
+          return;
+        }
+        const wrapper =
+          target.closest(".enhanced-table-wrapper") || tableWrapper;
+        const val = parseInt(
+          String(
+            target instanceof HTMLInputElement ? target.value : target.value
+          ),
+          10
+        );
+        if (!isNaN(val) && typeof window.updateTablePage === "function") {
+          ke.preventDefault();
+          window.updateTablePage(wrapper, val);
+        }
+      });
+
+      // Use focusout (bubbles) instead of blur (doesn't bubble)
+      tableWrapper.addEventListener("focusout", (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target || !target.classList.contains("page-input")) {
+          return;
+        }
+        const wrapper =
+          target.closest(".enhanced-table-wrapper") || tableWrapper;
+        const val = parseInt(
+          String(
+            target instanceof HTMLInputElement ? target.value : target.value
+          ),
+          10
+        );
+        if (!isNaN(val) && typeof window.updateTablePage === "function") {
+          window.updateTablePage(wrapper, val);
+        }
+      });
+    }
     // Page size selector
     const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
     if (pageSizeSelect) {
@@ -2927,43 +3064,6 @@ function handleTableDataDelta({
             totalPages,
             tableId
           );
-
-          // Re-attach event listeners to the new pagination buttons
-          const paginationBtns =
-            paginationContainer.querySelectorAll(".pagination-btn");
-          paginationBtns.forEach((btn) => {
-            btn.addEventListener("click", (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const action = btn.getAttribute("data-action");
-              const page = btn.getAttribute("data-page");
-
-              if (page && typeof window.handlePagination === "function") {
-                window.handlePagination(wrapper, "goto", page);
-              } else if (
-                action &&
-                typeof window.handlePagination === "function"
-              ) {
-                window.handlePagination(wrapper, action);
-              }
-            });
-          });
-
-          // Re-attach page input listeners
-          const pageInput = paginationContainer.querySelector(".page-input");
-          if (pageInput) {
-            pageInput.addEventListener("keydown", (e) => {
-              if (e.key === "Enter") {
-                const val = parseInt(pageInput.value, 10);
-                if (
-                  !isNaN(val) &&
-                  typeof window.updateTablePage === "function"
-                ) {
-                  window.updateTablePage(wrapper, val);
-                }
-              }
-            });
-          }
 
           if (window.debug) {
             window.debug.debug("[events.js] Updated pagination controls", {

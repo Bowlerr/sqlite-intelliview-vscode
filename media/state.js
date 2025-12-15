@@ -50,6 +50,7 @@ function getDefaultTabViewState() {
     searchTerm: "",
     scrollTop: 0,
     scrollLeft: 0,
+    sort: { columnName: null, dir: "none" },
     columnWidths: {},
     rowHeights: {},
     pinnedColumns: [],

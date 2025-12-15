@@ -7,7 +7,7 @@
 // Pagination settings
 const PAGINATION_CONFIG = {
   defaultPageSize: 100,
-  pageSizeOptions: [50, 100, 200, 500, 1000],
+  pageSizeOptions: [50, 100, 200, 500, 1000, 10000, 100000],
   maxVisiblePages: 5,
 };
 
@@ -90,7 +90,10 @@ function normalizeBlobValue(value) {
   if (value instanceof ArrayBuffer) {
     return new Uint8Array(value);
   }
-  if (Array.isArray(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+  if (
+    Array.isArray(value) &&
+    value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
+  ) {
     return Uint8Array.from(value);
   }
   // Node Buffer serialized form (rare, but can happen depending on transport)
@@ -300,7 +303,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         : 0
       : /** @type {number} */ (totalRows)
     : 0;
-  const totalPages = totalRowsKnown ? Math.ceil(effectiveTotalRows / pageSize) : 1;
+  const totalPages = totalRowsKnown
+    ? Math.ceil(effectiveTotalRows / pageSize)
+    : 1;
   const showSchemaStats = !isSchemaTable;
 
   // Determine if editing should be allowed
@@ -380,7 +385,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}">
       <div class="table-controls">
         <div class="table-search">
-          <input type="text" class="search-input" placeholder="Search table..." />
+          <input type="text" class="search-input" placeholder="Search table page..." />
           <button class="search-clear" title="Clear search">×</button>
         </div>
         ${
@@ -668,7 +673,9 @@ function renderTableCellHtml(
           isImage ? "🖼️" : "🧩"
         }</span>`;
     const label = `${isImage ? "Image" : "BLOB"} ${sizeText}`;
-    cellContentHtml = `<div class="cell-content cell-content-blob" data-original-value="" data-blob="true" data-blob-size="${blobBytes.length}"${
+    cellContentHtml = `<div class="cell-content cell-content-blob" data-original-value="" data-blob="true" data-blob-size="${
+      blobBytes.length
+    }"${
       mime ? ` data-blob-mime="${escapeHtmlFast(mime)}"` : ""
     }>${thumbHtml}<span class="blob-label">${escapeHtmlFast(
       label
@@ -691,11 +698,12 @@ function renderTableCellHtml(
   }
 
   const cellEditable = isEditable && !isBlob;
-  const ariaValue = isBlob && blobBytes
-    ? `BLOB (${formatBytes(blobBytes.length)})`
-    : cell !== null
-    ? String(cell).substring(0, 50)
-    : "null";
+  const ariaValue =
+    isBlob && blobBytes
+      ? `BLOB (${formatBytes(blobBytes.length)})`
+      : cell !== null
+      ? String(cell).substring(0, 50)
+      : "null";
 
   return `
             <td data-column="${cellIndex}" 
@@ -883,7 +891,8 @@ function initializeVirtualTable(tableWrapperOrContainer) {
     columnFilter: /** @type {null | { columnIndex: number, value: string }} */ (
       null
     ),
-    sort: /** @type {{ columnIndex: number|null, dir: 'none'|'asc'|'desc' }} */ ({
+    sort: /** @type {{ columnName?: string|null, columnIndex: number|null, dir: 'none'|'asc'|'desc' }} */ ({
+      columnName: null,
       columnIndex: null,
       dir: "none",
     }),
@@ -913,6 +922,24 @@ function initializeVirtualTable(tableWrapperOrContainer) {
   // Store state on the wrapper (in-memory only).
   /** @type {any} */ (wrapper).__virtualTableState = vs;
   wrapper.setAttribute("data-virtual-initialized", "true");
+
+  // Restore persisted sort for virtualized tables (by column name).
+  if (viewState && viewState.sort && typeof viewState.sort === "object") {
+    const dir =
+      viewState.sort.dir === "asc" || viewState.sort.dir === "desc"
+        ? viewState.sort.dir
+        : "none";
+    const colName =
+      typeof viewState.sort.columnName === "string"
+        ? viewState.sort.columnName
+        : null;
+    if (colName && dir !== "none") {
+      const idx = Array.isArray(vs.columns) ? vs.columns.indexOf(colName) : -1;
+      if (idx >= 0) {
+        vs.sort = { columnName: colName, columnIndex: idx, dir };
+      }
+    }
+  }
 
   // Attach a throttled scroll listener for re-rendering.
   if (scrollContainer.getAttribute("data-virtual-scroll") !== "true") {
@@ -1003,28 +1030,35 @@ function recomputeVirtualMetrics(vs) {
     });
   }
 
-  if (
-    vs.sort &&
-    vs.sort.dir !== "none" &&
-    typeof vs.sort.columnIndex === "number"
-  ) {
-    const colIdx = vs.sort.columnIndex;
-    const dir = vs.sort.dir;
-    const cmp =
-      typeof window.compareValues === "function"
-        ? window.compareValues
-        : (a, b, direction) =>
-            direction === "asc"
-              ? String(a).localeCompare(String(b))
-              : String(b).localeCompare(String(a));
+  if (vs.sort && vs.sort.dir !== "none") {
+    // Best-effort: derive index from columnName if needed
+    if (typeof vs.sort.columnIndex !== "number") {
+      if (vs.sort.columnName && Array.isArray(vs.columns)) {
+        const nextIdx = vs.columns.indexOf(vs.sort.columnName);
+        if (nextIdx >= 0) {
+          vs.sort.columnIndex = nextIdx;
+        }
+      }
+    }
+    if (typeof vs.sort.columnIndex === "number") {
+      const colIdx = vs.sort.columnIndex;
+      const dir = vs.sort.dir;
+      const cmp =
+        typeof window.compareValues === "function"
+          ? window.compareValues
+          : (a, b, direction) =>
+              direction === "asc"
+                ? String(a).localeCompare(String(b))
+                : String(b).localeCompare(String(a));
 
-    order.sort((aIdx, bIdx) => {
-      const aRow = vs.pageData[aIdx];
-      const bRow = vs.pageData[bIdx];
-      const aVal = Array.isArray(aRow) ? aRow[colIdx] : "";
-      const bVal = Array.isArray(bRow) ? bRow[colIdx] : "";
-      return cmp(aVal ?? "", bVal ?? "", dir);
-    });
+      order.sort((aIdx, bIdx) => {
+        const aRow = vs.pageData[aIdx];
+        const bRow = vs.pageData[bIdx];
+        const aVal = Array.isArray(aRow) ? aRow[colIdx] : "";
+        const bVal = Array.isArray(bRow) ? bRow[colIdx] : "";
+        return cmp(aVal ?? "", bVal ?? "", dir);
+      });
+    }
   }
 
   vs.order = order;
@@ -1093,13 +1127,40 @@ function virtualRender(vs, { force }) {
   const tbody = vs.tbody;
   const colCount = Array.isArray(vs.columns) ? vs.columns.length : 0;
   const totalRows = Array.isArray(vs.order) ? vs.order.length : 0;
+  const pageRows = Array.isArray(vs.pageData) ? vs.pageData.length : 0;
+  const hasSearch = !!(vs.searchTerm && String(vs.searchTerm).trim().length);
+  const hasColFilter = !!(vs.columnFilter && vs.columnFilter.value);
 
   if (!tbody || colCount <= 0) {
     return;
   }
 
   if (totalRows === 0) {
-    tbody.innerHTML = `<tr class="virtual-empty" role="row"><td colspan="${colCount}">No matching rows.</td></tr>`;
+    const title =
+      hasSearch || hasColFilter
+        ? "No results on this page"
+        : pageRows === 0
+        ? "No rows on this page"
+        : "No rows to show";
+    const descriptionLine1 =
+      hasSearch || hasColFilter
+        ? "Try a different search/filter, clear it, or change page."
+        : "Try changing page or refreshing the table.";
+    const descriptionLine2 =
+      hasSearch || hasColFilter
+        ? "Or use the Query tab to search the whole database with SQL."
+        : "";
+    tbody.innerHTML = `<tr class="virtual-empty" role="row"><td colspan="${colCount}"><div class="table-empty-message"><div class="table-empty-title">${escapeHtmlFast(
+      title
+    )}</div><div class="table-empty-description">${escapeHtmlFast(
+      descriptionLine1
+    )}</div>${
+      descriptionLine2
+        ? `<div class="table-empty-description">${escapeHtmlFast(
+            descriptionLine2
+          )}</div>`
+        : ""
+    }</div></td></tr>`;
     vs.lastStart = -1;
     vs.lastEnd = -1;
     return;
@@ -1237,7 +1298,9 @@ function syncColumnWidthsForVirtual(vs) {
     if (!width || !Number.isFinite(width)) {
       return;
     }
-    const colEl = vs.table.querySelector(`colgroup col[data-column="${colIdx}"]`);
+    const colEl = vs.table.querySelector(
+      `colgroup col[data-column="${colIdx}"]`
+    );
     if (colEl && colEl instanceof HTMLElement) {
       colEl.style.width = `${width}px`;
     }
@@ -1283,12 +1346,23 @@ function filterTable(tableWrapper, searchTerm) {
   }
 
   const table = wrapper.querySelector(".data-table");
-  const rows = table.querySelectorAll("tbody tr");
+  const tbody = table ? table.querySelector("tbody") : null;
+  if (!table || !tbody) {
+    return;
+  }
+
+  // Remove any prior empty-state placeholder row.
+  tbody.querySelectorAll("tr.filter-empty-row").forEach((row) => row.remove());
+
+  const rows = tbody.querySelectorAll("tr");
   let visibleCount = 0;
 
   const term = searchTerm.toLowerCase();
 
   rows.forEach((row) => {
+    if (row.classList.contains("filter-empty-row")) {
+      return;
+    }
     const cells = row.querySelectorAll("td");
     let rowMatches = false;
 
@@ -1307,10 +1381,30 @@ function filterTable(tableWrapper, searchTerm) {
     }
   });
 
+  if (visibleCount === 0 && searchTerm) {
+    const colCount = table.querySelectorAll("thead th").length || 1;
+    const emptyRow = document.createElement("tr");
+    emptyRow.className = "filter-empty-row";
+    emptyRow.setAttribute("role", "row");
+    const td = document.createElement("td");
+    td.colSpan = colCount;
+    td.innerHTML = `
+      <div class="table-empty-message">
+        <div class="table-empty-title">No results on this page</div>
+        <div class="table-empty-description">Try a different search term, clear the search, or change page.</div>
+        <div class="table-empty-description">Or use the Query tab to search the whole database with SQL.</div>
+      </div>
+    `;
+    emptyRow.appendChild(td);
+    tbody.prepend(emptyRow);
+  }
+
   // Update row count
-  const visibleRowsSpan = tableWrapper.querySelector(".visible-rows");
+  const visibleRowsSpan = wrapper.querySelector(".visible-rows");
   if (visibleRowsSpan) {
-    const totalRows = rows.length;
+    const totalRows = Array.from(rows).filter(
+      (r) => !r.classList.contains("filter-empty-row")
+    ).length;
     visibleRowsSpan.textContent = `Showing ${visibleCount} of ${totalRows} ${
       pluralize ? pluralize(totalRows, "row") : "rows"
     }`;
@@ -1358,9 +1452,34 @@ function sortTableByColumn(table, columnIndex) {
       indicator.textContent = newSort === "asc" ? "↑" : "↓";
     }
 
-    vs.sort = { columnIndex, dir: /** @type {'asc'|'desc'} */ (newSort) };
+    const columnName = header.getAttribute("data-column-name") || null;
+    vs.sort = {
+      columnName,
+      columnIndex,
+      dir: /** @type {'asc'|'desc'} */ (newSort),
+    };
     recomputeVirtualMetrics(vs);
     virtualRender(vs, { force: true });
+
+    // Persist sort for this tab (by column name)
+    try {
+      const tabKey =
+        wrapper &&
+        (wrapper.getAttribute("data-table") || wrapper.dataset.table);
+      if (
+        tabKey &&
+        typeof window.setTabViewState === "function" &&
+        columnName
+      ) {
+        window.setTabViewState(
+          tabKey,
+          { sort: { columnName, dir: newSort } },
+          { renderTabs: false, renderSidebar: false, persistState: "debounced" }
+        );
+      }
+    } catch (_) {
+      // ignore
+    }
 
     if (typeof showSuccess !== "undefined") {
       showSuccess(
@@ -1418,6 +1537,23 @@ function sortTableByColumn(table, columnIndex) {
 
   // Re-append sorted rows
   rows.forEach((row) => tbody.appendChild(row));
+
+  // Persist sort for this tab (by column name)
+  try {
+    const wrapper = table.closest(".enhanced-table-wrapper");
+    const tabKey =
+      wrapper && (wrapper.getAttribute("data-table") || wrapper.dataset.table);
+    const columnName = header.getAttribute("data-column-name") || null;
+    if (tabKey && columnName && typeof window.setTabViewState === "function") {
+      window.setTabViewState(
+        tabKey,
+        { sort: { columnName, dir: newSort } },
+        { renderTabs: false, renderSidebar: false, persistState: "debounced" }
+      );
+    }
+  } catch (_) {
+    // ignore
+  }
 
   if (typeof showSuccess !== "undefined") {
     showSuccess(`Table sorted by column ${columnIndex + 1} (${newSort}ending)`);
@@ -1583,12 +1719,28 @@ function filterTableByColumn(table, columnIndex, filterValue) {
     return;
   }
 
-  const rows = table.querySelectorAll("tbody tr");
+  const tbody = table.querySelector("tbody");
+  if (!tbody) {
+    return;
+  }
+
+  // Remove any prior empty-state placeholder row.
+  tbody.querySelectorAll("tr.filter-empty-row").forEach((row) => row.remove());
+
+  const rows = tbody.querySelectorAll("tr");
   let visibleCount = 0;
 
   rows.forEach((row) => {
+    if (row.classList.contains("filter-empty-row")) {
+      return;
+    }
     const cell = row.querySelector(`td[data-column="${columnIndex}"]`);
-    const cellValue = getCellValue ? getCellValue(cell) : cell.textContent;
+    const rawCellValue = getCellValue
+      ? getCellValue(cell)
+      : cell
+      ? cell.textContent
+      : "";
+    const cellValue = String(rawCellValue ?? "");
     const shouldShow =
       filterValue === "" ||
       cellValue.toLowerCase().includes(filterValue.toLowerCase());
@@ -1601,11 +1753,33 @@ function filterTableByColumn(table, columnIndex, filterValue) {
     }
   });
 
+  if (visibleCount === 0 && filterValue) {
+    const colCount = table.querySelectorAll("thead th").length || 1;
+    const emptyRow = document.createElement("tr");
+    emptyRow.className = "filter-empty-row";
+    emptyRow.setAttribute("role", "row");
+    const td = document.createElement("td");
+    td.colSpan = colCount;
+    td.innerHTML = `
+      <div class="table-empty-message">
+        <div class="table-empty-title">No results on this page</div>
+        <div class="table-empty-description">Try a different filter, clear it, or change page.</div>
+        <div class="table-empty-description">Or use the Query tab to search the whole database with SQL.</div>
+      </div>
+    `;
+    emptyRow.appendChild(td);
+    tbody.prepend(emptyRow);
+  }
+
   // Update row count
   const tableWrapper = table.closest(".enhanced-table-wrapper");
-  const visibleRowsSpan = tableWrapper.querySelector(".visible-rows");
+  const visibleRowsSpan = tableWrapper
+    ? tableWrapper.querySelector(".visible-rows")
+    : null;
   if (visibleRowsSpan) {
-    const totalRows = rows.length;
+    const totalRows = Array.from(rows).filter(
+      (r) => !r.classList.contains("filter-empty-row")
+    ).length;
     visibleRowsSpan.textContent = `Showing ${visibleCount} of ${totalRows} ${
       pluralize ? pluralize(totalRows, "row") : "rows"
     }`;
@@ -1656,7 +1830,7 @@ function exportTableData(tableWrapper) {
 
   const table = wrapper.querySelector(".data-table");
   const visibleRows = table.querySelectorAll(
-    'tbody tr:not([style*="display: none"])'
+    'tbody tr:not([style*="display: none"]):not(.filter-empty-row):not(.virtual-spacer):not(.virtual-loading):not(.virtual-empty)'
   );
 
   // Get headers

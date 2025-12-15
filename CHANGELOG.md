@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- 📚 **README overhaul + GIF demos**: Updated documentation with a quick start guide, offline/security notes, optional CLI requirements (`sqlite3`/`sqlcipher`), and feature demos
+- ↕️ **Per-tab sort persistence**: Remembers client-side column sort (by column name) per table tab and restores it when switching tabs
+- 🧾 **Clear empty states**: New “no results on this page” messaging for table page search/filters (virtualized and non-virtual tables)
+
+### Changed
+
+- 🧭 **Pagination event handling**: Pagination controls now use delegated listeners so regenerated pagination HTML continues to work without re-binding
+- 🔎 **Search UX wording**: Table search placeholder clarifies it searches the current page
+- 📄 **Bigger page size options**: Added very large page-size choices for browsing huge tables
+
+### Fixed
+
+- 📤 **Export correctness**: CSV export now ignores non-data rows (empty-state, virtual spacer/loading rows)
+
 ## [0.4.0] - 2025-12-13
 
 ### ⚡ Performance, UX, and Reliability Improvements
