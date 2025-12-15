@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-12-15
+
 ### Added
 
 - 📚 **README overhaul + GIF demos**: Updated documentation with a quick start guide, offline/security notes, optional CLI requirements (`sqlite3`/`sqlcipher`), and feature demos
