@@ -1,6 +1,10 @@
 # Change Log
 
-## [Unreleased]
+## [0.4.2] - 2025-12-16
+
+### Changed
+
+- 🖼️ **Logo updated**: Replaced the extension icon/logo with a refreshed design (images/icon.png).
 
 ## [0.4.1] - 2025-12-15
 
