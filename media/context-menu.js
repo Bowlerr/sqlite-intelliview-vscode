@@ -45,6 +45,14 @@ function createContextMenuElement() {
       <span class="icon">📋</span>
       <span>Copy Cell</span>
     </div>
+    <div class="context-menu-item context-menu-item-expand" data-action="expand-cell" style="display: none;">
+      <span class="icon">🔍</span>
+      <span>Expand Cell</span>
+    </div>
+    <div class="context-menu-item context-menu-item-row" data-action="toggle-row-multiline">
+      <span class="icon">↕</span>
+      <span>Expand Row</span>
+    </div>
     <div class="context-menu-item context-menu-item-json" data-action="view-json" style="display: none;">
       <span class="icon">{}</span>
       <span>View JSON</span>
@@ -301,6 +309,46 @@ function showContextMenuAt(x, y) {
     }
   }
 
+  // Show/hide expand-cell action for long text values
+  const expandItem = contextMenu.querySelector('[data-action="expand-cell"]');
+  if (expandItem) {
+    const canExpand = !!currentCell && !hasBlob;
+    if (!canExpand) {
+      expandItem.style.display = "none";
+    } else {
+      const raw = getCellRawValue(currentCell);
+      const value = raw && typeof raw.value === "string" ? raw.value : "";
+      const cellContent = currentCell.querySelector(".cell-content");
+      const hasOverflow =
+        cellContent &&
+        cellContent instanceof HTMLElement &&
+        cellContent.scrollWidth > cellContent.clientWidth + 2;
+      const shouldShow =
+        raw.truncated ||
+        value.length > 80 ||
+        value.includes("\n") ||
+        !!hasOverflow;
+      expandItem.style.display = shouldShow ? "flex" : "none";
+    }
+  }
+
+  // Show row expand/collapse action
+  const rowToggleItem = contextMenu.querySelector(
+    '[data-action="toggle-row-multiline"]'
+  );
+  if (rowToggleItem) {
+    if (!currentRow) {
+      rowToggleItem.style.display = "none";
+    } else {
+      rowToggleItem.style.display = "flex";
+      const isMultiline = currentRow.classList.contains("row-multiline");
+      const label = rowToggleItem.querySelector("span:last-child");
+      if (label) {
+        label.textContent = isMultiline ? "Collapse Row" : "Expand Row";
+      }
+    }
+  }
+
   // Position the context menu
   contextMenu.style.left = x + "px";
   contextMenu.style.top = y + "px";
@@ -410,6 +458,12 @@ function executeContextMenuAction(action) {
     case "copy-cell":
       copyCellValue();
       break;
+    case "expand-cell":
+      expandCellValue();
+      break;
+    case "toggle-row-multiline":
+      toggleRowMultiline();
+      break;
     case "view-json":
       viewCellAsJson();
       break;
@@ -460,6 +514,151 @@ function copyCellValue() {
 
   const cellValue = getCellDisplayValue(currentCell);
   copyToClipboard(cellValue, "Cell value copied");
+}
+
+/**
+ * Expand current cell value in a dialog.
+ */
+function expandCellValue() {
+  if (!currentCell) {
+    return;
+  }
+
+  const cellContent = currentCell.querySelector(".cell-content");
+  if (cellContent && cellContent.getAttribute("data-blob") === "true") {
+    if (typeof showError === "function") {
+      showError("Cell is a blob.");
+    }
+    return;
+  }
+
+  const raw = getCellRawValue(currentCell);
+  const isNull =
+    cellContent &&
+    cellContent.querySelector("em") &&
+    (cellContent.textContent || "").trim() === "NULL";
+  const value = isNull ? "NULL" : raw.value || "";
+
+  const columnName =
+    currentCell.getAttribute("data-column-name") ||
+    currentCell.dataset.columnName ||
+    "";
+  const title = columnName ? `Cell Viewer — ${columnName}` : "Cell Viewer";
+
+  showCellViewerDialog({
+    title,
+    value,
+    truncated: raw.truncated,
+    isNull,
+  });
+}
+
+/**
+ * Toggle a row between single-line and multiline display.
+ */
+function toggleRowMultiline() {
+  if (!currentRow) {
+    return;
+  }
+  const row = currentRow;
+  const rowIndex = row.getAttribute("data-row-index");
+  if (!rowIndex) {
+    return;
+  }
+  const table = row.closest(".data-table");
+  const tableWrapper = row.closest(".enhanced-table-wrapper");
+  const defaultHeight =
+    typeof window.TABLE_ROW_HEIGHT_DEFAULT === "number"
+      ? window.TABLE_ROW_HEIGHT_DEFAULT
+      : 28;
+  const isMultiline = row.classList.contains("row-multiline");
+  if (isMultiline) {
+    row.style.height = "";
+    row.style.minHeight = "";
+
+    if (typeof window.updateRowMultilineForRow === "function") {
+      requestAnimationFrame(() => {
+        window.updateRowMultilineForRow(row);
+      });
+    }
+
+    if (tableWrapper && typeof window.setTabViewState === "function") {
+      const tabKey =
+        tableWrapper.getAttribute("data-table") || tableWrapper.dataset.table;
+      if (tabKey) {
+        const patch = { rowHeights: { [rowIndex]: null } };
+        window.setTabViewState(tabKey, patch, {
+          renderTabs: false,
+          renderSidebar: false,
+        });
+      }
+    }
+
+    if (tableWrapper && typeof window.refreshVirtualTable === "function") {
+      window.refreshVirtualTable(tableWrapper);
+    }
+    if (table && typeof window.scheduleCellOverflowIndicators === "function") {
+      window.scheduleCellOverflowIndicators(table);
+    }
+    return;
+  }
+
+  const targetHeight = getExpandedRowHeight(row, defaultHeight);
+
+  row.style.height = `${targetHeight}px`;
+  row.style.minHeight = `${targetHeight}px`;
+
+  if (typeof window.updateRowMultilineForRow === "function") {
+    window.updateRowMultilineForRow(row, targetHeight);
+  }
+
+  if (tableWrapper && typeof window.setTabViewState === "function") {
+    const tabKey =
+      tableWrapper.getAttribute("data-table") || tableWrapper.dataset.table;
+    if (tabKey) {
+      const patch = { rowHeights: { [rowIndex]: targetHeight } };
+      window.setTabViewState(tabKey, patch, {
+        renderTabs: false,
+        renderSidebar: false,
+      });
+    }
+  }
+
+  if (tableWrapper && typeof window.refreshVirtualTable === "function") {
+    window.refreshVirtualTable(tableWrapper);
+  }
+  if (table && typeof window.scheduleCellOverflowIndicators === "function") {
+    window.scheduleCellOverflowIndicators(table);
+  }
+}
+
+function getExpandedRowHeight(row, minHeight) {
+  const lineHeight =
+    typeof window.TABLE_CELL_LINE_HEIGHT === "number"
+      ? window.TABLE_CELL_LINE_HEIGHT
+      : 18;
+  const verticalPadding =
+    typeof window.TABLE_CELL_VERTICAL_PADDING === "number"
+      ? window.TABLE_CELL_VERTICAL_PADDING
+      : 24;
+
+  let maxScrollHeight = 0;
+  row
+    .querySelectorAll(".cell-content:not(.cell-content-blob)")
+    .forEach((content) => {
+      if (!(content instanceof HTMLElement)) {
+        return;
+      }
+      maxScrollHeight = Math.max(maxScrollHeight, content.scrollHeight || 0);
+    });
+
+  if (!maxScrollHeight) {
+    return minHeight;
+  }
+
+  const lines = Math.max(1, Math.ceil(maxScrollHeight / lineHeight));
+  const height = verticalPadding + lines * lineHeight;
+  return Math.max(minHeight, height);
 }
 
 /**
@@ -1516,6 +1715,87 @@ function showJsonViewerDialog(opts) {
     } catch {
       copyToClipboard(opts.formattedJson, "Formatted JSON copied");
     }
+  });
+
+  document.body.appendChild(overlay);
+  copyBtn.focus();
+}
+
+/**
+ * Show a cell viewer dialog for long text.
+ * @param {{ title: string, value: string, truncated: boolean, isNull: boolean }} opts
+ */
+function showCellViewerDialog(opts) {
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-dialog-overlay";
+
+  const dialog = document.createElement("div");
+  dialog.className = "confirm-dialog cell-viewer-dialog";
+
+  const titleEl = document.createElement("h3");
+  titleEl.className = "confirm-dialog-title";
+  titleEl.textContent = opts.title || "Cell Viewer";
+
+  const infoEl = document.createElement("div");
+  infoEl.className = "confirm-dialog-table-info";
+  const infoParts = [];
+  if (opts.isNull) {
+    infoParts.push("NULL value");
+  } else if (!opts.value) {
+    infoParts.push("Empty string");
+  } else {
+    infoParts.push(`${opts.value.length.toLocaleString()} characters`);
+  }
+  if (opts.truncated) {
+    infoParts.push("truncated in table view");
+  }
+  infoEl.textContent = infoParts.join(" • ");
+
+  const contentEl = document.createElement("pre");
+  contentEl.className = "confirm-dialog-row-data cell-viewer-content";
+  contentEl.textContent = opts.value;
+
+  const buttonsEl = document.createElement("div");
+  buttonsEl.className = "confirm-dialog-buttons";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "secondary-button";
+  closeBtn.textContent = "Close";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "primary-button";
+  copyBtn.textContent = "Copy";
+
+  buttonsEl.appendChild(closeBtn);
+  buttonsEl.appendChild(copyBtn);
+
+  dialog.appendChild(titleEl);
+  dialog.appendChild(infoEl);
+  dialog.appendChild(contentEl);
+  dialog.appendChild(buttonsEl);
+  overlay.appendChild(dialog);
+
+  const close = () => {
+    overlay.remove();
+  };
+
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      close();
+    }
+  });
+
+  const handleEscape = (e) => {
+    if (e.key === "Escape") {
+      close();
+      document.removeEventListener("keydown", handleEscape);
+    }
+  };
+  document.addEventListener("keydown", handleEscape);
+
+  copyBtn.addEventListener("click", () => {
+    copyToClipboard(opts.value, "Cell value copied");
   });
 
   document.body.appendChild(overlay);

@@ -192,6 +192,16 @@
 .json-viewer-dialog .confirm-dialog-row-data {
   max-height: 60vh;
 }
+.cell-viewer-dialog {
+  max-width: 960px;
+  width: 95%;
+  max-height: 85vh;
+}
+.cell-viewer-dialog .cell-viewer-content {
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre;
+}
 
 .blob-viewer-dialog {
   max-width: 980px;

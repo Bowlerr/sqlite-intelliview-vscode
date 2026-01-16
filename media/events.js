@@ -1600,12 +1600,19 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
           const col = table.querySelector(`colgroup col[data-column="${colIndex}"]`);
           if (col && col instanceof HTMLElement) {
             col.style.width = `${w}px`;
+            col.style.maxWidth = "none";
           }
         }
       }
     });
     if (table && typeof window.updatePinnedColumnPositions === "function") {
       window.updatePinnedColumnPositions(table);
+    }
+    if (table && typeof window.updateTableWidthFromCols === "function") {
+      window.updateTableWidthFromCols(table);
+    }
+    if (table && typeof window.scheduleCellOverflowIndicators === "function") {
+      window.scheduleCellOverflowIndicators(table);
     }
   }
 
@@ -1628,6 +1635,9 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
       const h = Math.max(25, Math.floor(height));
       row.style.height = `${h}px`;
       row.style.minHeight = `${h}px`;
+      if (typeof window.updateRowMultilineForRow === "function") {
+        window.updateRowMultilineForRow(row, h);
+      }
     });
 
     // If virtualized, spacer math depends on row heights; refresh once.
@@ -2261,6 +2271,19 @@ function initializeTableEvents(tableWrapper) {
     if (typeof addResizeObserver === "function") {
       addResizeObserver(tableWrapper);
     }
+    const tableForIndicators = tableWrapper.querySelector(".data-table");
+    if (
+      tableForIndicators &&
+      typeof window.scheduleCellOverflowIndicators === "function"
+    ) {
+      window.scheduleCellOverflowIndicators(tableForIndicators);
+    }
+    if (
+      tableForIndicators &&
+      typeof window.updateRowMultilineForTable === "function"
+    ) {
+      window.updateRowMultilineForTable(tableForIndicators);
+    }
     const searchInput = tableWrapper.querySelector(".search-input");
     const clearBtn = tableWrapper.querySelector(".search-clear");
     const controlsBar = tableWrapper.querySelector(".table-controls");
@@ -2789,6 +2812,14 @@ function handleCellUpdateSuccess(message) {
     setTimeout(() => {
       cell.style.backgroundColor = "";
     }, 1000);
+
+    const table = cell.closest(".data-table");
+    if (
+      table &&
+      typeof window.scheduleCellOverflowIndicators === "function"
+    ) {
+      window.scheduleCellOverflowIndicators(table);
+    }
   }
 
   if (typeof showSuccess !== "undefined") {

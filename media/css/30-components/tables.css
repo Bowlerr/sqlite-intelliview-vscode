@@ -41,8 +41,8 @@
 }
 
 .data-table {
-  /* Allow tables to grow wider than the container so column resizing can expand horizontally. */
-  width: max-content;
+  /* Keep initial table width constrained; columns can still expand on user resize. */
+  width: 100%;
   min-width: 100%;
   border-collapse: collapse;
   background: var(--vscode-editor-background);
@@ -50,6 +50,13 @@
   font-family: var(--vscode-editor-font-family);
   font-size: 0.9em;
   table-layout: fixed;
+  --table-col-default-width: 220px;
+  --cell-line-height: 18px;
+  --cell-visible-lines: 3;
+}
+.data-table col {
+  width: var(--table-col-default-width);
+  max-width: var(--table-col-default-width);
 }
 .data-table th,
 .data-table td {
@@ -92,6 +99,22 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   position: relative;
+}
+.data-table tr.row-multiline td {
+  white-space: normal;
+  vertical-align: top;
+}
+.data-table .cell-content:not(.cell-content-blob) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  line-height: var(--cell-line-height, 18px);
+  max-height: calc(var(--cell-visible-lines, 3) * var(--cell-line-height, 18px));
+  overflow-x: hidden;
+  overflow-y: scroll;
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
 }
 .data-table td em {
   color: var(--vscode-descriptionForeground);

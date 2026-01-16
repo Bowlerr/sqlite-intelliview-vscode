@@ -12,8 +12,9 @@ const PAGINATION_CONFIG = {
 };
 
 // Rendering limits to keep the UI responsive on wide/large-text tables.
-const CELL_RENDER_LIMIT = 200; // visible characters
-const CELL_ORIGINAL_LIMIT = 2000; // stored in DOM attributes (for editing)
+// Set to Infinity to avoid truncating visible values by default.
+const CELL_RENDER_LIMIT = Number.POSITIVE_INFINITY; // visible characters
+const CELL_ORIGINAL_LIMIT = Number.POSITIVE_INFINITY; // stored in DOM attributes (for editing)
 
 // BLOB rendering: keep thumbnails small to avoid UI jank.
 const BLOB_THUMB_MAX_BYTES = 64 * 1024; // 64KB
@@ -26,6 +27,16 @@ const VIRTUALIZATION_CONFIG = {
   minCells: 12000, // rows * columns
   overscan: 8, // rows above/below viewport
 };
+
+const DEFAULT_COLUMN_WIDTH = 220;
+const CELL_LINE_HEIGHT = 18;
+const CELL_VERTICAL_PADDING = 24;
+const DEFAULT_VISIBLE_LINES = 3;
+const MULTILINE_VISIBLE_LINES = 6;
+const DEFAULT_ROW_HEIGHT =
+  CELL_VERTICAL_PADDING + CELL_LINE_HEIGHT * DEFAULT_VISIBLE_LINES;
+const MULTILINE_ROW_HEIGHT =
+  CELL_VERTICAL_PADDING + CELL_LINE_HEIGHT * MULTILINE_VISIBLE_LINES;
 
 function escapeHtmlFast(value) {
   return String(value).replace(/[&<>"']/g, (ch) => {
@@ -214,6 +225,92 @@ function normalizeEnhancedTableWrapper(el) {
   }
   const parent = el.closest(".enhanced-table-wrapper");
   return parent || null;
+}
+
+function updateTableWidthFromCols(table) {
+  if (!table) {
+    return;
+  }
+  const headers = table.querySelectorAll("thead th[data-column]");
+  if (!headers.length) {
+    return;
+  }
+  let total = 0;
+  headers.forEach((th) => {
+    const colIndex = th.getAttribute("data-column");
+    let width = 0;
+    if (colIndex) {
+      const col = table.querySelector(
+        `colgroup col[data-column="${colIndex}"]`
+      );
+      if (col && col instanceof HTMLElement) {
+        const styleWidth = parseFloat(col.style.width || "");
+        if (Number.isFinite(styleWidth) && styleWidth > 0) {
+          width = styleWidth;
+        }
+      }
+    }
+    if (!width) {
+      const rect = th.getBoundingClientRect();
+      width = rect && rect.width ? rect.width : 0;
+    }
+    total += width;
+  });
+
+  if (total > 0) {
+    table.style.width = `${Math.ceil(total)}px`;
+  }
+}
+
+function updateRowMultilineForRow(row, height) {
+  if (!row || !(row instanceof HTMLElement)) {
+    return;
+  }
+  const nextHeight =
+    typeof height === "number" && Number.isFinite(height)
+      ? height
+      : row.offsetHeight;
+  const contentHeight = Math.max(0, nextHeight - CELL_VERTICAL_PADDING);
+  const lines = Math.max(1, Math.round(contentHeight / CELL_LINE_HEIGHT));
+  row.classList.toggle("row-multiline", lines > DEFAULT_VISIBLE_LINES);
+  row.style.setProperty("--cell-visible-lines", String(lines));
+  row.style.setProperty("--cell-line-height", `${CELL_LINE_HEIGHT}px`);
+}
+
+function updateRowMultilineForTable(table) {
+  if (!table) {
+    return;
+  }
+  table.querySelectorAll("tr.resizable-row").forEach((row) => {
+    updateRowMultilineForRow(row);
+  });
+}
+
+function updateCellOverflowIndicators(table) {
+  if (!table) {
+    return;
+  }
+  const cells = table.querySelectorAll("td.data-cell");
+  cells.forEach((cell) => {
+    if (!(cell instanceof HTMLElement)) {
+      return;
+    }
+    cell.classList.remove("cell-overflow");
+  });
+}
+
+function scheduleCellOverflowIndicators(table) {
+  if (!table || typeof requestAnimationFrame !== "function") {
+    return;
+  }
+  /** @type {any} */ const tableAny = table;
+  if (tableAny.__overflowIndicatorRaf) {
+    return;
+  }
+  tableAny.__overflowIndicatorRaf = requestAnimationFrame(() => {
+    tableAny.__overflowIndicatorRaf = 0;
+    updateCellOverflowIndicators(table);
+  });
 }
 
 function shouldVirtualizeTable(pageRowCount, columnCount, tableName, options) {
@@ -434,14 +531,16 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         </div>
       </div>
       <div class="table-scroll-container">
-        <table class="data-table resizable-table" id="${tableId}" role="table" aria-label="Database table data">
+        <table class="data-table resizable-table" id="${tableId}" role="table" aria-label="Database table data" style="width: ${
+    Math.max(0, DEFAULT_COLUMN_WIDTH * columns.length)
+  }px;">
           <colgroup>
             ${columns
               .map(
                 (col, index) =>
                   `<col data-column="${index}" data-column-name="${escapeHtmlFast(
                     col
-                  )}" />`
+                  )}" style="width: ${DEFAULT_COLUMN_WIDTH}px; max-width: ${DEFAULT_COLUMN_WIDTH}px;" />`
               )
               .join("")}
           </colgroup>
@@ -896,7 +995,7 @@ function initializeVirtualTable(tableWrapperOrContainer) {
       columnIndex: null,
       dir: "none",
     }),
-    baseRowHeight: 28,
+    baseRowHeight: DEFAULT_ROW_HEIGHT,
     rowHeights:
       viewState &&
       viewState.rowHeights &&
@@ -1229,6 +1328,7 @@ function virtualRender(vs, { force }) {
   syncPinnedColumnsForVirtual(vs);
   syncColumnWidthsForVirtual(vs);
   syncRowHeightsForVirtual(vs);
+  scheduleCellOverflowIndicators(vs.table);
 }
 
 function findRowAtOffset(prefix, offset) {
@@ -1305,6 +1405,8 @@ function syncColumnWidthsForVirtual(vs) {
       colEl.style.width = `${width}px`;
     }
   });
+
+  updateTableWidthFromCols(vs.table);
 }
 
 function syncRowHeightsForVirtual(vs) {
@@ -1327,6 +1429,7 @@ function syncRowHeightsForVirtual(vs) {
     const h = Math.max(25, Math.floor(height));
     row.style.height = `${h}px`;
     row.style.minHeight = `${h}px`;
+    updateRowMultilineForRow(row, h);
   });
 }
 
@@ -2196,4 +2299,18 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).renderTableRows = renderTableRows;
   /** @type {any} */ (window).initializeVirtualTable = initializeVirtualTable;
   /** @type {any} */ (window).refreshVirtualTable = refreshVirtualTable;
+  /** @type {any} */ (window).updateTableWidthFromCols =
+    updateTableWidthFromCols;
+  /** @type {any} */ (window).scheduleCellOverflowIndicators =
+    scheduleCellOverflowIndicators;
+  /** @type {any} */ (window).updateRowMultilineForRow =
+    updateRowMultilineForRow;
+  /** @type {any} */ (window).updateRowMultilineForTable =
+    updateRowMultilineForTable;
+  /** @type {any} */ (window).TABLE_ROW_HEIGHT_DEFAULT = DEFAULT_ROW_HEIGHT;
+  /** @type {any} */ (window).TABLE_ROW_HEIGHT_MULTILINE =
+    MULTILINE_ROW_HEIGHT;
+  /** @type {any} */ (window).TABLE_CELL_LINE_HEIGHT = CELL_LINE_HEIGHT;
+  /** @type {any} */ (window).TABLE_CELL_VERTICAL_PADDING =
+    CELL_VERTICAL_PADDING;
 }

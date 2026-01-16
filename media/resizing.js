@@ -12,6 +12,77 @@ let startX = 0;
 let startY = 0;
 let startWidth = 0;
 let startHeight = 0;
+const AUTO_SCROLL_EDGE = 24;
+const AUTO_SCROLL_STEP = 16;
+const USE_POINTER_EVENTS =
+  typeof window !== "undefined" && "PointerEvent" in window;
+let activePointerId = null;
+let activePointerTarget = null;
+
+function captureResizePointer(e, target) {
+  if (!(e instanceof PointerEvent)) {
+    return;
+  }
+  if (!target || !(target instanceof HTMLElement)) {
+    return;
+  }
+  try {
+    target.setPointerCapture(e.pointerId);
+    activePointerId = e.pointerId;
+    activePointerTarget = target;
+  } catch (_) {
+    // ignore pointer capture errors
+  }
+}
+
+function releaseResizePointer() {
+  if (
+    activePointerTarget &&
+    activePointerTarget instanceof HTMLElement &&
+    activePointerId !== null &&
+    typeof activePointerTarget.releasePointerCapture === "function"
+  ) {
+    try {
+      activePointerTarget.releasePointerCapture(activePointerId);
+    } catch (_) {
+      // ignore pointer release errors
+    }
+  }
+  activePointerId = null;
+  activePointerTarget = null;
+}
+
+function maybeAutoScrollForResize(e, table) {
+  if (!table || !(table instanceof HTMLElement)) {
+    return;
+  }
+  const scrollContainer = table.closest(".table-scroll-container");
+  if (!scrollContainer || !(scrollContainer instanceof HTMLElement)) {
+    return;
+  }
+
+  const rect = scrollContainer.getBoundingClientRect();
+  let delta = 0;
+  if (e.clientX >= rect.right - AUTO_SCROLL_EDGE) {
+    const prev = scrollContainer.scrollLeft;
+    const max = Math.max(
+      0,
+      scrollContainer.scrollWidth - scrollContainer.clientWidth
+    );
+    scrollContainer.scrollLeft = Math.min(max, prev + AUTO_SCROLL_STEP);
+    delta = scrollContainer.scrollLeft - prev;
+    if (delta > 0) {
+      startX -= delta;
+    }
+  } else if (e.clientX <= rect.left + AUTO_SCROLL_EDGE) {
+    const prev = scrollContainer.scrollLeft;
+    scrollContainer.scrollLeft = Math.max(0, prev - AUTO_SCROLL_STEP);
+    delta = prev - scrollContainer.scrollLeft;
+    if (delta > 0) {
+      startX += delta;
+    }
+  }
+}
 
 /**
  * Initialize resizing functionality for a table
@@ -26,7 +97,8 @@ function initializeResizing(tableWrapper) {
   const wrapperEl = /** @type {HTMLElement} */ (tableWrapper);
   if (wrapperEl.getAttribute("data-resize-delegated") !== "true") {
     wrapperEl.setAttribute("data-resize-delegated", "true");
-    wrapperEl.addEventListener("mousedown", (e) => {
+    const downEvent = USE_POINTER_EVENTS ? "pointerdown" : "mousedown";
+    wrapperEl.addEventListener(downEvent, (e) => {
       if (!(e instanceof MouseEvent)) {
         return;
       }
@@ -63,8 +135,14 @@ function initializeResizing(tableWrapper) {
 
   // Global mouse events (add only once)
   if (!document.body.hasAttribute("data-resize-listeners")) {
-    document.addEventListener("mousemove", handleResize);
-    document.addEventListener("mouseup", endResize);
+    if (USE_POINTER_EVENTS) {
+      document.addEventListener("pointermove", handleResize);
+      document.addEventListener("pointerup", endResize);
+      document.addEventListener("pointercancel", endResize);
+    } else {
+      document.addEventListener("mousemove", handleResize);
+      document.addEventListener("mouseup", endResize);
+    }
     document.body.setAttribute("data-resize-listeners", "true");
   }
 }
@@ -106,12 +184,14 @@ function startColumnResize(e) {
   if (!target) {
     return;
   }
+  captureResizePointer(e, target);
 
   const columnIndex = parseInt(target.dataset.column || "0");
   const table = target.closest(".data-table");
   const header = table?.querySelector(`th[data-column="${columnIndex}"]`);
 
   if (header) {
+    captureResizePointer(e, handleEl);
     currentResizeTarget = /** @type {HTMLElement} */ (header);
     startWidth = header.offsetWidth;
 
@@ -157,6 +237,7 @@ function startColumnResizeFromHandle(e, handleEl) {
 function startRowResizeFromRow(e, rowEl) {
   e.preventDefault();
   e.stopPropagation();
+  captureResizePointer(e, rowEl);
 
   isResizing = true;
   currentResizeType = "row";
@@ -189,6 +270,7 @@ function startColumnResizeFromCell(e, cellEl) {
 
   e.preventDefault();
   e.stopPropagation();
+  captureResizePointer(e, cellEl);
 
   isResizing = true;
   currentResizeType = "column";
@@ -217,6 +299,7 @@ function startColumnResizeFromCell(e, cellEl) {
 function startRowResize(e) {
   e.preventDefault();
   e.stopPropagation();
+  captureResizePointer(e, /** @type {HTMLElement} */ (e.currentTarget));
 
   isResizing = true;
   currentResizeType = "row";
@@ -249,6 +332,10 @@ function handleResize(e) {
   e.preventDefault();
 
   if (currentResizeType === "column") {
+    const table = currentResizeTarget.closest(".data-table");
+    if (table && (e instanceof MouseEvent || e instanceof PointerEvent)) {
+      maybeAutoScrollForResize(e, table);
+    }
     const deltaX = e.clientX - startX;
     const newWidth = Math.max(50, startWidth + deltaX); // Minimum width of 50px
 
@@ -258,11 +345,11 @@ function handleResize(e) {
 
     // Prefer <colgroup> to apply widths without touching every cell (much faster).
     const columnIndex = currentResizeTarget.dataset.column;
-    const table = currentResizeTarget.closest(".data-table");
     if (table && columnIndex) {
       const col = table.querySelector(`colgroup col[data-column="${columnIndex}"]`);
       if (col && col instanceof HTMLElement) {
         col.style.width = newWidth + "px";
+        col.style.maxWidth = "none";
       }
     }
 
@@ -277,12 +364,19 @@ function handleResize(e) {
         table.style.setProperty("--pinned-column-2-width", newWidth + "px");
       }
     }
+
+    if (table && typeof window.updateTableWidthFromCols === "function") {
+      window.updateTableWidthFromCols(table);
+    }
   } else if (currentResizeType === "row") {
     const deltaY = e.clientY - startY;
     const newHeight = Math.max(25, startHeight + deltaY); // Minimum height of 25px
 
     currentResizeTarget.style.height = newHeight + "px";
     currentResizeTarget.style.minHeight = newHeight + "px";
+    if (typeof window.updateRowMultilineForRow === "function") {
+      window.updateRowMultilineForRow(currentResizeTarget, newHeight);
+    }
   }
 }
 
@@ -296,6 +390,7 @@ function endResize(e) {
   }
 
   isResizing = false;
+  releaseResizePointer();
   document.body.style.cursor = "";
 
   if (currentResizeTarget) {
@@ -349,6 +444,10 @@ function endResize(e) {
               renderSidebar: false,
             });
 
+            if (typeof window.updateRowMultilineForRow === "function") {
+              window.updateRowMultilineForRow(row, height);
+            }
+
             // Keep virtualization metrics (spacer heights) in sync after resizing.
             if (typeof window.refreshVirtualTable === "function" && tableWrapper) {
               window.refreshVirtualTable(tableWrapper);
@@ -370,6 +469,14 @@ function endResize(e) {
           2;
     if (didChange && typeof showSuccess !== "undefined") {
       showSuccess(`${resizeType} resized successfully`);
+    }
+
+    if (
+      currentResizeType === "column" &&
+      table &&
+      typeof window.scheduleCellOverflowIndicators === "function"
+    ) {
+      window.scheduleCellOverflowIndicators(table);
     }
   }
 
