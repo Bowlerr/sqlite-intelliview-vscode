@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.4.4] - 2026-01-17
+
+### Fixed
+
+- Quote table names in schema/ER diagram PRAGMA calls so names with dots load correctly
+
 ## [0.4.3] - 2026-01-17
 
 ### Added
