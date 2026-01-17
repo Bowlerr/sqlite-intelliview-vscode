@@ -191,7 +191,6 @@ function startColumnResize(e) {
   const header = table?.querySelector(`th[data-column="${columnIndex}"]`);
 
   if (header) {
-    captureResizePointer(e, handleEl);
     currentResizeTarget = /** @type {HTMLElement} */ (header);
     startWidth = header.offsetWidth;
 

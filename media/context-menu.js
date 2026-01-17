@@ -1716,6 +1716,7 @@ function showJsonViewerDialog(opts) {
 
   const close = () => {
     overlay.remove();
+    document.removeEventListener("keydown", handleEscape);
   };
 
   closeBtn.addEventListener("click", close);
