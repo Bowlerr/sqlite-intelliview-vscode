@@ -241,7 +241,8 @@ function handleGlobalKeyboard(e) {
 function refreshDatabaseView(options = {}) {
   const includeDatabaseInfo = options.includeDatabaseInfo !== false;
   const state = typeof getCurrentState === "function" ? getCurrentState() : {};
-  const key = typeof state.encryptionKey === "string" ? state.encryptionKey : "";
+  const key =
+    typeof state.encryptionKey === "string" ? state.encryptionKey : "";
 
   if (
     includeDatabaseInfo &&
@@ -273,7 +274,8 @@ function refreshDatabaseView(options = {}) {
 
 function reloadDatabaseConnection() {
   const state = typeof getCurrentState === "function" ? getCurrentState() : {};
-  const key = typeof state.encryptionKey === "string" ? state.encryptionKey : "";
+  const key =
+    typeof state.encryptionKey === "string" ? state.encryptionKey : "";
 
   if (window.vscode && typeof window.vscode.postMessage === "function") {
     window.vscode.postMessage({ type: "reloadDatabase", key });
@@ -545,8 +547,13 @@ function restoreFallbackReloadSnapshotOnce() {
   }
 
   const maxAgeMs = 10 * 60 * 1000;
-  const savedAt = snapshot && typeof snapshot.savedAt === "number" ? snapshot.savedAt : 0;
-  if (!snapshot || snapshot.version !== 1 || (savedAt && Date.now() - savedAt > maxAgeMs)) {
+  const savedAt =
+    snapshot && typeof snapshot.savedAt === "number" ? snapshot.savedAt : 0;
+  if (
+    !snapshot ||
+    snapshot.version !== 1 ||
+    (savedAt && Date.now() - savedAt > maxAgeMs)
+  ) {
     clearFallbackReloadSnapshot();
     return;
   }
@@ -556,7 +563,11 @@ function restoreFallbackReloadSnapshotOnce() {
     if (snapshot && snapshot.state && typeof snapshot.state === "object") {
       delete snapshot.state.encryptionKey;
     }
-    if (snapshot && snapshot.queryEditor && typeof snapshot.queryEditor === "object") {
+    if (
+      snapshot &&
+      snapshot.queryEditor &&
+      typeof snapshot.queryEditor === "object"
+    ) {
       delete snapshot.queryEditor.value;
     }
   } catch (_) {
@@ -718,7 +729,9 @@ function handleExtensionMessage(event) {
           const bytes =
             typeof message.bytes === "number" ? message.bytes : undefined;
           showSuccess(
-            bytes ? `Blob saved (${bytes.toLocaleString()} bytes)` : "Blob saved"
+            bytes
+              ? `Blob saved (${bytes.toLocaleString()} bytes)`
+              : "Blob saved"
           );
         }
       } else {
@@ -924,7 +937,10 @@ function handleDatabaseInfo(message) {
     let activeMainTab = "schema";
     try {
       const activeEl = document.querySelector(".tab.active");
-      const domTab = activeEl && activeEl instanceof HTMLElement ? activeEl.dataset.tab : null;
+      const domTab =
+        activeEl && activeEl instanceof HTMLElement
+          ? activeEl.dataset.tab
+          : null;
       if (domTab) {
         activeMainTab = domTab;
       } else if (typeof window.getCurrentState === "function") {
@@ -937,7 +953,10 @@ function handleDatabaseInfo(message) {
       // ignore
     }
 
-    if (typeof window.getCurrentState === "function" && typeof window.updateState === "function") {
+    if (
+      typeof window.getCurrentState === "function" &&
+      typeof window.updateState === "function"
+    ) {
       const s = window.getCurrentState();
       if (s && s.activeTab !== activeMainTab) {
         window.updateState(
@@ -956,7 +975,9 @@ function handleDatabaseInfo(message) {
       typeof window.openTableTab === "function"
     ) {
       const state = window.getCurrentState();
-      const openTables = Array.isArray(state.openTables) ? state.openTables : [];
+      const openTables = Array.isArray(state.openTables)
+        ? state.openTables
+        : [];
       if (openTables.length === 0) {
         const first =
           typeof message.tables[0] === "string"
@@ -993,8 +1014,14 @@ function handleDatabaseInfo(message) {
       }
 
       // Only real tables have schema.
-      const isResultTab = typeof selected === "string" && selected.startsWith("Results (");
-      if (!isResultTab && selected && window.vscode && typeof window.vscode.postMessage === "function") {
+      const isResultTab =
+        typeof selected === "string" && selected.startsWith("Results (");
+      if (
+        !isResultTab &&
+        selected &&
+        window.vscode &&
+        typeof window.vscode.postMessage === "function"
+      ) {
         if (activeMainTab === "schema") {
           window.vscode.postMessage({
             type: "getTableSchema",
@@ -1204,7 +1231,9 @@ function handleTableData(message) {
 
     // Only render if this table is currently active; otherwise ignore the UI update.
     const state =
-      typeof window.getCurrentState === "function" ? window.getCurrentState() : {};
+      typeof window.getCurrentState === "function"
+        ? window.getCurrentState()
+        : {};
     const active = state.activeTable || state.selectedTable || null;
     if (active && message.tableName && message.tableName !== active) {
       return;
@@ -1214,7 +1243,10 @@ function handleTableData(message) {
       page: message.page,
       pageSize: message.pageSize,
       totalRows: message.totalRows,
-      totalRowsKnown: message.totalRowsKnown !== false && message.totalRows !== null && message.totalRows !== undefined,
+      totalRowsKnown:
+        message.totalRowsKnown !== false &&
+        message.totalRows !== null &&
+        message.totalRows !== undefined,
       backendPaginated: true,
       foreignKeys: message.foreignKeys,
     });
@@ -1241,7 +1273,10 @@ function handleTableRowCount(message) {
   wrapper.setAttribute("data-total-rows", String(totalRows));
   wrapper.setAttribute("data-total-rows-known", "true");
 
-  const pageSize = parseInt(wrapper.getAttribute("data-page-size") || "100", 10);
+  const pageSize = parseInt(
+    wrapper.getAttribute("data-page-size") || "100",
+    10
+  );
   const currentPage = parseInt(
     wrapper.getAttribute("data-current-page") || "1",
     10
@@ -1255,17 +1290,24 @@ function handleTableRowCount(message) {
 
   const startIndex = (currentPage - 1) * pageSize;
   const pageRows = parseInt(wrapper.getAttribute("data-page-rows") || "0", 10);
-  const renderedRows = wrapper.querySelectorAll("tbody tr.resizable-row").length;
+  const renderedRows = wrapper.querySelectorAll(
+    "tbody tr.resizable-row"
+  ).length;
   const endIndex = startIndex + (pageRows || renderedRows);
   const visibleRows = wrapper.querySelector(".visible-rows");
   if (visibleRows) {
-    visibleRows.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalRows.toLocaleString()} rows`;
+    visibleRows.textContent = `Showing ${
+      startIndex + 1
+    }-${endIndex} of ${totalRows.toLocaleString()} rows`;
   }
 
   const paginationContainer = wrapper.querySelector(".table-pagination");
   if (paginationContainer) {
     const tableId = wrapper.getAttribute("data-table-id") || "unknown";
-    if (totalPages > 1 && typeof window.createPaginationControls === "function") {
+    if (
+      totalPages > 1 &&
+      typeof window.createPaginationControls === "function"
+    ) {
       paginationContainer.innerHTML = window.createPaginationControls(
         currentPage,
         totalPages,
@@ -1451,9 +1493,12 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
 
     const table = tableWrapper.querySelector(".data-table");
     if (table && dir && columnName) {
-      /** @type {any} */ const vs = /** @type {any} */ (tableWrapper).__virtualTableState;
+      /** @type {any} */ const vs = /** @type {any} */ (tableWrapper)
+        .__virtualTableState;
       if (vs && vs.enabled === true) {
-        const idx = Array.isArray(vs.columns) ? vs.columns.indexOf(columnName) : -1;
+        const idx = Array.isArray(vs.columns)
+          ? vs.columns.indexOf(columnName)
+          : -1;
         if (idx >= 0) {
           vs.sort = { columnName, columnIndex: idx, dir };
           table.querySelectorAll("th").forEach((th) => {
@@ -1476,7 +1521,9 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
           }
         }
       } else {
-        const header = table.querySelector(`th[data-column-name="${columnName}"]`);
+        const header = table.querySelector(
+          `th[data-column-name="${columnName}"]`
+        );
         const colIndex = header
           ? parseInt(header.getAttribute("data-column") || "-1", 10)
           : -1;
@@ -1578,7 +1625,11 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
   }
 
   // Restore column widths
-  if (viewState && viewState.columnWidths && typeof viewState.columnWidths === "object") {
+  if (
+    viewState &&
+    viewState.columnWidths &&
+    typeof viewState.columnWidths === "object"
+  ) {
     const widths = viewState.columnWidths;
     const table = tableWrapper.querySelector(".data-table");
     const headers = tableWrapper.querySelectorAll("th[data-column-name]");
@@ -1597,9 +1648,12 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
       if (table) {
         const colIndex = th.getAttribute("data-column");
         if (colIndex) {
-          const col = table.querySelector(`colgroup col[data-column="${colIndex}"]`);
+          const col = table.querySelector(
+            `colgroup col[data-column="${colIndex}"]`
+          );
           if (col && col instanceof HTMLElement) {
             col.style.width = `${w}px`;
+            col.style.maxWidth = "none";
           }
         }
       }
@@ -1607,10 +1661,17 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
     if (table && typeof window.updatePinnedColumnPositions === "function") {
       window.updatePinnedColumnPositions(table);
     }
+    if (table && typeof window.updateTableWidthFromCols === "function") {
+      window.updateTableWidthFromCols(table);
+    }
   }
 
   // Restore row heights (only for rows that were explicitly resized)
-  if (viewState && viewState.rowHeights && typeof viewState.rowHeights === "object") {
+  if (
+    viewState &&
+    viewState.rowHeights &&
+    typeof viewState.rowHeights === "object"
+  ) {
     const heights = viewState.rowHeights;
     // Iterate rendered rows (fast) instead of iterating possibly-huge persisted maps.
     tableWrapper.querySelectorAll("tr[data-row-index]").forEach((row) => {
@@ -1628,6 +1689,9 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
       const h = Math.max(25, Math.floor(height));
       row.style.height = `${h}px`;
       row.style.minHeight = `${h}px`;
+      if (typeof window.updateRowMultilineForRow === "function") {
+        window.updateRowMultilineForRow(row, h);
+      }
     });
 
     // If virtualized, spacer math depends on row heights; refresh once.
@@ -1640,10 +1704,7 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
   const searchInput = tableWrapper.querySelector(".search-input");
   if (searchInput && typeof viewState.searchTerm === "string") {
     searchInput.value = viewState.searchTerm;
-    if (
-      viewState.searchTerm &&
-      typeof window.filterTable === "function"
-    ) {
+    if (viewState.searchTerm && typeof window.filterTable === "function") {
       window.filterTable(tableWrapper, viewState.searchTerm);
     }
   }
@@ -1674,8 +1735,14 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
   scrollContainer.setAttribute("data-viewstate-restoring-scroll", "true");
 
   const applyScroll = (attempt = 0) => {
-    const maxTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
-    const maxLeft = Math.max(0, scrollContainer.scrollWidth - scrollContainer.clientWidth);
+    const maxTop = Math.max(
+      0,
+      scrollContainer.scrollHeight - scrollContainer.clientHeight
+    );
+    const maxLeft = Math.max(
+      0,
+      scrollContainer.scrollWidth - scrollContainer.clientWidth
+    );
     const desiredTop = Math.max(0, Math.min(maxTop, targetTop));
     const desiredLeft = Math.max(0, Math.min(maxLeft, targetLeft));
     scrollContainer.scrollTop = desiredTop;
@@ -1686,7 +1753,9 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
       setTimeout(() => applyScroll(attempt + 1), 50);
     } else {
       scrollContainer.removeAttribute("data-viewstate-restoring-scroll");
-      const prev = scrollContainer.getAttribute("data-viewstate-prev-scroll-behavior");
+      const prev = scrollContainer.getAttribute(
+        "data-viewstate-prev-scroll-behavior"
+      );
       if (prev !== null) {
         if (prev) {
           scrollContainer.style.scrollBehavior = prev;
@@ -2011,7 +2080,8 @@ function displayQueryResults(data, columns, query = null) {
       : [];
     // Only add if not already present
     if (!openTables.find((t) => t.key === tabKey)) {
-      const initialPageSize = Math.min(Array.isArray(data) ? data.length : 0, 100) || 100;
+      const initialPageSize =
+        Math.min(Array.isArray(data) ? data.length : 0, 100) || 100;
       // Also store the query in the tab object for easy access
       openTables.push({
         key: tabKey,
@@ -2261,12 +2331,22 @@ function initializeTableEvents(tableWrapper) {
     if (typeof addResizeObserver === "function") {
       addResizeObserver(tableWrapper);
     }
+    const tableForIndicators = tableWrapper.querySelector(".data-table");
+    if (
+      tableForIndicators &&
+      typeof window.updateRowMultilineForTable === "function"
+    ) {
+      window.updateRowMultilineForTable(tableForIndicators);
+    }
     const searchInput = tableWrapper.querySelector(".search-input");
     const clearBtn = tableWrapper.querySelector(".search-clear");
     const controlsBar = tableWrapper.querySelector(".table-controls");
     if (searchInput) {
       // Expand search and hide other controls while focused.
-      if (controlsBar && controlsBar.getAttribute("data-search-focus") !== "true") {
+      if (
+        controlsBar &&
+        controlsBar.getAttribute("data-search-focus") !== "true"
+      ) {
         controlsBar.setAttribute("data-search-focus", "true");
         searchInput.addEventListener("focus", () => {
           controlsBar.classList.add("search-is-focused");
@@ -2325,7 +2405,9 @@ function initializeTableEvents(tableWrapper) {
     }
 
     // Scroll position persistence (throttled)
-    const scrollContainer = tableWrapper.querySelector(".table-scroll-container");
+    const scrollContainer = tableWrapper.querySelector(
+      ".table-scroll-container"
+    );
     if (
       scrollContainer &&
       scrollContainer.getAttribute("data-viewstate-scroll") !== "true"
@@ -2353,7 +2435,11 @@ function initializeTableEvents(tableWrapper) {
               scrollTop: scrollContainer.scrollTop,
               scrollLeft: scrollContainer.scrollLeft,
             },
-            { renderTabs: false, renderSidebar: false, persistState: "debounced" }
+            {
+              renderTabs: false,
+              renderSidebar: false,
+              persistState: "debounced",
+            }
           );
         }, 400);
       });
@@ -2430,8 +2516,7 @@ function initializeTableEvents(tableWrapper) {
           const pageInput =
             (container && container.querySelector(".page-input")) ||
             wrapper.querySelector(".page-input");
-          const raw =
-            pageInput && "value" in pageInput ? pageInput.value : "";
+          const raw = pageInput && "value" in pageInput ? pageInput.value : "";
           const val = parseInt(String(raw), 10);
           if (!isNaN(val) && typeof window.updateTablePage === "function") {
             window.updateTablePage(wrapper, val);
@@ -2528,7 +2613,8 @@ function initializeTableEvents(tableWrapper) {
 
     tableWrapper.addEventListener("keydown", (e) => {
       const keyEvent = /** @type {KeyboardEvent} */ (e);
-      const target = keyEvent.target instanceof HTMLElement ? keyEvent.target : null;
+      const target =
+        keyEvent.target instanceof HTMLElement ? keyEvent.target : null;
       if (!target) {
         return;
       }
@@ -2567,7 +2653,8 @@ function initializeTableEvents(tableWrapper) {
 
     tableWrapper.addEventListener("keydown", (e) => {
       const keyEvent = /** @type {KeyboardEvent} */ (e);
-      const target = keyEvent.target instanceof HTMLElement ? keyEvent.target : null;
+      const target =
+        keyEvent.target instanceof HTMLElement ? keyEvent.target : null;
       if (!target) {
         return;
       }
@@ -3136,19 +3223,24 @@ function handleTableDataDelta({
 
   // Virtualized tables can't be patched reliably by mutating the DOM because most rows aren't rendered.
   // Instead update the in-memory pageData and trigger a virtual refresh.
-  /** @type {any} */ const vs = /** @type {any} */ (wrapper).__virtualTableState;
+  /** @type {any} */ const vs = /** @type {any} */ (wrapper)
+    .__virtualTableState;
   if (vs && vs.enabled === true && Array.isArray(vs.pageData)) {
     const pageStart =
       parseInt(wrapper.getAttribute("data-start-index") || "0", 10) ||
       (typeof vs.startIndex === "number" ? vs.startIndex : 0);
-    const pageSize = parseInt(wrapper.getAttribute("data-page-size") || "100", 10) || 100;
+    const pageSize =
+      parseInt(wrapper.getAttribute("data-page-size") || "100", 10) || 100;
 
     const toLocal = (globalRowIndex) => globalRowIndex - pageStart;
 
     // Deletes are indices in the OLD page; apply from bottom to top.
     const deleteLocals = deletes
       .map((rowIndex) => toLocal(rowIndex))
-      .filter((local) => Number.isFinite(local) && local >= 0 && local < vs.pageData.length)
+      .filter(
+        (local) =>
+          Number.isFinite(local) && local >= 0 && local < vs.pageData.length
+      )
       .sort((a, b) => b - a);
     deleteLocals.forEach((local) => {
       vs.pageData.splice(local, 1);
@@ -3193,16 +3285,19 @@ function handleTableDataDelta({
     }
 
     // Update the base "Showing …" label for the unfiltered state.
-    const currentPage = parseInt(wrapper.getAttribute("data-current-page") || "1", 10) || 1;
+    const currentPage =
+      parseInt(wrapper.getAttribute("data-current-page") || "1", 10) || 1;
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + vs.pageData.length;
     const totalRowsText =
       totalCount !== null
         ? totalCount.toLocaleString()
-        : (wrapper.getAttribute("data-total-rows") || "…");
+        : wrapper.getAttribute("data-total-rows") || "…";
     const visibleRows = wrapper.querySelector(".visible-rows");
     if (visibleRows) {
-      const nextText = `Showing ${startIndex + 1}-${endIndex} of ${totalRowsText} rows`;
+      const nextText = `Showing ${
+        startIndex + 1
+      }-${endIndex} of ${totalRowsText} rows`;
       visibleRows.textContent = nextText;
       vs.originalVisibleLabelText = nextText;
     }

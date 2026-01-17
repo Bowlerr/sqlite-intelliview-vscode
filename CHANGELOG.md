@@ -1,5 +1,19 @@
 # Change Log
 
+## [Unreleased]
+
+### Added
+
+- 🔍 **Cell viewer dialog**: "Expand Cell" in the context menu opens a full-value viewer with copy for long text
+- ↕ **Row expand/collapse**: Context menu action toggles multiline rows and persists row height per tab
+
+### Changed
+
+- 📐 **Table layout defaults**: Tables now derive width from default column sizes with multiline cell previews and scroll
+- 🖱️ **Resizing UX**: Column/row resizing uses pointer events, auto-scroll near edges, and updates table width
+- 🧰 **View state restores**: Column widths and row heights now refresh table width, multiline styling, and overflow indicators on load
+
+
 ## [0.4.2] - 2025-12-16
 
 ### Changed
