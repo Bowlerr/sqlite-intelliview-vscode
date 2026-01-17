@@ -871,13 +871,13 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     try {
                         this.debugLog('ERDiagram', `Checking foreign keys for table ${index + 1}/${tables.length}: ${table.name}`);
                         
-                        const foreignKeys = await dbService.executeQuery(`PRAGMA foreign_key_list(${table.name})`);
-                        this.debugLog('ERDiagram', `Foreign keys result for ${table.name}:`, foreignKeys);
+                        const foreignKeys = await dbService.getForeignKeys(table.name);
+                        this.debugLog('ERDiagram', `Foreign keys for ${table.name}:`, foreignKeys);
                         
-                        const fkList = foreignKeys.values.map((fk: any) => ({
-                            column: fk[3], // from column
-                            referencedTable: fk[2], // to table
-                            referencedColumn: fk[4] // to column
+                        const fkList = foreignKeys.map((fk) => ({
+                            column: fk.column,
+                            referencedTable: fk.referencedTable,
+                            referencedColumn: fk.referencedColumn
                         }));
                         
                         if (fkList.length > 0) {

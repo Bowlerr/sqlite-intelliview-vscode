@@ -78,6 +78,10 @@ export class DatabaseService {
         }
     }
 
+    private quoteIdentifier(identifier: string): string {
+        return `"${identifier.replace(/"/g, '""')}"`;
+    }
+
     async initialize(): Promise<void> {
         if (!this.SQL) {
             this.SQL = await initSqlJs({
@@ -271,7 +275,7 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        const stmt = this.db.prepare(`PRAGMA table_info(${tableName})`);
+        const stmt = this.db.prepare(`PRAGMA table_info(${this.quoteIdentifier(tableName)})`);
         const columns: ColumnInfo[] = [];
         
         while (stmt.step()) {
@@ -623,7 +627,7 @@ export class DatabaseService {
 
         // Use executeQuery instead of direct prepared statements to ensure
         // compatibility with SQLCipher encrypted databases
-        const query = `PRAGMA table_info(${tableName})`;
+        const query = `PRAGMA table_info(${this.quoteIdentifier(tableName)})`;
         const result = await this.executeQuery(query);
         
         return result;
@@ -634,7 +638,7 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        const stmt = this.db.prepare(`PRAGMA foreign_key_list(${tableName})`);
+        const stmt = this.db.prepare(`PRAGMA foreign_key_list(${this.quoteIdentifier(tableName)})`);
         const foreignKeys: ForeignKeyInfo[] = [];
         
         while (stmt.step()) {
