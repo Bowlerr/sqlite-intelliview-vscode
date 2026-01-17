@@ -199,7 +199,7 @@
     "vendor": "node vendor-libs.js",
     "prepackage": "npm run vendor && npm run compile",
     "package": "vsce package",
-    "publish": "vsce publish",
+    "release": "vsce publish",
     "lint": "eslint src --fix",
     "check-types": "tsc --noEmit",
     "pretest": "npm run compile && npm run lint",
