@@ -322,7 +322,8 @@ function showContextMenuAt(x, y) {
       const hasOverflow =
         cellContent &&
         cellContent instanceof HTMLElement &&
-        cellContent.scrollWidth > cellContent.clientWidth + 2;
+        (cellContent.scrollWidth > cellContent.clientWidth + 2 ||
+          cellContent.scrollHeight > cellContent.clientHeight + 2);
       const shouldShow =
         raw.truncated ||
         value.length > 80 ||
@@ -597,9 +598,6 @@ function toggleRowMultiline() {
     if (tableWrapper && typeof window.refreshVirtualTable === "function") {
       window.refreshVirtualTable(tableWrapper);
     }
-    if (table && typeof window.scheduleCellOverflowIndicators === "function") {
-      window.scheduleCellOverflowIndicators(table);
-    }
     return;
   }
 
@@ -626,9 +624,6 @@ function toggleRowMultiline() {
 
   if (tableWrapper && typeof window.refreshVirtualTable === "function") {
     window.refreshVirtualTable(tableWrapper);
-  }
-  if (table && typeof window.scheduleCellOverflowIndicators === "function") {
-    window.scheduleCellOverflowIndicators(table);
   }
 }
 
@@ -705,7 +700,8 @@ function copyColumnData() {
   );
 
   const tableWrapper = table.closest(".enhanced-table-wrapper");
-  /** @type {any} */ const vs = tableWrapper && tableWrapper.__virtualTableState;
+  /** @type {any} */ const vs =
+    tableWrapper && tableWrapper.__virtualTableState;
 
   // Get column header
   const header = table.querySelector(`thead th:nth-child(${columnIndex + 1})`);
@@ -813,7 +809,8 @@ function copyTableDataAsJSON() {
   }
 
   const tableWrapper = table.closest(".enhanced-table-wrapper");
-  /** @type {any} */ const vs = tableWrapper && tableWrapper.__virtualTableState;
+  /** @type {any} */ const vs =
+    tableWrapper && tableWrapper.__virtualTableState;
 
   // Get column headers
   const headers = table.querySelectorAll("thead th");
@@ -913,12 +910,16 @@ function getCellUnderlyingValue(cell) {
     10
   );
   const rowEl = cell.closest("tr");
-  const localIndex = parseInt(rowEl?.getAttribute("data-local-index") || "", 10);
+  const localIndex = parseInt(
+    rowEl?.getAttribute("data-local-index") || "",
+    10
+  );
   if (!Number.isFinite(colIndex) || !Number.isFinite(localIndex)) {
     return null;
   }
 
-  /** @type {any} */ const vs = /** @type {any} */ (wrapper).__virtualTableState;
+  /** @type {any} */ const vs = /** @type {any} */ (wrapper)
+    .__virtualTableState;
   if (vs && vs.enabled === true && Array.isArray(vs.pageData)) {
     const row = vs.pageData[localIndex];
     if (Array.isArray(row) && colIndex >= 0 && colIndex < row.length) {
@@ -926,9 +927,13 @@ function getCellUnderlyingValue(cell) {
     }
   }
 
-  const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+  const tableId =
+    wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
   /** @type {any} */ const stash = /** @type {any} */ (window).__tableDataStash;
-  const payload = tableId && stash && typeof stash.get === "function" ? stash.get(tableId) : null;
+  const payload =
+    tableId && stash && typeof stash.get === "function"
+      ? stash.get(tableId)
+      : null;
   if (payload && Array.isArray(payload.pageData)) {
     const row = payload.pageData[localIndex];
     if (Array.isArray(row) && colIndex >= 0 && colIndex < row.length) {
@@ -948,7 +953,8 @@ function getCellRawValue(cell) {
   const cellContent = cell.querySelector(".cell-content");
   if (cellContent) {
     const original = cellContent.getAttribute("data-original-value") || "";
-    const truncated = cellContent.getAttribute("data-original-truncated") === "true";
+    const truncated =
+      cellContent.getAttribute("data-original-truncated") === "true";
     const isNull =
       cellContent.querySelector("em") &&
       (cellContent.textContent || "").trim() === "NULL";
@@ -1023,7 +1029,11 @@ function getJsonInfoForCell(cell) {
     if (parsed === null || typeof parsed !== "object") {
       return null;
     }
-    return { parsed, formatted: JSON.stringify(parsed, null, 2), truncated: raw.truncated };
+    return {
+      parsed,
+      formatted: JSON.stringify(parsed, null, 2),
+      truncated: raw.truncated,
+    };
   } catch {
     return null;
   }
@@ -1323,7 +1333,9 @@ function createHexDump(bytes, maxBytes) {
 
 function downloadBytes(bytes, filename, mime) {
   try {
-    const blob = new Blob([bytes], { type: mime || "application/octet-stream" });
+    const blob = new Blob([bytes], {
+      type: mime || "application/octet-stream",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1344,7 +1356,11 @@ function requestDownloadBytes(bytes, filename, mime) {
   const maxBytes = 20 * 1024 * 1024; // 20MB (keeps message passing reasonable)
   if (bytes && bytes.length > maxBytes) {
     if (typeof showError === "function") {
-      showError(`Blob too large to download from the viewer (${formatBytes(bytes.length)}).`);
+      showError(
+        `Blob too large to download from the viewer (${formatBytes(
+          bytes.length
+        )}).`
+      );
     }
     return;
   }
@@ -1481,7 +1497,9 @@ function showBlobViewerDialog(opts) {
     img.className = "blob-viewer-image";
     img.alt = "Image blob preview";
     try {
-      objectUrl = URL.createObjectURL(new Blob([opts.bytes], { type: opts.mime }));
+      objectUrl = URL.createObjectURL(
+        new Blob([opts.bytes], { type: opts.mime })
+      );
       img.src = objectUrl;
     } catch (_) {
       // ignore
@@ -1567,7 +1585,10 @@ function showBlobViewerDialog(opts) {
       }
       return;
     }
-    copyToClipboard(bytesToBase64(opts.bytes), `Base64 copied (${opts.sizeText})`);
+    copyToClipboard(
+      bytesToBase64(opts.bytes),
+      `Base64 copied (${opts.sizeText})`
+    );
   });
   copyHexBtn.addEventListener("click", () => {
     const maxBytes = 1 * 1024 * 1024;
@@ -1615,7 +1636,14 @@ function formatJsonWithSyntaxHighlighting(jsonString) {
     /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(?:\\s*:)?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|[{}\[\],:])/g;
 
   return escaped.replace(tokenRegex, (match) => {
-    if (match === "{" || match === "}" || match === "[" || match === "]" || match === "," || match === ":") {
+    if (
+      match === "{" ||
+      match === "}" ||
+      match === "[" ||
+      match === "]" ||
+      match === "," ||
+      match === ":"
+    ) {
       return `<span class="json-punctuation">${match}</span>`;
     }
     if (match === "true" || match === "false") {
@@ -1922,7 +1950,8 @@ function getContextMenuActions(cell) {
   const table = cell.closest(".data-table");
   if (table) {
     const tableWrapper = table.closest(".enhanced-table-wrapper");
-    /** @type {any} */ const vs = tableWrapper && tableWrapper.__virtualTableState;
+    /** @type {any} */ const vs =
+      tableWrapper && tableWrapper.__virtualTableState;
     const rowCount =
       vs && vs.enabled === true
         ? (vs.order || []).length
@@ -2619,10 +2648,13 @@ function highlightForeignKeyTarget(tableWrapper) {
 
   const foreignKeyInfo = window.pendingForeignKeyHighlight;
   const wrapper =
-    tableWrapper && tableWrapper.classList && tableWrapper.classList.contains("enhanced-table-wrapper")
+    tableWrapper &&
+    tableWrapper.classList &&
+    tableWrapper.classList.contains("enhanced-table-wrapper")
       ? tableWrapper
       : tableWrapper && tableWrapper.querySelector
-      ? tableWrapper.querySelector(".enhanced-table-wrapper") || tableWrapper.closest(".enhanced-table-wrapper")
+      ? tableWrapper.querySelector(".enhanced-table-wrapper") ||
+        tableWrapper.closest(".enhanced-table-wrapper")
       : null;
 
   const table = (wrapper || tableWrapper).querySelector(".data-table");
@@ -2668,7 +2700,11 @@ function highlightForeignKeyTarget(tableWrapper) {
 
     if (pos !== -1) {
       const scrollContainer = wrapper.querySelector(".table-scroll-container");
-      if (scrollContainer && Array.isArray(vs.prefix) && vs.prefix[pos] !== undefined) {
+      if (
+        scrollContainer &&
+        Array.isArray(vs.prefix) &&
+        vs.prefix[pos] !== undefined
+      ) {
         scrollContainer.scrollTop = Math.max(0, Math.floor(vs.prefix[pos]));
         if (typeof window.refreshVirtualTable === "function") {
           window.refreshVirtualTable(wrapper);

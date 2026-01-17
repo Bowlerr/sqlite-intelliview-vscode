@@ -286,33 +286,6 @@ function updateRowMultilineForTable(table) {
   });
 }
 
-function updateCellOverflowIndicators(table) {
-  if (!table) {
-    return;
-  }
-  const cells = table.querySelectorAll("td.data-cell");
-  cells.forEach((cell) => {
-    if (!(cell instanceof HTMLElement)) {
-      return;
-    }
-    cell.classList.remove("cell-overflow");
-  });
-}
-
-function scheduleCellOverflowIndicators(table) {
-  if (!table || typeof requestAnimationFrame !== "function") {
-    return;
-  }
-  /** @type {any} */ const tableAny = table;
-  if (tableAny.__overflowIndicatorRaf) {
-    return;
-  }
-  tableAny.__overflowIndicatorRaf = requestAnimationFrame(() => {
-    tableAny.__overflowIndicatorRaf = 0;
-    updateCellOverflowIndicators(table);
-  });
-}
-
 function shouldVirtualizeTable(pageRowCount, columnCount, tableName, options) {
   if (
     !Array.isArray(options?.virtualizeAllowList) &&
@@ -531,9 +504,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         </div>
       </div>
       <div class="table-scroll-container">
-        <table class="data-table resizable-table" id="${tableId}" role="table" aria-label="Database table data" style="width: ${
-    Math.max(0, DEFAULT_COLUMN_WIDTH * columns.length)
-  }px;">
+        <table class="data-table resizable-table" id="${tableId}" role="table" aria-label="Database table data" style="width: ${Math.max(
+    0,
+    DEFAULT_COLUMN_WIDTH * columns.length
+  )}px;">
           <colgroup>
             ${columns
               .map(
@@ -1328,7 +1302,6 @@ function virtualRender(vs, { force }) {
   syncPinnedColumnsForVirtual(vs);
   syncColumnWidthsForVirtual(vs);
   syncRowHeightsForVirtual(vs);
-  scheduleCellOverflowIndicators(vs.table);
 }
 
 function findRowAtOffset(prefix, offset) {
@@ -2301,15 +2274,12 @@ if (typeof window !== "undefined") {
   /** @type {any} */ (window).refreshVirtualTable = refreshVirtualTable;
   /** @type {any} */ (window).updateTableWidthFromCols =
     updateTableWidthFromCols;
-  /** @type {any} */ (window).scheduleCellOverflowIndicators =
-    scheduleCellOverflowIndicators;
   /** @type {any} */ (window).updateRowMultilineForRow =
     updateRowMultilineForRow;
   /** @type {any} */ (window).updateRowMultilineForTable =
     updateRowMultilineForTable;
   /** @type {any} */ (window).TABLE_ROW_HEIGHT_DEFAULT = DEFAULT_ROW_HEIGHT;
-  /** @type {any} */ (window).TABLE_ROW_HEIGHT_MULTILINE =
-    MULTILINE_ROW_HEIGHT;
+  /** @type {any} */ (window).TABLE_ROW_HEIGHT_MULTILINE = MULTILINE_ROW_HEIGHT;
   /** @type {any} */ (window).TABLE_CELL_LINE_HEIGHT = CELL_LINE_HEIGHT;
   /** @type {any} */ (window).TABLE_CELL_VERTICAL_PADDING =
     CELL_VERTICAL_PADDING;

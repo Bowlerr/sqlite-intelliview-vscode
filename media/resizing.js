@@ -346,7 +346,9 @@ function handleResize(e) {
     // Prefer <colgroup> to apply widths without touching every cell (much faster).
     const columnIndex = currentResizeTarget.dataset.column;
     if (table && columnIndex) {
-      const col = table.querySelector(`colgroup col[data-column="${columnIndex}"]`);
+      const col = table.querySelector(
+        `colgroup col[data-column="${columnIndex}"]`
+      );
       if (col && col instanceof HTMLElement) {
         col.style.width = newWidth + "px";
         col.style.maxWidth = "none";
@@ -404,7 +406,9 @@ function endResize(e) {
 
     // Persist sizing to per-tab viewState (best-effort)
     try {
-      const tableWrapper = currentResizeTarget.closest(".enhanced-table-wrapper");
+      const tableWrapper = currentResizeTarget.closest(
+        ".enhanced-table-wrapper"
+      );
       const tabKey =
         tableWrapper &&
         (tableWrapper.getAttribute("data-table") || tableWrapper.dataset.table);
@@ -449,7 +453,10 @@ function endResize(e) {
             }
 
             // Keep virtualization metrics (spacer heights) in sync after resizing.
-            if (typeof window.refreshVirtualTable === "function" && tableWrapper) {
+            if (
+              typeof window.refreshVirtualTable === "function" &&
+              tableWrapper
+            ) {
               window.refreshVirtualTable(tableWrapper);
             }
           }
@@ -463,20 +470,14 @@ function endResize(e) {
     const resizeType = currentResizeType === "column" ? "Column" : "Row";
     const didChange =
       currentResizeType === "column"
-        ? Math.abs((currentResizeTarget.offsetWidth || 0) - (startWidth || 0)) >=
-          2
-        : Math.abs((currentResizeTarget.offsetHeight || 0) - (startHeight || 0)) >=
-          2;
+        ? Math.abs(
+            (currentResizeTarget.offsetWidth || 0) - (startWidth || 0)
+          ) >= 2
+        : Math.abs(
+            (currentResizeTarget.offsetHeight || 0) - (startHeight || 0)
+          ) >= 2;
     if (didChange && typeof showSuccess !== "undefined") {
       showSuccess(`${resizeType} resized successfully`);
-    }
-
-    if (
-      currentResizeType === "column" &&
-      table &&
-      typeof window.scheduleCellOverflowIndicators === "function"
-    ) {
-      window.scheduleCellOverflowIndicators(table);
     }
   }
 
