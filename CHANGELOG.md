@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.4.5] - 2026-01-28
+
+### Fixed
+
+- Only show per-cell scrollbars when content overflows (removes always-on black boxes)
+
 ## [0.4.4] - 2026-01-17
 
 ### Fixed
