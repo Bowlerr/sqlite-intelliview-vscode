@@ -111,7 +111,7 @@
   line-height: var(--cell-line-height, 18px);
   max-height: calc(var(--cell-visible-lines, 3) * var(--cell-line-height, 18px));
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
   scrollbar-width: thin;
