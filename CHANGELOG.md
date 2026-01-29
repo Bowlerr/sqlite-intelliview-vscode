@@ -1,5 +1,15 @@
 # Change Log
 
+## [0.4.6] - 2026-01-29
+
+### Added
+
+- Warn when WAL files are detected but `sqlite3` is missing, to explain stale/empty data risk
+
+### Changed
+
+- SQLCipher decrypt/re-encrypt now uses cross-platform stdin execution instead of shell pipes
+
 ## [0.4.5] - 2026-01-28
 
 ### Fixed
