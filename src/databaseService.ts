@@ -1,11 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import * as vscode from 'vscode';
+import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { markInternalUpdate } from './databaseWatcher';
 import { hasWalFiles, checkpointWalWithRetry, getWalStatus } from './walUtils';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // For now, we'll use sql.js which works in both Node.js and browser environments
 // Later we can add native sqlite3 support for better performance
@@ -116,11 +118,34 @@ export class DatabaseService {
                 this.debugLog('WAL', `WAL file size: ${walStatus.walSize} bytes, SHM file size: ${walStatus.shmSize} bytes`);
                 
                 try {
-                    const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey);
-                    if (checkpointSuccess) {
-                        this.debugLog('WAL', 'WAL checkpoint completed successfully');
+                    if (!encryptionKey) {
+                        let sqlite3Available = true;
+                        try {
+                            await execFileAsync('sqlite3', ['-version']);
+                        } catch {
+                            sqlite3Available = false;
+                        }
+
+                        if (!sqlite3Available) {
+                            vscode.window.showWarningMessage(
+                                'SQLite IntelliView: WAL files detected, but sqlite3 is not available on PATH. Table data may appear empty or stale. Install sqlite3 and reopen the database.'
+                            );
+                            this.debugWarn('WAL', 'sqlite3 not found on PATH; skipping WAL checkpoint');
+                        } else {
+                            const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey);
+                            if (checkpointSuccess) {
+                                this.debugLog('WAL', 'WAL checkpoint completed successfully');
+                            } else {
+                                this.debugWarn('WAL', 'Could not checkpoint WAL after retries. Continuing with potentially stale data.');
+                            }
+                        }
                     } else {
-                        this.debugWarn('WAL', 'Could not checkpoint WAL after retries. Continuing with potentially stale data.');
+                        const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey);
+                        if (checkpointSuccess) {
+                            this.debugLog('WAL', 'WAL checkpoint completed successfully');
+                        } else {
+                            this.debugWarn('WAL', 'Could not checkpoint WAL after retries. Continuing with potentially stale data.');
+                        }
                     }
                 } catch (error) {
                     this.debugWarn('WAL', 'Could not checkpoint WAL:', error);
@@ -177,12 +202,7 @@ export class DatabaseService {
 
     private async decryptDatabase(databasePath: string, encryptionKey: string): Promise<string> {
         try {
-            // Check if sqlcipher is available
-            try {
-                await execAsync('which sqlcipher');
-            } catch {
-                throw new Error('SQLCipher not found. Please install SQLCipher to decrypt encrypted databases.');
-            }
+            await this.ensureSqlCipherAvailable();
 
             // Create a temporary file for the decrypted database
             const tempDir = require('os').tmpdir();
@@ -192,13 +212,17 @@ export class DatabaseService {
             // Escape the encryption key to handle special characters
             const escapedKey = encryptionKey.replace(/'/g, "''");
 
-            // Use sqlcipher to decrypt the database to a temporary file
-            // SQLCipher proper decryption using the standard approach
-            const decryptCommand = `echo "PRAGMA key = '${escapedKey}'; ATTACH DATABASE '${this.tempDecryptedPath}' AS plaintext KEY ''; SELECT sqlcipher_export('plaintext'); DETACH DATABASE plaintext;" | sqlcipher "${databasePath}"`;
+            const escapedTempPath = this.tempDecryptedPath.replace(/'/g, "''");
+            const sqlCommands = [
+                `PRAGMA key = '${escapedKey}';`,
+                `ATTACH DATABASE '${escapedTempPath}' AS plaintext KEY '';`,
+                `SELECT sqlcipher_export('plaintext');`,
+                `DETACH DATABASE plaintext;`,
+                `.quit`
+            ].join('\n') + '\n';
 
             this.debugLog('Decrypt', 'Attempting to decrypt database with SQLCipher...');
-            const result = await execAsync(decryptCommand);
-            this.debugLog('Decrypt', 'SQLCipher command result:', result);
+            await this.runSqlCipher(databasePath, sqlCommands);
 
             // Verify the decrypted file exists and is valid
             if (!fs.existsSync(this.tempDecryptedPath)) {
@@ -241,6 +265,79 @@ export class DatabaseService {
                 throw new Error('Failed to decrypt database. Please check your encryption key.');
             }
         }
+    }
+
+    private async ensureSqlCipherAvailable(): Promise<void> {
+        try {
+            await execFileAsync('sqlcipher', ['-version']);
+        } catch {
+            throw new Error('SQLCipher not found. Please install SQLCipher to decrypt encrypted databases.');
+        }
+    }
+
+    private async runSqlCipher(dbPath: string, sqlCommands: string, timeoutMs: number = 30000): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const sqlcipher = spawn('sqlcipher', [dbPath], {
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+
+            let stdout = '';
+            let stderr = '';
+            let finished = false;
+
+            const timeout = setTimeout(() => {
+                if (finished) {
+                    return;
+                }
+                finished = true;
+                sqlcipher.kill();
+                reject(new Error(`SQLCipher command timed out after ${timeoutMs / 1000} seconds`));
+            }, timeoutMs);
+
+            sqlcipher.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            sqlcipher.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            sqlcipher.on('error', (err) => {
+                if (finished) {
+                    return;
+                }
+                finished = true;
+                clearTimeout(timeout);
+                reject(new Error(`Failed to spawn sqlcipher: ${err.message}`));
+            });
+
+            sqlcipher.on('close', (code) => {
+                if (finished) {
+                    return;
+                }
+                finished = true;
+                clearTimeout(timeout);
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`SQLCipher exited with code ${code}: ${stderr || stdout}`));
+                }
+            });
+
+            sqlcipher.stdin.write(sqlCommands, (err) => {
+                if (err) {
+                    if (finished) {
+                        return;
+                    }
+                    finished = true;
+                    clearTimeout(timeout);
+                    sqlcipher.kill();
+                    reject(new Error(`Failed to write to sqlcipher stdin: ${err.message}`));
+                } else {
+                    sqlcipher.stdin.end();
+                }
+            });
+        });
     }
 
     async getTables(): Promise<TableInfo[]> {
@@ -567,18 +664,24 @@ export class DatabaseService {
         }
 
         try {
+            await this.ensureSqlCipherAvailable();
             // Create a new temporary encrypted file
             const tempDir = require('os').tmpdir();
             const tempEncryptedFile = path.join(tempDir, `encrypted_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
             
             // Escape the encryption key
             const escapedKey = this.currentEncryptionKey.replace(/'/g, "''");
+            const escapedTempEncryptedPath = tempEncryptedFile.replace(/'/g, "''");
             
-            // Use sqlcipher to encrypt the updated database
-            const encryptCommand = `echo "ATTACH DATABASE '${tempEncryptedFile}' AS encrypted KEY '${escapedKey}'; SELECT sqlcipher_export('encrypted'); DETACH DATABASE encrypted;" | sqlcipher "${this.tempDecryptedPath}"`;
+            const sqlCommands = [
+                `ATTACH DATABASE '${escapedTempEncryptedPath}' AS encrypted KEY '${escapedKey}';`,
+                `SELECT sqlcipher_export('encrypted');`,
+                `DETACH DATABASE encrypted;`,
+                `.quit`
+            ].join('\n') + '\n';
             
             this.debugLog('ReEncrypt', 'Re-encrypting database with SQLCipher...');
-            await execAsync(encryptCommand);
+            await this.runSqlCipher(this.tempDecryptedPath, sqlCommands);
             
             // Verify the encrypted file was created
             if (!fs.existsSync(tempEncryptedFile)) {
