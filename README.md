@@ -126,6 +126,11 @@ Verify: `sqlite3 --version`
 
 Verify: `sqlcipher -version`
 
+### Detailed PATH setup guides
+
+- Windows: `readme/windows-path-setup.md`
+- macOS: `readme/macos-path-setup.md`
+
 ## SQLCipher (Encrypted Databases)
 
 - Run **SQLite IntelliView: Connect with SQLCipher Key** and enter your key.
