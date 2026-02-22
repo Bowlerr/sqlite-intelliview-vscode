@@ -111,24 +111,42 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         private readonly context: vscode.ExtensionContext
     ) { }
 
+    private getSettings() {
+        const config = vscode.workspace.getConfiguration('sqliteIntelliView');
+        const configuredPageSize = config.get<number>('defaultPageSize', 1000);
+        const configuredExternalRefreshDebounceMs = config.get<number>('externalRefreshDebounceMs', 500);
+        const defaultPageSize = Math.min(100000, Math.max(10, Number.isFinite(configuredPageSize) ? configuredPageSize : 1000));
+        const externalRefreshDebounceMs = Math.min(10000, Math.max(50, Number.isFinite(configuredExternalRefreshDebounceMs) ? configuredExternalRefreshDebounceMs : 500));
+        return {
+            defaultPageSize,
+            externalRefreshDebounceMs,
+            walMonitoring: config.get<boolean>('walMonitoring', true),
+            walAutoCheckpoint: config.get<boolean>('walAutoCheckpoint', true),
+            walCheckpointMode: config.get<'full' | 'passive' | 'off'>('walCheckpointMode', 'full'),
+        };
+    }
+
     public async openCustomDocument(
         uri: vscode.Uri,
         openContext: vscode.CustomDocumentOpenContext,
         _token: vscode.CancellationToken
     ): Promise<vscode.CustomDocument> {
-        // Add file watcher for this database file using DatabaseWatcher
-        this.databaseWatcher.addWatcher(uri.fsPath, () => {
-            // On external change, close all in-memory connections for this file
-            this.handleExternalDatabaseChange(uri.fsPath);
-            // Notify the webview for this file if open
-            const panel = this.webviewPanels.get(uri.fsPath);
-            if (panel) {
-                panel.webview.postMessage({
-                    type: 'externalDatabaseChanged',
-                    databasePath: uri.fsPath
-                });
-            }
-        });
+        // Add file watcher for this database file using DatabaseWatcher if enabled
+        const settings = this.getSettings();
+        if (settings.walMonitoring) {
+            this.databaseWatcher.addWatcher(uri.fsPath, () => {
+                // On external change, close all in-memory connections for this file
+                this.handleExternalDatabaseChange(uri.fsPath);
+                // Notify the webview for this file if open
+                const panel = this.webviewPanels.get(uri.fsPath);
+                if (panel) {
+                    panel.webview.postMessage({
+                        type: 'externalDatabaseChanged',
+                        databasePath: uri.fsPath
+                    });
+                }
+            }, settings.externalRefreshDebounceMs);
+        }
         return {
             uri,
             dispose: () => {
@@ -151,10 +169,12 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
         // Handle database file loading
+        const getSettings = () => this.getSettings();
         function updateWebview() {
             webviewPanel.webview.postMessage({
                 type: 'update',
-                databasePath: document.uri.fsPath
+                databasePath: document.uri.fsPath,
+                settings: getSettings()
             });
         }
 
@@ -1022,7 +1042,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const connectionKey = `${databasePath}:${normalizedKey}`;
             const connection = this.activeConnections.get(connectionKey);
             if (connection) {
-                console.info('Closing connection', `for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
+                this.debugLog('Connection', `Closing connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
                 connection.closeDatabase();
                 this.activeConnections.delete(connectionKey);
             }
@@ -1030,7 +1050,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const keysToDelete = [];
             for (const [connectionKey, connection] of this.activeConnections) {
                 if (connectionKey.startsWith(`${databasePath}:`)) {
-                    console.info('Closing connection', `for database path: ${databasePath}`);
+                    this.debugLog('Connection', `Closing connection for database path: ${databasePath}`);
                     connection.closeDatabase();
                     keysToDelete.push(connectionKey);
                 }
@@ -1039,7 +1059,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             if (!this.webviewPanels.has(databasePath)) {
                 this.lastSync.delete(databasePath);
             } else {
-                console.info('Panel still open', `for ${databasePath}, retaining lastSync`);
+                this.debugLog('Connection', `Panel still open for ${databasePath}, retaining lastSync`);
             }
         }
     }
@@ -1053,9 +1073,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     private debugLogConnections(): void {
-        console.info('Active connections', `(${this.activeConnections.size}):`);
-        for (const [key, connection] of this.activeConnections) {
-            console.info('Connection Key', key);
+        this.debugLog('Connection', `Active connections (${this.activeConnections.size})`);
+        for (const [key] of this.activeConnections) {
+            this.debugLog('Connection', `Connection Key ${key}`);
         }
     }
 
@@ -1073,22 +1093,20 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         this.closeConnection(databasePath);
         const panel = this.webviewPanels.get(databasePath);
         const sync = this.lastSync.get(databasePath);
-        console.info('DatabaseChange', `[handleExternalDatabaseChange] Triggered for ${databasePath}`, { hasPanel: !!panel, hasSync: !!sync });
+        this.debugLog('DatabaseChange', `[handleExternalDatabaseChange] Triggered for ${databasePath}`, { hasPanel: !!panel, hasSync: !!sync });
         if (!panel || !sync) {
-            console.warn('DatabaseChange', `[handleExternalDatabaseChange] No panel or sync found for ${databasePath}`, { panel, sync });
+            this.debugWarn('DatabaseChange', `[handleExternalDatabaseChange] No panel or sync found for ${databasePath}`, { panel, sync });
             return;
         }
         const { table, page, pageSize, lastPageData } = sync;
-        console.info('DatabaseChange', "[handleExternalDatabaseChange] Using sync state", { table, page, pageSize, lastPageData });
+        this.debugLog('DatabaseChange', '[handleExternalDatabaseChange] Using sync state', { table, page, pageSize });
         const db = await this.getOrCreateConnection(databasePath);
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
         const newTotalCount = await db.getRowCount(table);
         this.rowCountCache.set(this.getTableCacheKey(databasePath, table), newTotalCount);
-        console.info('New page data fetched', { newResult, newTotalCount });
+        this.debugLog('DatabaseChange', 'New page data fetched', { rowCount: newResult.values.length, newTotalCount });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;
-        console.info('Old Rows', JSON.stringify(oldRows));
-        console.info('New Rows', JSON.stringify(newRows));
         const baseIndex = (page - 1) * pageSize;
         const oldMap = new Map();
         oldRows.forEach((r, i) => oldMap.set(r[0], JSON.stringify(r)));
@@ -1114,7 +1132,16 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 updates.push({ rowIndex: baseIndex + i, rowData: r });
             }
         });
-        console.info('Delta computed', { inserts, updates, deletes });
+        const hasDelta = inserts.length > 0 || updates.length > 0 || deletes.length > 0;
+        this.debugLog('DatabaseChange', 'Delta computed', {
+            inserts: inserts.length,
+            updates: updates.length,
+            deletes: deletes.length
+        });
+        if (hasDelta) {
+            this.debugLog('DatabaseChange', 'Old Rows', JSON.stringify(oldRows));
+            this.debugLog('DatabaseChange', 'New Rows', JSON.stringify(newRows));
+        }
         panel.webview.postMessage({
             type: 'tableDataDelta',
             tableName: table,
@@ -1123,10 +1150,19 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             deletes,
             totalCount: newTotalCount
         });
-        console.info('tableDataDelta sent to webview', { table, inserts, updates, deletes, totalCount: newTotalCount });
+        this.debugLog('DatabaseChange', 'tableDataDelta sent to webview', {
+            table,
+            inserts: inserts.length,
+            updates: updates.length,
+            deletes: deletes.length,
+            totalCount: newTotalCount
+        });
         sync.lastPageData = newRows;
         this.lastSync.set(databasePath, sync);
-        console.info('lastPageData updated in lastSync', { databasePath, lastPageData: sync.lastPageData });
+        this.debugLog('DatabaseChange', 'lastPageData updated in lastSync', {
+            databasePath,
+            rowCount: sync.lastPageData.length
+        });
     }
 }
 

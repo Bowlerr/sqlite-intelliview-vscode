@@ -2,6 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
+import { Buffer } from 'buffer';
+
+declare const process: {
+    env: Record<string, string | undefined>;
+    platform: string;
+    arch: string;
+};
+
+declare const __dirname: string;
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -31,12 +40,119 @@ function debugError(message: string, ...args: any[]): void {
     }
 }
 
+export type Sqlite3CliSource = 'bundled' | 'system';
+
+export interface Sqlite3CliInfo {
+    command: string;
+    source: Sqlite3CliSource;
+}
+
+export interface WalFilePaths {
+    walPath: string;
+    shmPath: string;
+}
+
+export interface WalStatus {
+    hasWal: boolean;
+    walSize: number;
+    shmSize: number;
+    walPath: string;
+    shmPath: string;
+}
+
+export type WalCheckpointMode = 'full' | 'passive' | 'off';
+
+function toSqliteWalCheckpointMode(mode: Exclude<WalCheckpointMode, 'off'>): 'FULL' | 'PASSIVE' {
+    return mode === 'passive' ? 'PASSIVE' : 'FULL';
+}
+
+function getSqlite3ExecutableName(): string {
+    return process.platform === 'win32' ? 'sqlite3.exe' : 'sqlite3';
+}
+
+function getBundledSqlite3Candidates(): string[] {
+    const extensionRoot = path.resolve(__dirname, '..');
+    const exe = getSqlite3ExecutableName();
+    const platformArch = `${process.platform}-${process.arch}`;
+    const binRoot = path.join(extensionRoot, 'bin');
+
+    // Support a few layouts so packaging can evolve without code churn.
+    const candidates = [
+        path.join(extensionRoot, 'bin', platformArch, exe),
+        path.join(extensionRoot, 'bin', process.platform, process.arch, exe),
+        path.join(extensionRoot, 'bin', exe)
+    ];
+
+    // Also support official sqlite.org extracted archive folders like:
+    //   bin/sqlite-tools-linux-x64-3510200/sqlite3
+    //   bin/sqlite-tools-win-x64-3510200/sqlite3.exe
+    //   bin/sqlite-tools-osx-arm64-3510200/sqlite3
+    try {
+        const sqliteToolPlatform =
+            process.platform === 'win32' ? 'win' :
+            process.platform === 'darwin' ? 'osx' :
+            process.platform === 'linux' ? 'linux' :
+            process.platform;
+
+        const prefix = `sqlite-tools-${sqliteToolPlatform}-${process.arch}-`;
+        for (const entry of fs.readdirSync(binRoot, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !entry.name.startsWith(prefix)) {
+                continue;
+            }
+            candidates.push(path.join(binRoot, entry.name, exe));
+        }
+    } catch {
+        // Ignore missing/unreadable bin directory here; higher-level checks handle absence.
+    }
+
+    return candidates;
+}
+
+function isExecutableFile(filePath: string): boolean {
+    try {
+        const mode = process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK;
+        fs.accessSync(filePath, mode);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function getBundledSqlite3Path(): string | null {
+    for (const candidate of getBundledSqlite3Candidates()) {
+        if (isExecutableFile(candidate)) {
+            return candidate;
+        }
+    }
+    return null;
+}
+
+export async function getSqlite3CliInfo(): Promise<Sqlite3CliInfo | null> {
+    const bundledPath = getBundledSqlite3Path();
+    if (bundledPath) {
+        try {
+            await execFileAsync(bundledPath, ['-version']);
+            return { command: bundledPath, source: 'bundled' };
+        } catch (error: any) {
+            debugWarn('Bundled sqlite3 found but could not be executed, falling back to PATH lookup:', error?.message || error);
+        }
+    }
+
+    try {
+        await execFileAsync('sqlite3', ['-version']);
+        return { command: 'sqlite3', source: 'system' };
+    } catch (error: any) {
+        debugLog('System sqlite3 unavailable:', error?.message || error);
+        return null;
+    }
+}
+
 /**
  * Get the file paths for WAL and SHM files associated with a database.
  * @param dbPath Path to the database file
  * @returns Object containing walPath and shmPath
  */
-export function getWalFilePaths(dbPath: string): { walPath: string; shmPath: string } {
+export function getWalFilePaths(dbPath: string): WalFilePaths {
     return {
         walPath: `${dbPath}-wal`,
         shmPath: `${dbPath}-shm`
@@ -100,15 +216,21 @@ export async function walHasData(walPath: string): Promise<boolean> {
 
 /**
  * Checkpoint a WAL file, merging its contents into the main database.
- * This uses SQLite's PRAGMA wal_checkpoint(FULL) command.
+ * This uses SQLite's PRAGMA wal_checkpoint(<MODE>) command.
  * 
  * @param dbPath Path to the database file
  * @param encryptionKey Optional SQLCipher encryption key
+ * @param mode WAL checkpoint mode ('full' | 'passive' | 'off')
  * @returns Promise<void>
  * @throws Error if checkpoint fails
  */
-export async function checkpointWal(dbPath: string, encryptionKey?: string): Promise<void> {
-    debugLog(`Starting WAL checkpoint for: ${dbPath}`);
+export async function checkpointWal(dbPath: string, encryptionKey?: string, mode: WalCheckpointMode = 'full'): Promise<void> {
+    if (mode === 'off') {
+        debugLog(`WAL checkpoint skipped (mode=off) for: ${dbPath}`);
+        return;
+    }
+
+    debugLog(`Starting WAL checkpoint for: ${dbPath} (mode=${mode})`);
     
     // First check if WAL file exists and has data
     const { walPath } = getWalFilePaths(dbPath);
@@ -119,9 +241,9 @@ export async function checkpointWal(dbPath: string, encryptionKey?: string): Pro
     
     try {
         if (encryptionKey) {
-            await checkpointEncryptedWal(dbPath, encryptionKey);
+            await checkpointEncryptedWal(dbPath, encryptionKey, mode);
         } else {
-            await checkpointUnencryptedWal(dbPath);
+            await checkpointUnencryptedWal(dbPath, mode);
         }
         
         debugLog('WAL checkpoint completed successfully');
@@ -150,13 +272,19 @@ export async function checkpointWal(dbPath: string, encryptionKey?: string): Pro
  * Uses the system sqlite3 command which is reliable across all platforms.
  * @param dbPath Path to the database file
  */
-async function checkpointUnencryptedWal(dbPath: string): Promise<void> {
-    debugLog('Attempting checkpoint with sqlite3 CLI');
+async function checkpointUnencryptedWal(dbPath: string, mode: Exclude<WalCheckpointMode, 'off'>): Promise<void> {
+    const sqlite3Cli = await getSqlite3CliInfo();
+    if (!sqlite3Cli) {
+        throw new Error('sqlite3 CLI not available (bundled or on PATH)');
+    }
+
+    debugLog(`Attempting checkpoint with sqlite3 CLI (${sqlite3Cli.source}, mode=${mode})`);
     
     try {
         // Use execFile to safely pass arguments without shell interpolation
         // This prevents shell injection and handles paths with spaces/special chars
-        const { stdout, stderr } = await execFileAsync('sqlite3', [dbPath, 'PRAGMA wal_checkpoint(FULL);']);
+        const pragmaMode = toSqliteWalCheckpointMode(mode);
+        const { stdout, stderr } = await execFileAsync(sqlite3Cli.command, [dbPath, `PRAGMA wal_checkpoint(${pragmaMode});`]);
         
         if (stderr && stderr.trim()) {
             debugWarn('sqlite3 CLI stderr:', stderr);
@@ -193,8 +321,12 @@ async function isSqlCipherAvailable(): Promise<boolean> {
  * @param dbPath Path to the database file
  * @param encryptionKey SQLCipher encryption key
  */
-async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Promise<void> {
-    debugLog('Attempting checkpoint with SQLCipher CLI');
+async function checkpointEncryptedWal(
+    dbPath: string,
+    encryptionKey: string,
+    mode: Exclude<WalCheckpointMode, 'off'>
+): Promise<void> {
+    debugLog(`Attempting checkpoint with SQLCipher CLI (mode=${mode})`);
     
     // Check if sqlcipher is available using cross-platform detection
     const sqlCipherAvailable = await isSqlCipherAvailable();
@@ -220,17 +352,17 @@ async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Pr
         }, 30000);
         
         // Collect stdout
-        sqlcipher.stdout.on('data', (data) => {
+        sqlcipher.stdout.on('data', (data: Buffer) => {
             stdout += data.toString();
         });
         
         // Collect stderr
-        sqlcipher.stderr.on('data', (data) => {
+        sqlcipher.stderr.on('data', (data: Buffer) => {
             stderr += data.toString();
         });
         
         // Handle process exit
-        sqlcipher.on('close', (code) => {
+        sqlcipher.on('close', (code: number | null) => {
             clearTimeout(timeout);
             
             if (errorOccurred) {
@@ -257,7 +389,7 @@ async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Pr
         });
         
         // Handle spawn errors (e.g., command not found)
-        sqlcipher.on('error', (err) => {
+        sqlcipher.on('error', (err: Error) => {
             clearTimeout(timeout);
             errorOccurred = true;
             reject(new Error(`Failed to spawn sqlcipher: ${err.message}`));
@@ -267,9 +399,10 @@ async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Pr
         const escapedKey = encryptionKey.replace(/'/g, "''");
         
         // Write SQL commands to stdin securely (key never appears in process list)
-        const sqlCommands = `PRAGMA key = '${escapedKey}';\nPRAGMA busy_timeout = 5000;\nPRAGMA wal_checkpoint(FULL);\n.quit\n`;
+        const pragmaMode = toSqliteWalCheckpointMode(mode);
+        const sqlCommands = `PRAGMA key = '${escapedKey}';\nPRAGMA busy_timeout = 5000;\nPRAGMA wal_checkpoint(${pragmaMode});\n.quit\n`;
         
-        sqlcipher.stdin.write(sqlCommands, (err) => {
+        sqlcipher.stdin.write(sqlCommands, (err?: Error | null) => {
             if (err) {
                 errorOccurred = true;
                 sqlcipher.kill();
@@ -293,14 +426,20 @@ async function checkpointEncryptedWal(dbPath: string, encryptionKey: string): Pr
 export async function checkpointWalWithRetry(
     dbPath: string, 
     encryptionKey?: string,
+    mode: WalCheckpointMode = 'full',
     maxRetries: number = 3
 ): Promise<boolean> {
+    if (mode === 'off') {
+        debugLog(`Skipping WAL checkpoint retry loop (mode=off) for: ${dbPath}`);
+        return true;
+    }
+
     let attempt = 0;
     let lastError: Error | null = null;
     
     while (attempt < maxRetries) {
         try {
-            await checkpointWal(dbPath, encryptionKey);
+            await checkpointWal(dbPath, encryptionKey, mode);
             return true;
         } catch (error: any) {
             lastError = error;
@@ -334,13 +473,7 @@ export async function checkpointWalWithRetry(
  * @param dbPath Path to the database file
  * @returns Object with WAL status information
  */
-export async function getWalStatus(dbPath: string): Promise<{
-    hasWal: boolean;
-    walSize: number;
-    shmSize: number;
-    walPath: string;
-    shmPath: string;
-}> {
+export async function getWalStatus(dbPath: string): Promise<WalStatus> {
     const { walPath, shmPath } = getWalFilePaths(dbPath);
     
     let walSize = 0;

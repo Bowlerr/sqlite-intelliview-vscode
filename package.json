@@ -161,30 +161,37 @@
       "properties": {
         "sqliteIntelliView.defaultPageSize": {
           "type": "number",
-          "default": 100,
+          "default": 1000,
           "minimum": 10,
-          "maximum": 1000,
+          "maximum": 100000,
           "description": "Default number of rows per page in data tables."
-        },
-        "sqliteIntelliView.enableEncryption": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable SQLCipher encryption support for opening encrypted databases."
-        },
-        "sqliteIntelliView.themeIntegration": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable automatic theme integration for the database editor UI."
         },
         "sqliteIntelliView.walAutoCheckpoint": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically checkpoint WAL (Write-Ahead Logging) files before opening databases to ensure up-to-date data."
+          "description": "Automatically checkpoint WAL (Write-Ahead Logging) files before opening databases to ensure up-to-date data. Retained for backward compatibility; use walCheckpointMode for finer control."
+        },
+        "sqliteIntelliView.walCheckpointMode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "passive",
+            "off"
+          ],
+          "default": "full",
+          "markdownDescription": "WAL checkpoint mode used when opening databases with `-wal` files. `full` merges WAL contents and may block writers, `passive` is less intrusive, and `off` skips auto-checkpointing. If `walAutoCheckpoint` is `false`, this setting is ignored and auto-checkpointing remains off."
         },
         "sqliteIntelliView.walMonitoring": {
           "type": "boolean",
           "default": true,
           "description": "Monitor WAL files for changes and automatically refresh the database view when changes are detected."
+        },
+        "sqliteIntelliView.externalRefreshDebounceMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 50,
+          "maximum": 10000,
+          "description": "Debounce window for external database refresh events (DB/WAL/SHM watcher bursts). Higher values reduce refresh noise; lower values refresh sooner."
         }
       }
     }
@@ -207,7 +214,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "^20.19.33",
     "@types/sortablejs": "^1.15.0",
     "@types/sql.js": "^1.4.9",
     "@types/vscode": "^1.101.0",

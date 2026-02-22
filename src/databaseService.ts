@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { markInternalUpdate } from './databaseWatcher';
-import { hasWalFiles, checkpointWalWithRetry, getWalStatus } from './walUtils';
+import { hasWalFiles, checkpointWalWithRetry, getWalStatus, getSqlite3CliInfo, WalCheckpointMode } from './walUtils';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -84,6 +84,19 @@ export class DatabaseService {
         return `"${identifier.replace(/"/g, '""')}"`;
     }
 
+    private getSettings() {
+        const config = vscode.workspace.getConfiguration('sqliteIntelliView');
+        const configuredWalCheckpointMode = config.get<string>('walCheckpointMode', 'full');
+        const walCheckpointMode: WalCheckpointMode =
+            configuredWalCheckpointMode === 'passive' || configuredWalCheckpointMode === 'off'
+                ? configuredWalCheckpointMode
+                : 'full';
+        return {
+            walAutoCheckpoint: config.get<boolean>('walAutoCheckpoint', true),
+            walCheckpointMode,
+        };
+    }
+
     async initialize(): Promise<void> {
         if (!this.SQL) {
             this.SQL = await initSqlJs({
@@ -106,33 +119,36 @@ export class DatabaseService {
         this.currentEncryptionKey = encryptionKey || null;
         
         try {
+            const settings = this.getSettings();
+
             // Check if file exists
             if (!fs.existsSync(databasePath)) {
                 throw new Error(`Database file not found: ${databasePath}`);
             }
 
             // Check for WAL mode and checkpoint if needed
-            if (await hasWalFiles(databasePath)) {
-                this.debugLog('WAL', 'WAL files detected, performing checkpoint...');
+            const walFilesPresent = await hasWalFiles(databasePath);
+            const effectiveWalCheckpointMode: WalCheckpointMode =
+                settings.walAutoCheckpoint ? settings.walCheckpointMode : 'off';
+
+            if (walFilesPresent && effectiveWalCheckpointMode !== 'off') {
+                this.debugLog('WAL', `WAL files detected, performing ${effectiveWalCheckpointMode} checkpoint...`);
                 const walStatus = await getWalStatus(databasePath);
                 this.debugLog('WAL', `WAL file size: ${walStatus.walSize} bytes, SHM file size: ${walStatus.shmSize} bytes`);
                 
                 try {
                     if (!encryptionKey) {
-                        let sqlite3Available = true;
-                        try {
-                            await execFileAsync('sqlite3', ['-version']);
-                        } catch {
-                            sqlite3Available = false;
-                        }
+                        const sqlite3Cli = await getSqlite3CliInfo();
+                        const sqlite3Available = !!sqlite3Cli;
 
                         if (!sqlite3Available) {
                             vscode.window.showWarningMessage(
-                                'SQLite IntelliView: WAL files detected, but sqlite3 is not available on PATH. Table data may appear empty or stale. Install sqlite3 and reopen the database.'
+                                'SQLite IntelliView: WAL files detected, but no sqlite3 CLI is available (bundled binary or PATH). WAL features are disabled for this session, but the database will still open using the main database file contents (data may be stale until WAL is checkpointed).'
                             );
-                            this.debugWarn('WAL', 'sqlite3 not found on PATH; skipping WAL checkpoint');
+                            this.debugWarn('WAL', 'No sqlite3 CLI available (bundled or PATH); skipping WAL checkpoint');
                         } else {
-                            const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey);
+                            this.debugLog('WAL', `Using sqlite3 CLI source: ${sqlite3Cli.source}`);
+                            const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey, effectiveWalCheckpointMode);
                             if (checkpointSuccess) {
                                 this.debugLog('WAL', 'WAL checkpoint completed successfully');
                             } else {
@@ -140,7 +156,7 @@ export class DatabaseService {
                             }
                         }
                     } else {
-                        const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey);
+                        const checkpointSuccess = await checkpointWalWithRetry(databasePath, encryptionKey, effectiveWalCheckpointMode);
                         if (checkpointSuccess) {
                             this.debugLog('WAL', 'WAL checkpoint completed successfully');
                         } else {
@@ -151,6 +167,8 @@ export class DatabaseService {
                     this.debugWarn('WAL', 'Could not checkpoint WAL:', error);
                     // Continue anyway - we'll load what we can from the main database file
                 }
+            } else if (walFilesPresent && effectiveWalCheckpointMode === 'off') {
+                this.debugWarn('WAL', 'WAL files detected, but auto-checkpoint is disabled by settings (walCheckpointMode=off or walAutoCheckpoint=false). Continuing with main database file contents.');
             }
 
             let dataToLoad: Buffer;

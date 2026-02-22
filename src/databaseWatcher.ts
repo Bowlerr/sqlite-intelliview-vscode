@@ -9,6 +9,7 @@ import { getWalFilePaths } from './walUtils';
  */
 export class DatabaseWatcher {
     private watchers: Map<string, vscode.FileSystemWatcher> = new Map();
+    private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
     /**
      * Add a watcher for a database file.
@@ -16,21 +17,23 @@ export class DatabaseWatcher {
      * @param filePath Absolute path to the database file
      * @param onChange Callback to invoke on file change
      */
-    addWatcher(filePath: string, onChange: () => void) {
+    addWatcher(filePath: string, onChange: () => void, debounceMs: number = 500) {
         if (this.watchers.has(filePath)) {
             return;
         }
-        
+
+        const normalizedDebounceMs = Math.max(50, Math.floor(debounceMs));
+
         // Add watcher for the main database file
-        this.addWatcherForFile(filePath, onChange, 150); // 150ms debounce for main DB
+        this.addWatcherForFile(filePath, onChange, normalizedDebounceMs, filePath);
         
         // Also watch WAL and SHM files - create watchers even if files don't exist yet
         // SQLite creates WAL/SHM files on first write, so we need to watch for their creation
         const { walPath, shmPath } = getWalFilePaths(filePath);
         
         // Always create watchers for WAL and SHM files to catch creation events
-        this.addWatcherForFile(walPath, onChange, 500); // 500ms debounce for WAL (more frequent changes)
-        this.addWatcherForFile(shmPath, onChange, 500); // 500ms debounce for SHM
+        this.addWatcherForFile(walPath, onChange, normalizedDebounceMs, filePath);
+        this.addWatcherForFile(shmPath, onChange, normalizedDebounceMs, filePath);
     }
 
     /**
@@ -38,8 +41,9 @@ export class DatabaseWatcher {
      * @param filePath Absolute path to the file to watch
      * @param onChange Callback to invoke on file change
      * @param debounceMs Debounce delay in milliseconds
+     * @param debounceKey Shared debounce key (lets DB/WAL/SHM coalesce into one refresh)
      */
-    private addWatcherForFile(filePath: string, onChange: () => void, debounceMs: number) {
+    private addWatcherForFile(filePath: string, onChange: () => void, debounceMs: number, debounceKey: string) {
         // Don't add duplicate watchers
         if (this.watchers.has(filePath)) {
             return;
@@ -51,10 +55,6 @@ export class DatabaseWatcher {
         const pattern = new vscode.RelativePattern(dir, base);
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
         
-        // Debounce map to prevent rapid duplicate triggers
-        const debounceMap: Map<string, NodeJS.Timeout> = (this as any)._debounceMap || new Map();
-        (this as any)._debounceMap = debounceMap;
-        
         const filterEvent = (uri: vscode.Uri) => {
             if (uri.fsPath === filePath) {
                 // For main database file, check if it's an internal update
@@ -65,12 +65,12 @@ export class DatabaseWatcher {
                     }
                 }
                 
-                if (debounceMap.has(filePath)) {
-                    clearTimeout(debounceMap.get(filePath));
+                if (this.debounceTimers.has(debounceKey)) {
+                    clearTimeout(this.debounceTimers.get(debounceKey));
                 }
-                debounceMap.set(filePath, setTimeout(() => {
+                this.debounceTimers.set(debounceKey, setTimeout(() => {
                     onChange();
-                    debounceMap.delete(filePath);
+                    this.debounceTimers.delete(debounceKey);
                 }, debounceMs));
             }
         };
@@ -87,6 +87,12 @@ export class DatabaseWatcher {
      * @param filePath Absolute path to the database file
      */
     removeWatcher(filePath: string) {
+        const pendingTimer = this.debounceTimers.get(filePath);
+        if (pendingTimer) {
+            clearTimeout(pendingTimer);
+            this.debounceTimers.delete(filePath);
+        }
+
         // Remove main database watcher
         const watcher = this.watchers.get(filePath);
         if (watcher) {
@@ -118,6 +124,10 @@ export class DatabaseWatcher {
             watcher.dispose();
         }
         this.watchers.clear();
+        for (const timer of this.debounceTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.debounceTimers.clear();
     }
 }
 
