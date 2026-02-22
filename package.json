@@ -200,6 +200,8 @@
     "prepackage": "npm run vendor && npm run compile",
     "package": "vsce package",
     "release": "vsce publish",
+    "release:openvsx": "npx ovsx publish",
+    "release:all": "npm run release && npm run release:openvsx",
     "lint": "eslint src --fix",
     "check-types": "tsc --noEmit",
     "pretest": "npm run compile && npm run lint",
