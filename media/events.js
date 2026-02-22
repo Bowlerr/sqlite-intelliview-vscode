@@ -5,6 +5,53 @@
  */
 
 /**
+ * Shared extension -> webview message contract (type-only import for editor tooling).
+ * Runtime handling still uses a local guard because this file is loaded directly in the webview.
+ * @typedef {import("../src/webviewMessages").ExtensionToWebviewMessage} ExtensionToWebviewMessage
+ */
+
+/** @type {Set<string>} */
+const EXTENSION_TO_WEBVIEW_MESSAGE_TYPES = new Set([
+  "update",
+  "databaseLoadError",
+  "databaseReloaded",
+  "externalDatabaseChanged",
+  "databaseInfo",
+  "tableData",
+  "tableRowCount",
+  "tableColumnInfo",
+  "tableDataDelta",
+  "queryResult",
+  "tableSchema",
+  "erDiagram",
+  "erDiagramProgress",
+  "error",
+  "cellUpdateSuccess",
+  "cellUpdateError",
+  "deleteRowSuccess",
+  "deleteRowError",
+  "downloadBlobResult",
+  "maximizeSidebar",
+]);
+
+/**
+ * Narrow raw extension messages before switching on `type`.
+ * @param {unknown} value
+ * @returns {value is ExtensionToWebviewMessage}
+ */
+function isExtensionToWebviewMessage(value) {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "type" in value &&
+    typeof /** @type {{type?: unknown}} */ (value).type === "string" &&
+    EXTENSION_TO_WEBVIEW_MESSAGE_TYPES.has(
+      /** @type {{type: string}} */ (value).type
+    )
+  );
+}
+
+/**
  * Initialize all event listeners
  */
 /**
@@ -637,7 +684,18 @@ function restorePendingQueryEditorSnapshot() {
  * @param {MessageEvent} event - Message event
  */
 function handleExtensionMessage(event) {
-  const message = event.data;
+  const rawMessage = event.data;
+  if (!isExtensionToWebviewMessage(rawMessage)) {
+    if (window.debug) {
+      window.debug.debug(
+        `[Events] Ignoring invalid extension message: ${JSON.stringify(
+          rawMessage
+        )}`
+      );
+    }
+    return;
+  }
+  const message = rawMessage;
   if (window.debug) {
     window.debug.debug(
       `[Events] Received message: ${message.type}, ${JSON.stringify(message)}`

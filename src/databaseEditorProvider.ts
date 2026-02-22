@@ -3,6 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DatabaseService } from './databaseService';
 import { DatabaseWatcher } from './databaseWatcher';
+import type { ExtensionToWebviewMessage, WebviewSettingsPayload } from './webviewMessages';
+import { isWebviewToExtensionMessage } from './webviewMessages';
 
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
     public static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
@@ -86,6 +88,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         }
     }
 
+    private postWebviewMessage(webview: vscode.Webview, message: ExtensionToWebviewMessage): Thenable<boolean> {
+        return webview.postMessage(message);
+    }
+
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
         DatabaseEditorProvider.activeProvider = provider;
@@ -111,7 +117,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         private readonly context: vscode.ExtensionContext
     ) { }
 
-    private getSettings() {
+    private getSettings(): WebviewSettingsPayload {
         const config = vscode.workspace.getConfiguration('sqliteIntelliView');
         const configuredPageSize = config.get<number>('defaultPageSize', 1000);
         const configuredExternalRefreshDebounceMs = config.get<number>('externalRefreshDebounceMs', 500);
@@ -170,27 +176,34 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
         // Handle database file loading
         const getSettings = () => this.getSettings();
-        function updateWebview() {
-            webviewPanel.webview.postMessage({
+        const updateWebview = () => {
+            const message: ExtensionToWebviewMessage = {
                 type: 'update',
                 databasePath: document.uri.fsPath,
                 settings: getSettings()
-            });
-        }
+            };
+            void this.postWebviewMessage(webviewPanel.webview, message);
+        };
 
         // Set the initial content
         try {
             updateWebview();
         } catch (error) {
             // Post error to webview so it can react (e.g., maximize sidebar)
-            webviewPanel.webview.postMessage({
+            const message: ExtensionToWebviewMessage = {
                 type: 'databaseLoadError',
                 error: (error && typeof error === 'object' && 'message' in error) ? (error as any).message : String(error)
-            });
+            };
+            void this.postWebviewMessage(webviewPanel.webview, message);
         }
 
         // Handle messages from the webview
-        webviewPanel.webview.onDidReceiveMessage(e => {
+        webviewPanel.webview.onDidReceiveMessage((e: unknown) => {
+            if (!isWebviewToExtensionMessage(e)) {
+                this.debugWarn('onDidReceiveMessage', 'Ignoring invalid webview message payload', e);
+                return;
+            }
+
             this.debugLog('onDidReceiveMessage', `Received message type: ${e.type}`, e);
             
             switch (e.type) {
@@ -205,7 +218,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                             // errors are already surfaced via handleDatabaseInfoRequest
                         })
                         .finally(() => {
-                            webviewPanel.webview.postMessage({
+                            void this.postWebviewMessage(webviewPanel.webview, {
                                 type: 'databaseReloaded',
                                 databasePath: document.uri.fsPath
                             });
