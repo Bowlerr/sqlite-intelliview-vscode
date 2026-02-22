@@ -10,7 +10,12 @@
  * @typedef {import("../src/webviewMessages").ExtensionToWebviewMessage} ExtensionToWebviewMessage
  */
 
-/** @type {Set<string>} */
+/**
+ * Keep this in sync with `EXTENSION_TO_WEBVIEW_TYPES` in `src/webviewMessages.ts`
+ * (the canonical list used by the extension-side runtime guard).
+ * Update both locations when adding/removing extension -> webview message types.
+ * @type {Set<string>}
+ */
 const EXTENSION_TO_WEBVIEW_MESSAGE_TYPES = new Set([
   "update",
   "databaseLoadError",
@@ -49,6 +54,19 @@ function isExtensionToWebviewMessage(value) {
       /** @type {{type: string}} */ (value).type
     )
   );
+}
+
+/**
+ * Best-effort stringify for debug logging; never throw on circular values.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function safeDebugStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return "[unserializable message]";
+  }
 }
 
 /**
@@ -688,7 +706,7 @@ function handleExtensionMessage(event) {
   if (!isExtensionToWebviewMessage(rawMessage)) {
     if (window.debug) {
       window.debug.debug(
-        `[Events] Ignoring invalid extension message: ${JSON.stringify(
+        `[Events] Ignoring invalid extension message: ${safeDebugStringify(
           rawMessage
         )}`
       );
@@ -698,7 +716,9 @@ function handleExtensionMessage(event) {
   const message = rawMessage;
   if (window.debug) {
     window.debug.debug(
-      `[Events] Received message: ${message.type}, ${JSON.stringify(message)}`
+      `[Events] Received message: ${message.type}, ${safeDebugStringify(
+        message
+      )}`
     );
   }
 

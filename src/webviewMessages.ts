@@ -242,6 +242,8 @@ export function isExtensionToWebviewMessage(value: unknown): value is ExtensionT
                 isOptionalString(value.message)
             );
         default:
+            // TODO: Add field-level validation for GenericExtensionToWebviewMessage branches.
+            // Prioritize high-traffic payloads first: 'tableData', 'databaseInfo', and 'queryResult'.
             return true;
     }
 }
