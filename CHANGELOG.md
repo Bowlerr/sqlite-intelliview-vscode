@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.4.8] - 2026-02-22
+
+### Fixed
+
+- Removed debug launch configuration overrides from `.vscode/launch.json` (`preLaunchTask` and forced `PATH`) for the extension host launch config
+
 ## [0.4.7] - 2026-02-22
 
 ### Added
