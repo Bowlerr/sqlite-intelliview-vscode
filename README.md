@@ -147,6 +147,21 @@ If the database is locked by another process (or you only have read-only access)
 
 For best results, ensure the `sqlite3` CLI is available on your `PATH` (used for WAL checkpointing on unencrypted databases).
 
+## Settings (WAL + Refresh)
+
+These VS Code settings control WAL behavior and external refresh noise:
+
+- `sqliteIntelliView.walCheckpointMode` (`"full" | "passive" | "off"`, default: `"full"`): controls how WAL checkpointing runs when opening a database with a `-wal` file.
+  - `full`: more aggressive checkpoint (best chance of up-to-date data).
+  - `passive`: less intrusive checkpoint attempt.
+  - `off`: skip auto-checkpoint on open.
+- `sqliteIntelliView.walAutoCheckpoint` (default: `true`): backward-compatibility toggle. If set to `false`, auto-checkpoint is disabled even if `walCheckpointMode` is `full` or `passive`.
+- `sqliteIntelliView.walMonitoring` (default: `true`): watches DB/WAL/SHM files and auto-refreshes when changes are detected.
+- `sqliteIntelliView.externalRefreshDebounceMs` (default: `500`): coalesces bursts of DB/WAL/SHM file events into a single refresh. Increase this if external writers are noisy.
+- `sqliteIntelliView.defaultPageSize`: default rows per page in table views.
+
+Tip: if you see repeated refresh notifications from busy external writers, keep `walMonitoring` on and increase `externalRefreshDebounceMs` (for example, `750` or `1000`).
+
 ## Commands
 
 | Command                                          | Purpose                                                        |

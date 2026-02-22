@@ -6,7 +6,13 @@ node_modules
 
 # Test databases and files
 test*.db
+test*.sqlite
+test*.sqlite-shm
+test*.sqlite-wal
 example*.db
+example*.sqlite
+example*.sqlite-shm
+example*.sqlite-wal
 *.sql
 test_*.js
 generate_*.js

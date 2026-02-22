@@ -11,7 +11,10 @@
       "request": "launch",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "${defaultBuildTask}"
+      "preLaunchTask": "${defaultBuildTask}",
+      "env": {
+        "PATH": "/tmp/fake-bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     }
   ]
 }

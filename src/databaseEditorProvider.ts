@@ -3,6 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DatabaseService } from './databaseService';
 import { DatabaseWatcher } from './databaseWatcher';
+import type { ExtensionToWebviewMessage, WebviewSettingsPayload } from './webviewMessages';
+import { isWebviewToExtensionMessage } from './webviewMessages';
 
 export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvider {
     public static readonly viewType = 'sqlite-intelliview-vscode.databaseEditor';
@@ -86,6 +88,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         }
     }
 
+    private postWebviewMessage(webview: vscode.Webview, message: ExtensionToWebviewMessage): Thenable<boolean> {
+        return webview.postMessage(message);
+    }
+
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new DatabaseEditorProvider(context);
         DatabaseEditorProvider.activeProvider = provider;
@@ -111,24 +117,44 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         private readonly context: vscode.ExtensionContext
     ) { }
 
+    private getSettings(): WebviewSettingsPayload {
+        const config = vscode.workspace.getConfiguration('sqliteIntelliView');
+        const configuredPageSize = config.get<number>('defaultPageSize', 1000);
+        const configuredExternalRefreshDebounceMs = config.get<number>('externalRefreshDebounceMs', 500);
+        const defaultPageSize = Math.min(100000, Math.max(10, Number.isFinite(configuredPageSize) ? configuredPageSize : 1000));
+        const externalRefreshDebounceMs = Math.min(10000, Math.max(50, Number.isFinite(configuredExternalRefreshDebounceMs) ? configuredExternalRefreshDebounceMs : 500));
+        return {
+            defaultPageSize,
+            externalRefreshDebounceMs,
+            walMonitoring: config.get<boolean>('walMonitoring', true),
+            walAutoCheckpoint: config.get<boolean>('walAutoCheckpoint', true),
+            walCheckpointMode: config.get<'full' | 'passive' | 'off'>('walCheckpointMode', 'full'),
+        };
+    }
+
     public async openCustomDocument(
         uri: vscode.Uri,
         openContext: vscode.CustomDocumentOpenContext,
         _token: vscode.CancellationToken
     ): Promise<vscode.CustomDocument> {
-        // Add file watcher for this database file using DatabaseWatcher
-        this.databaseWatcher.addWatcher(uri.fsPath, () => {
-            // On external change, close all in-memory connections for this file
-            this.handleExternalDatabaseChange(uri.fsPath);
-            // Notify the webview for this file if open
-            const panel = this.webviewPanels.get(uri.fsPath);
-            if (panel) {
-                panel.webview.postMessage({
-                    type: 'externalDatabaseChanged',
-                    databasePath: uri.fsPath
-                });
-            }
-        });
+        // Add file watcher for this database file using DatabaseWatcher if enabled
+        const settings = this.getSettings();
+        // Note: watcher config is snapshotted at open time. If walMonitoring or
+        // externalRefreshDebounceMs changes, the watcher must be re-registered to apply it.
+        if (settings.walMonitoring) {
+            this.databaseWatcher.addWatcher(uri.fsPath, () => {
+                // On external change, close all in-memory connections for this file
+                this.handleExternalDatabaseChange(uri.fsPath);
+                // Notify the webview for this file if open
+                const panel = this.webviewPanels.get(uri.fsPath);
+                if (panel) {
+                    void this.postWebviewMessage(panel.webview, {
+                        type: 'externalDatabaseChanged',
+                        databasePath: uri.fsPath
+                    });
+                }
+            }, settings.externalRefreshDebounceMs);
+        }
         return {
             uri,
             dispose: () => {
@@ -151,26 +177,35 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
         // Handle database file loading
-        function updateWebview() {
-            webviewPanel.webview.postMessage({
+        const getSettings = () => this.getSettings();
+        const updateWebview = () => {
+            const message: ExtensionToWebviewMessage = {
                 type: 'update',
-                databasePath: document.uri.fsPath
-            });
-        }
+                databasePath: document.uri.fsPath,
+                settings: getSettings()
+            };
+            void this.postWebviewMessage(webviewPanel.webview, message);
+        };
 
         // Set the initial content
         try {
             updateWebview();
         } catch (error) {
             // Post error to webview so it can react (e.g., maximize sidebar)
-            webviewPanel.webview.postMessage({
+            const message: ExtensionToWebviewMessage = {
                 type: 'databaseLoadError',
                 error: (error && typeof error === 'object' && 'message' in error) ? (error as any).message : String(error)
-            });
+            };
+            void this.postWebviewMessage(webviewPanel.webview, message);
         }
 
         // Handle messages from the webview
-        webviewPanel.webview.onDidReceiveMessage(e => {
+        webviewPanel.webview.onDidReceiveMessage((e: unknown) => {
+            if (!isWebviewToExtensionMessage(e)) {
+                this.debugWarn('onDidReceiveMessage', 'Ignoring invalid webview message payload', e);
+                return;
+            }
+
             this.debugLog('onDidReceiveMessage', `Received message type: ${e.type}`, e);
             
             switch (e.type) {
@@ -185,7 +220,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                             // errors are already surfaced via handleDatabaseInfoRequest
                         })
                         .finally(() => {
-                            webviewPanel.webview.postMessage({
+                            void this.postWebviewMessage(webviewPanel.webview, {
                                 type: 'databaseReloaded',
                                 databasePath: document.uri.fsPath
                             });
@@ -435,23 +470,23 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     private async handleDownloadBlobRequest(
         webviewPanel: vscode.WebviewPanel,
         databasePath: string,
-        requestId: unknown,
-        filename: unknown,
-        mime: unknown,
-        dataBase64: unknown
+        requestId: string,
+        filename: string,
+        mime: string,
+        dataBase64: string
     ): Promise<void> {
+        const reqId = requestId.trim().length > 0 ? requestId.trim() : undefined;
         try {
-            const reqId = typeof requestId === 'string' && requestId.trim().length > 0 ? requestId.trim() : undefined;
-            const safeName = typeof filename === 'string' && filename.trim().length > 0
+            const safeName = filename.trim().length > 0
                 ? path.basename(filename.trim())
                 : 'blob.bin';
-            const safeMime = typeof mime === 'string' && mime.trim().length > 0
+            const safeMime = mime.trim().length > 0
                 ? mime.trim()
                 : 'application/octet-stream';
-            const payload = typeof dataBase64 === 'string' ? dataBase64 : '';
+            const payload = dataBase64;
 
             if (!payload) {
-                webviewPanel.webview.postMessage({
+                this.postWebviewMessage(webviewPanel.webview, {
                     type: 'downloadBlobResult',
                     requestId: reqId,
                     success: false,
@@ -462,7 +497,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
             const buffer = Buffer.from(payload, 'base64');
             if (!buffer || buffer.length === 0) {
-                webviewPanel.webview.postMessage({
+                this.postWebviewMessage(webviewPanel.webview, {
                     type: 'downloadBlobResult',
                     requestId: reqId,
                     success: false,
@@ -488,7 +523,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             });
 
             if (!target) {
-                webviewPanel.webview.postMessage({
+                this.postWebviewMessage(webviewPanel.webview, {
                     type: 'downloadBlobResult',
                     requestId: reqId,
                     success: false,
@@ -499,7 +534,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
 
             await fs.promises.writeFile(target.fsPath, buffer);
 
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'downloadBlobResult',
                 requestId: reqId,
                 success: true,
@@ -509,9 +544,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             });
         } catch (error) {
             this.debugError('downloadBlob', 'Failed to save blob:', error);
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'downloadBlobResult',
-                requestId: (typeof requestId === 'string' && requestId.trim().length > 0) ? requestId.trim() : undefined,
+                requestId: reqId,
                 success: false,
                 message: (error && typeof error === 'object' && 'message' in error) ? (error as any).message : String(error)
             });
@@ -542,7 +577,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 }
             }
 
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'databaseInfo',
                 success: true,
                 tables: tables,
@@ -551,7 +586,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         } catch (error) {
             // Close the connection if it failed
             this.closeConnection(databasePath, key);
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'error',
                 message: `Failed to load database: ${error}`
             });
@@ -575,7 +610,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             // Check if this is a schema query
             const isSchemaQuery = query.toLowerCase().includes('pragma table_info');
             
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: isSchemaQuery ? 'tableSchema' : 'queryResult',
                 success: true,
                 data: result.values,
@@ -583,7 +618,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 query: query
             });
         } catch (error) {
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'error',
                 message: `Query execution failed: ${error}`
             });
@@ -614,7 +649,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     // Compute count in background and update UI when ready
                     dbService.getRowCount(tableName).then(count => {
                         this.rowCountCache.set(cacheKey, count);
-                        webviewPanel.webview.postMessage({
+                        this.postWebviewMessage(webviewPanel.webview, {
                             type: 'tableRowCount',
                             tableName,
                             totalRows: count,
@@ -651,7 +686,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 // Fill in background; UI doesn't need this to render the page.
                 dbService.getTableInfo(tableName).then(info => {
                     this.tableInfoCache.set(metaKey, info as any[]);
-                    webviewPanel.webview.postMessage({
+                    this.postWebviewMessage(webviewPanel.webview, {
                         type: 'tableColumnInfo',
                         tableName,
                         columnInfo: info
@@ -678,7 +713,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 columns = ['_rowid', ...columns.slice(1)];
             }
 
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'tableData',
                 success: true,
                 tableName,
@@ -703,7 +738,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 this.debugLog('getTableDataPaginated', 'lastSync set for', databasePath, { table: tableName, page, pageSize, lastPageData: data });
             }
         } catch (error) {
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'error',
                 message: `Failed to load table data: ${error}`
             });
@@ -729,7 +764,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.invalidateCachesForTable(databasePath, tableName);
 
             // Send success response
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'cellUpdateSuccess',
                 success: true,
                 tableName: tableName,
@@ -741,7 +776,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('handleCellUpdateRequest', 'Cell update completed successfully');
         } catch (error) {
             this.debugError('handleCellUpdateRequest', 'Cell update failed:', error);
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'cellUpdateError',
                 success: false,
                 message: `Failed to update cell: ${error}`,
@@ -764,7 +799,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('handleSchemaRequest', `Schema result for ${tableName}: ${result.columns.length} columns, ${result.values.length} rows`);
             this.debugLog('handleSchemaRequest', `Foreign keys for ${tableName}:`, foreignKeys);
             
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'tableSchema',
                 success: true,
                 tableName: tableName,
@@ -774,7 +809,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             });
         } catch (error) {
             this.debugError('handleSchemaRequest', `Schema request failed for ${tableName}:`, error);
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'error',
                 message: `Failed to load table schema: ${error}`
             });
@@ -788,7 +823,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('handleERDiagramRequest', `Key provided: ${key ? 'YES' : 'NO'}`);
             
             // Send progress update - step 1
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'erDiagramProgress',
                 step: 1,
                 message: 'Connecting to database...'
@@ -799,7 +834,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('ERDiagram', 'Database connection successful');
             
             // Send progress update - step 2
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'erDiagramProgress',
                 step: 2,
                 message: 'Analyzing database tables...'
@@ -811,7 +846,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('ERDiagram', `Found ${tables.length} tables:`, tables.map(t => t.name));
             
             // Send progress update with table count
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'erDiagramProgress',
                 step: 2,
                 message: `Found ${tables.length} tables, analyzing schemas...`
@@ -825,7 +860,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                     this.debugLog('ERDiagram', `Processing table ${index + 1}/${tables.length}: ${table.name}`);
                     
                     // Send progress update for each table
-                    webviewPanel.webview.postMessage({
+                    this.postWebviewMessage(webviewPanel.webview, {
                         type: 'erDiagramProgress',
                         step: 2,
                         message: `Analyzing table ${index + 1}/${tables.length}: ${table.name}`
@@ -859,7 +894,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('ERDiagram', 'Schema analysis complete. Starting foreign key detection...');
             
             // Send progress update - step 3
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'erDiagramProgress',
                 step: 3,
                 message: 'Detecting foreign key relationships...'
@@ -905,7 +940,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('ERDiagram', 'Sending final ER diagram data...');
             
             // Send final success message
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'erDiagram',
                 success: true,
                 tables: tablesWithSchemas,
@@ -919,7 +954,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugError('ERDiagram', 'Error details:', error);
             this.debugError('ERDiagram', 'Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
             
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'erDiagram',
                 success: false,
                 error: error instanceof Error ? error.message : String(error)
@@ -950,7 +985,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.invalidateCachesForTable(databasePath, tableName);
             
             // Send success response
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'deleteRowSuccess',
                 success: true,
                 tableName: tableName,
@@ -960,7 +995,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.debugLog('DeleteRow', 'Row deletion completed successfully');
         } catch (error) {
             this.debugError('DeleteRow', 'Row deletion failed:', error);
-            webviewPanel.webview.postMessage({
+            this.postWebviewMessage(webviewPanel.webview, {
                 type: 'deleteRowError',
                 success: false,
                 message: `Failed to delete row: ${error}`,
@@ -1022,7 +1057,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const connectionKey = `${databasePath}:${normalizedKey}`;
             const connection = this.activeConnections.get(connectionKey);
             if (connection) {
-                console.info('Closing connection', `for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
+                this.debugLog('Connection', `Closing connection for: ${databasePath}, key: ${normalizedKey ? '[PROVIDED]' : '[EMPTY]'}`);
                 connection.closeDatabase();
                 this.activeConnections.delete(connectionKey);
             }
@@ -1030,7 +1065,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const keysToDelete = [];
             for (const [connectionKey, connection] of this.activeConnections) {
                 if (connectionKey.startsWith(`${databasePath}:`)) {
-                    console.info('Closing connection', `for database path: ${databasePath}`);
+                    this.debugLog('Connection', `Closing connection for database path: ${databasePath}`);
                     connection.closeDatabase();
                     keysToDelete.push(connectionKey);
                 }
@@ -1039,7 +1074,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             if (!this.webviewPanels.has(databasePath)) {
                 this.lastSync.delete(databasePath);
             } else {
-                console.info('Panel still open', `for ${databasePath}, retaining lastSync`);
+                this.debugLog('Connection', `Panel still open for ${databasePath}, retaining lastSync`);
             }
         }
     }
@@ -1053,9 +1088,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     private debugLogConnections(): void {
-        console.info('Active connections', `(${this.activeConnections.size}):`);
-        for (const [key, connection] of this.activeConnections) {
-            console.info('Connection Key', key);
+        this.debugLog('Connection', `Active connections (${this.activeConnections.size})`);
+        for (const [key] of this.activeConnections) {
+            this.debugLog('Connection', `Connection Key ${key}`);
         }
     }
 
@@ -1073,22 +1108,20 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         this.closeConnection(databasePath);
         const panel = this.webviewPanels.get(databasePath);
         const sync = this.lastSync.get(databasePath);
-        console.info('DatabaseChange', `[handleExternalDatabaseChange] Triggered for ${databasePath}`, { hasPanel: !!panel, hasSync: !!sync });
+        this.debugLog('DatabaseChange', `[handleExternalDatabaseChange] Triggered for ${databasePath}`, { hasPanel: !!panel, hasSync: !!sync });
         if (!panel || !sync) {
-            console.warn('DatabaseChange', `[handleExternalDatabaseChange] No panel or sync found for ${databasePath}`, { panel, sync });
+            this.debugWarn('DatabaseChange', `[handleExternalDatabaseChange] No panel or sync found for ${databasePath}`, { panel, sync });
             return;
         }
         const { table, page, pageSize, lastPageData } = sync;
-        console.info('DatabaseChange', "[handleExternalDatabaseChange] Using sync state", { table, page, pageSize, lastPageData });
+        this.debugLog('DatabaseChange', '[handleExternalDatabaseChange] Using sync state', { table, page, pageSize });
         const db = await this.getOrCreateConnection(databasePath);
         const newResult = await db.getTableDataPaginated(table, page, pageSize);
         const newTotalCount = await db.getRowCount(table);
         this.rowCountCache.set(this.getTableCacheKey(databasePath, table), newTotalCount);
-        console.info('New page data fetched', { newResult, newTotalCount });
+        this.debugLog('DatabaseChange', 'New page data fetched', { rowCount: newResult.values.length, newTotalCount });
         const oldRows = lastPageData || [];
         const newRows = newResult.values;
-        console.info('Old Rows', JSON.stringify(oldRows));
-        console.info('New Rows', JSON.stringify(newRows));
         const baseIndex = (page - 1) * pageSize;
         const oldMap = new Map();
         oldRows.forEach((r, i) => oldMap.set(r[0], JSON.stringify(r)));
@@ -1114,8 +1147,17 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 updates.push({ rowIndex: baseIndex + i, rowData: r });
             }
         });
-        console.info('Delta computed', { inserts, updates, deletes });
-        panel.webview.postMessage({
+        const hasDelta = inserts.length > 0 || updates.length > 0 || deletes.length > 0;
+        this.debugLog('DatabaseChange', 'Delta computed', {
+            inserts: inserts.length,
+            updates: updates.length,
+            deletes: deletes.length
+        });
+        if (hasDelta) {
+            this.debugLog('DatabaseChange', 'Old Rows', JSON.stringify(oldRows));
+            this.debugLog('DatabaseChange', 'New Rows', JSON.stringify(newRows));
+        }
+        this.postWebviewMessage(panel.webview, {
             type: 'tableDataDelta',
             tableName: table,
             inserts,
@@ -1123,10 +1165,19 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             deletes,
             totalCount: newTotalCount
         });
-        console.info('tableDataDelta sent to webview', { table, inserts, updates, deletes, totalCount: newTotalCount });
+        this.debugLog('DatabaseChange', 'tableDataDelta sent to webview', {
+            table,
+            inserts: inserts.length,
+            updates: updates.length,
+            deletes: deletes.length,
+            totalCount: newTotalCount
+        });
         sync.lastPageData = newRows;
         this.lastSync.set(databasePath, sync);
-        console.info('lastPageData updated in lastSync', { databasePath, lastPageData: sync.lastPageData });
+        this.debugLog('DatabaseChange', 'lastPageData updated in lastSync', {
+            databasePath,
+            rowCount: sync.lastPageData.length
+        });
     }
 }
 

@@ -1,5 +1,29 @@
 # Change Log
 
+## [Unreleased]
+
+### Added
+
+- Bundled cross-platform `sqlite3` CLI fallback binaries (Windows/macOS/Linux, x64/arm64) for WAL checkpoint support when no system `sqlite3` is on `PATH`
+- New WAL/refresh settings: `sqliteIntelliView.walCheckpointMode` (`full`/`passive`/`off`) and `sqliteIntelliView.externalRefreshDebounceMs`
+- Shared `src/webviewMessages.ts` message contracts and runtime guards for extension <-> webview messaging
+- Webview settings payload (`defaultPageSize`, WAL settings, external refresh debounce) sent from the extension to support runtime UI behavior
+
+### Changed
+
+- WAL checkpointing now honors `walCheckpointMode` (and `walAutoCheckpoint` as a compatibility override) for `FULL`, `PASSIVE`, or disabled auto-checkpoint behavior
+- WAL checkpoint CLI detection now prefers bundled `sqlite3` binaries and falls back to system `sqlite3`, with clearer warnings when no CLI is available
+- External DB/WAL/SHM file watcher events now share a coalesced debounce window (configurable via `externalRefreshDebounceMs`) to reduce refresh storms
+- Default table page size setting increased to `1000` (max increased to `100000`)
+- Extension -> webview message sends in `databaseEditorProvider` now consistently use a typed helper for stronger payload shape checks during development
+- README now documents WAL checkpoint mode, monitoring, and external refresh debounce settings
+
+### Fixed
+
+- Webview message validation now rejects malformed `updateCellData` messages missing `newValue` and `deleteRow` messages missing `rowId`
+- `events.js` debug logging no longer throws if a received message cannot be `JSON.stringify`-ed (e.g., circular structures)
+- Reduced noisy no-op “external change” notifications after WAL checkpoint/file-watcher bursts by deduping visible no-change delta notices
+
 ## [0.4.6] - 2026-01-29
 
 ### Added

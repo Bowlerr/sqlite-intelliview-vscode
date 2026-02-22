@@ -5,6 +5,71 @@
  */
 
 /**
+ * Shared extension -> webview message contract (type-only import for editor tooling).
+ * Runtime handling still uses a local guard because this file is loaded directly in the webview.
+ * @typedef {import("../src/webviewMessages").ExtensionToWebviewMessage} ExtensionToWebviewMessage
+ */
+
+/**
+ * Keep this in sync with `EXTENSION_TO_WEBVIEW_TYPES` in `src/webviewMessages.ts`
+ * (the canonical list used by the extension-side runtime guard).
+ * Update both locations when adding/removing extension -> webview message types.
+ * @type {Set<string>}
+ */
+const EXTENSION_TO_WEBVIEW_MESSAGE_TYPES = new Set([
+  "update",
+  "databaseLoadError",
+  "databaseReloaded",
+  "externalDatabaseChanged",
+  "databaseInfo",
+  "tableData",
+  "tableRowCount",
+  "tableColumnInfo",
+  "tableDataDelta",
+  "queryResult",
+  "tableSchema",
+  "erDiagram",
+  "erDiagramProgress",
+  "error",
+  "cellUpdateSuccess",
+  "cellUpdateError",
+  "deleteRowSuccess",
+  "deleteRowError",
+  "downloadBlobResult",
+  "maximizeSidebar",
+]);
+
+/**
+ * Narrow raw extension messages before switching on `type`.
+ * @param {unknown} value
+ * @returns {value is ExtensionToWebviewMessage}
+ */
+function isExtensionToWebviewMessage(value) {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "type" in value &&
+    typeof /** @type {{type?: unknown}} */ (value).type === "string" &&
+    EXTENSION_TO_WEBVIEW_MESSAGE_TYPES.has(
+      /** @type {{type: string}} */ (value).type
+    )
+  );
+}
+
+/**
+ * Best-effort stringify for debug logging; never throw on circular values.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function safeDebugStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return "[unserializable message]";
+  }
+}
+
+/**
  * Initialize all event listeners
  */
 /**
@@ -637,10 +702,23 @@ function restorePendingQueryEditorSnapshot() {
  * @param {MessageEvent} event - Message event
  */
 function handleExtensionMessage(event) {
-  const message = event.data;
+  const rawMessage = event.data;
+  if (!isExtensionToWebviewMessage(rawMessage)) {
+    if (window.debug) {
+      window.debug.debug(
+        `[Events] Ignoring invalid extension message: ${safeDebugStringify(
+          rawMessage
+        )}`
+      );
+    }
+    return;
+  }
+  const message = rawMessage;
   if (window.debug) {
     window.debug.debug(
-      `[Events] Received message: ${message.type}, ${JSON.stringify(message)}`
+      `[Events] Received message: ${message.type}, ${safeDebugStringify(
+        message
+      )}`
     );
   }
 
@@ -825,6 +903,28 @@ function handleExecuteQuery() {
  * @param {Object} message - Update message
  */
 function handleUpdate(message) {
+  const settings = message && message.settings ? message.settings : {};
+  const currentState =
+    typeof getCurrentState === "function" ? getCurrentState() : {};
+  const isInitialDatabaseBind =
+    !!message.databasePath &&
+    (!currentState || !currentState.databasePath);
+
+  if (
+    settings &&
+    typeof settings.defaultPageSize === "number" &&
+    !isNaN(settings.defaultPageSize) &&
+    settings.defaultPageSize > 0
+  ) {
+    if (
+      typeof PAGINATION_CONFIG !== "undefined" &&
+      PAGINATION_CONFIG &&
+      typeof PAGINATION_CONFIG === "object"
+    ) {
+      PAGINATION_CONFIG.defaultPageSize = settings.defaultPageSize;
+    }
+  }
+
   // Reset connect button state
   const elements = getAllDOMElements ? getAllDOMElements() : {};
   if (elements.connectBtn) {
@@ -840,14 +940,16 @@ function handleUpdate(message) {
   }
 
   // Get current state to preserve encryption key
-  const currentState =
-    typeof getCurrentState === "function" ? getCurrentState() : {};
-
   if (typeof updateState !== "undefined") {
     updateState({
       databasePath: message.databasePath,
       isConnected: message.isConnected,
       connectionError: message.connectionError,
+      ...(isInitialDatabaseBind &&
+      typeof settings.defaultPageSize === "number" &&
+      settings.defaultPageSize > 0
+        ? { pageSize: settings.defaultPageSize }
+        : {}),
       // Preserve the encryption key from current state
       encryptionKey: currentState.encryptionKey || "",
     });
@@ -3207,8 +3309,30 @@ function handleTableDataDelta({
     }
   }
 
+  // Replace noisy no-op notifications (common after WAL checkpoint triggers
+  // multiple file watcher events) with a deduped explanatory message.
   if (typeof window.showNotification === "function") {
-    window.showNotification(summary, "info", 6000);
+    if (visibleChanges === 0 && !totalCountChanged) {
+      const dedupeWindowMs = 3000;
+      const dedupeKey = `noopExternalDelta:${tableName}`;
+      const now = Date.now();
+      const store =
+        /** @type {any} */ (window).__externalDeltaNotificationTimes ||
+        ((/** @type {any} */ (window).__externalDeltaNotificationTimes = {}));
+      const lastAt =
+        typeof store[dedupeKey] === "number" ? store[dedupeKey] : 0;
+
+      if (now - lastAt > dedupeWindowMs) {
+        store[dedupeKey] = now;
+        window.showNotification(
+          `Database files changed (likely WAL checkpoint/refresh), but no visible changes were detected in ${tableName} table.`,
+          "info",
+          5000
+        );
+      }
+    } else {
+      window.showNotification(summary, "info", 6000);
+    }
   }
 
   const wrapper = document.querySelector(
