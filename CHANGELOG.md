@@ -1,5 +1,17 @@
 # Change Log
 
+## [0.4.9] - 2026-04-27
+
+### Changed
+
+- Refactored webview component styling to use shared SQLite/VS Code theme variables across sidebar, tables, tabs, buttons, notifications, dropdowns, dialogs, and diagrams.
+- Updated the embedded Monaco SQL editor to dynamically follow VS Code theme changes.
+
+### Fixed
+
+- Improved text contrast in the sidebar table list and selected/hovered items across light, dark, and high-contrast themes.
+- Replaced the query editor current-line red outline/background behavior with a subtle neutral highlight.
+
 ## [0.4.8] - 2026-02-22
 
 ### Fixed
