@@ -29,12 +29,13 @@
   gap: 8px;
   position: relative;
   z-index: 11;
+  color: var(--sqlite-sidebar-foreground);
 }
 .table-item:hover {
   background: var(--vscode-list-hoverBackground);
-  color: var(--vscode-list-hoverForeground);
+  color: var(--vscode-list-hoverForeground, var(--sqlite-sidebar-foreground));
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--sqlite-shadow-soft);
   z-index: 1000;
   border-color: var(--vscode-focusBorder);
   overflow: visible;
@@ -43,14 +44,20 @@
 }
 .table-item.selected {
   background: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
+  color: var(
+    --vscode-list-activeSelectionForeground,
+    var(--sqlite-sidebar-foreground)
+  );
   border-color: var(--vscode-focusBorder);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-soft);
 }
 .table-item:active {
   background: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
+  color: var(
+    --vscode-list-activeSelectionForeground,
+    var(--sqlite-sidebar-foreground)
+  );
   transform: translateY(0);
 }
 
@@ -58,7 +65,7 @@
 .table-name {
   font-weight: 500;
   font-size: 0.9em;
-  color: var(--vscode-foreground);
+  color: inherit;
   margin-right: 8px;
   white-space: nowrap;
   overflow: hidden;
@@ -80,13 +87,14 @@
   gap: 8px;
   position: relative;
   z-index: 11;
-  background: var(--vscode-sideBar-background);
+  color: var(--sqlite-sidebar-foreground);
+  background: var(--sqlite-sidebar-background);
 }
 .result-tab-item:hover {
   background: var(--vscode-list-hoverBackground);
-  color: var(--vscode-list-hoverForeground);
+  color: var(--vscode-list-hoverForeground, var(--sqlite-sidebar-foreground));
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--sqlite-shadow-soft);
   z-index: 1000;
   border-color: var(--vscode-focusBorder);
   overflow: visible;
@@ -95,14 +103,20 @@
 }
 .result-tab-item.selected {
   background: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
+  color: var(
+    --vscode-list-activeSelectionForeground,
+    var(--sqlite-sidebar-foreground)
+  );
   border-color: var(--vscode-focusBorder);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-soft);
 }
 .result-tab-item:active {
   background: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
+  color: var(
+    --vscode-list-activeSelectionForeground,
+    var(--sqlite-sidebar-foreground)
+  );
   transform: translateY(0);
 }
 
@@ -114,6 +128,6 @@
   color: var(--vscode-descriptionForeground);
   font-weight: 600;
   letter-spacing: 0.03em;
-  border-top: 1px solid var(--vscode-panel-border, #e0e0e0);
+  border-top: 1px solid var(--vscode-panel-border);
   background: transparent;
 }

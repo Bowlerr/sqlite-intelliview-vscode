@@ -162,7 +162,8 @@ class D3ERDiagram {
       .attr("dx", 2)
       .attr("dy", 2)
       .attr("stdDeviation", 3)
-      .attr("flood-color", "rgba(0,0,0,0.3)");
+      .attr("flood-color", "var(--vscode-widget-shadow, currentColor)")
+      .attr("flood-opacity", 0.3);
   }
 
   render(data) {

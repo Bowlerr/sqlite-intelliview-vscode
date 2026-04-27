@@ -71,8 +71,9 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--vscode-list-headerBackground) !important;
-  background-color: var(--vscode-list-headerBackground, #2d2d2d) !important;
+  background: var(--sqlite-table-header-background) !important;
+  background-color: var(--sqlite-table-header-background) !important;
+  color: var(--sqlite-table-header-foreground);
   font-weight: 600;
   font-size: 0.85em;
   text-transform: uppercase;
@@ -84,14 +85,14 @@
   transition: background-color 0.1s ease;
 }
 .data-table tbody tr:hover {
-  background: var(--vscode-list-hoverBackground) !important;
+  background: var(--sqlite-table-row-hover-background) !important;
   border-left: 3px solid var(--vscode-focusBorder);
 }
 .data-table tr:nth-child(even) {
-  background: var(--vscode-list-oddRowsBackground);
+  background: var(--sqlite-table-row-alt-background);
 }
 .data-table tbody tr:nth-child(even):hover {
-  background: var(--vscode-list-hoverBackground) !important;
+  background: var(--sqlite-table-row-hover-background) !important;
   border-left: 3px solid var(--vscode-focusBorder);
 }
 .data-table td {
@@ -328,7 +329,7 @@
 .table-action-btn:hover {
   background: var(--vscode-button-secondaryHoverBackground);
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px var(--sqlite-shadow-soft);
 }
 
 .table-action-btn:active {
@@ -478,8 +479,8 @@
 .data-table th.fk-column {
   background: linear-gradient(
     135deg,
-    var(--vscode-list-headerBackground) 0%,
-    rgba(100, 149, 237, 0.15) 100%
+    var(--sqlite-table-header-background) 0%,
+    color-mix(in srgb, var(--sqlite-info) 15%, transparent) 100%
   );
 }
 
@@ -490,7 +491,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, #6495ed, #4169e1);
+  background: var(--sqlite-info);
   z-index: 1;
 }
 
@@ -501,17 +502,17 @@
   left: 0;
   bottom: 0;
   width: 3px;
-  background: #6495ed;
+  background: var(--sqlite-info);
   z-index: 12;
   pointer-events: none;
 }
 
 .data-table th.fk-column.pinned::after {
-  background: #4169e1;
+  background: var(--sqlite-accent);
 }
 
 .fk-indicator {
-  color: #6495ed;
+  color: var(--sqlite-info);
   font-size: 0.9em;
   margin: 0 4px;
   opacity: 0.8;
@@ -519,22 +520,22 @@
 }
 .data-table th.fk-column:hover .fk-indicator {
   opacity: 1;
-  color: #4169e1;
+  color: var(--sqlite-accent);
 }
 .data-table td.fk-cell {
-  background: rgba(100, 149, 237, 0.05);
-  border-left: 2px solid rgba(100, 149, 237, 0.3);
+  background: color-mix(in srgb, var(--sqlite-info) 8%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--sqlite-info) 45%, transparent);
   position: relative;
   outline: none;
 }
 .data-table td.fk-cell:focus-visible {
   outline: 2px solid var(--vscode-focusBorder);
   outline-offset: -2px;
-  background: rgba(100, 149, 237, 0.18);
+  background: color-mix(in srgb, var(--sqlite-info) 18%, var(--sqlite-table-row-background));
 }
 .data-table td.fk-cell:hover {
-  background: rgba(100, 149, 237, 0.1);
-  border-left-color: #6495ed;
+  background: color-mix(in srgb, var(--sqlite-info) 12%, var(--sqlite-table-row-background));
+  border-left-color: var(--sqlite-info);
 }
 .data-table td.fk-cell::before {
   content: "";
@@ -545,18 +546,22 @@
   height: 100%;
   background: linear-gradient(
     180deg,
-    rgba(100, 149, 237, 0.4),
-    rgba(100, 149, 237, 0.1)
+    color-mix(in srgb, var(--sqlite-info) 55%, transparent),
+    color-mix(in srgb, var(--sqlite-info) 15%, transparent)
   );
 }
 .data-table td.fk-cell:hover::before {
-  background: linear-gradient(180deg, #6495ed, rgba(100, 149, 237, 0.3));
+  background: linear-gradient(
+    180deg,
+    var(--sqlite-info),
+    color-mix(in srgb, var(--sqlite-info) 35%, transparent)
+  );
 }
 
 /* ===== ADVANCED FOREIGN KEY ROW HIGHLIGHT ===== */
 .data-table tr.fk-target-row {
-  background-color: rgba(0, 123, 255, 0.15);
-  border: 2px solid #007bff;
+  background-color: color-mix(in srgb, var(--sqlite-accent) 18%, var(--sqlite-table-row-background));
+  border: 2px solid var(--sqlite-accent);
   animation: fk-target-highlight 0.8s ease-in-out;
   position: relative;
   z-index: 10;
@@ -564,40 +569,39 @@
   outline-offset: -2px;
 }
 .data-table tr.fk-target-row td {
-  background-color: rgba(0, 123, 255, 0.15);
-  border-top: 1px solid #007bff;
-  border-bottom: 1px solid #007bff;
-  box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
-  box-shadow: 0 0 12px rgba(0, 123, 255, 0.35);
+  background-color: color-mix(in srgb, var(--sqlite-accent) 18%, var(--sqlite-table-row-background));
+  border-top: 1px solid var(--sqlite-accent);
+  border-bottom: 1px solid var(--sqlite-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sqlite-accent) 35%, transparent);
 }
 .data-table tr.fk-target-row td:first-child {
-  border-left: 2px solid #007bff;
+  border-left: 2px solid var(--sqlite-accent);
 }
 .data-table tr.fk-target-row td:last-child {
-  border-right: 2px solid #007bff;
+  border-right: 2px solid var(--sqlite-accent);
 }
 @keyframes fk-target-highlight {
   0% {
-    background-color: rgba(0, 123, 255, 0.4);
+    background-color: color-mix(in srgb, var(--sqlite-accent) 40%, var(--sqlite-table-row-background));
     transform: scale(1.03);
-    box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+    box-shadow: 0 0 15px color-mix(in srgb, var(--sqlite-accent) 50%, transparent);
   }
   25% {
-    background-color: rgba(0, 123, 255, 0.3);
+    background-color: color-mix(in srgb, var(--sqlite-accent) 30%, var(--sqlite-table-row-background));
     transform: scale(1.02);
   }
   50% {
-    background-color: rgba(0, 123, 255, 0.25);
+    background-color: color-mix(in srgb, var(--sqlite-accent) 25%, var(--sqlite-table-row-background));
     transform: scale(1.01);
   }
   75% {
-    background-color: rgba(0, 123, 255, 0.2);
+    background-color: color-mix(in srgb, var(--sqlite-accent) 20%, var(--sqlite-table-row-background));
     transform: scale(1.005);
   }
   100% {
-    background-color: rgba(0, 123, 255, 0.15);
+    background-color: color-mix(in srgb, var(--sqlite-accent) 18%, var(--sqlite-table-row-background));
     transform: scale(1);
-    box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--sqlite-accent) 30%, transparent);
   }
 }
 
@@ -607,10 +611,10 @@
   left: 0;
   top: 0;
   z-index: 15;
-  background: var(--vscode-list-headerBackground) !important;
-  background-color: var(--vscode-list-headerBackground, #2d2d2d) !important;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2) !important;
-  color: var(--vscode-list-headerForeground) !important;
+  background: var(--sqlite-table-header-background) !important;
+  background-color: var(--sqlite-table-header-background) !important;
+  box-shadow: 2px 0 8px var(--sqlite-shadow-medium) !important;
+  color: var(--sqlite-table-header-foreground) !important;
   opacity: 1 !important;
   font-weight: 600;
   transform: translateZ(0);
@@ -634,15 +638,15 @@
   z-index: 5;
   pointer-events: none;
   transform: translateZ(0);
-  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 1px 0 2px var(--sqlite-shadow-medium);
 }
 .data-table td.pinned {
   position: sticky !important;
   left: 0;
   z-index: 14;
-  background: var(--vscode-editor-background) !important;
-  background-color: var(--vscode-editor-background, #1e1e1e) !important;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2) !important;
+  background: var(--sqlite-table-row-background) !important;
+  background-color: var(--sqlite-table-row-background) !important;
+  box-shadow: 2px 0 8px var(--sqlite-shadow-medium) !important;
   color: var(--vscode-foreground) !important;
   transform: translateZ(0);
   will-change: transform, left, box-shadow;
@@ -665,28 +669,28 @@
   z-index: 5;
   pointer-events: none;
   transform: translateZ(0);
-  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 1px 0 2px var(--sqlite-shadow-medium);
 }
 .data-table tbody tr:nth-child(even) td.pinned {
-  background: var(--vscode-list-oddRowsBackground) !important;
-  background-color: var(--vscode-list-oddRowsBackground, #252525) !important;
+  background: var(--sqlite-table-row-alt-background) !important;
+  background-color: var(--sqlite-table-row-alt-background) !important;
 }
 .data-table tbody tr:hover td.pinned {
-  background: var(--vscode-list-hoverBackground) !important;
-  background-color: var(--vscode-list-hoverBackground, #2a2a2a) !important;
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+  background: var(--sqlite-table-row-hover-background) !important;
+  background-color: var(--sqlite-table-row-hover-background) !important;
+  box-shadow: 4px 0 12px var(--sqlite-shadow-medium), 0 2px 4px var(--sqlite-shadow-soft) !important;
 }
 .data-table th.pinned:hover {
-  background: var(--vscode-list-hoverBackground) !important;
-  background-color: var(--vscode-list-hoverBackground, #2a2a2a) !important;
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.25), 0 3px 6px rgba(0, 0, 0, 0.15) !important;
+  background: var(--sqlite-table-row-hover-background) !important;
+  background-color: var(--sqlite-table-row-hover-background) !important;
+  box-shadow: 4px 0 12px var(--sqlite-shadow-medium), 0 3px 6px var(--sqlite-shadow-soft) !important;
 }
 .data-table th.pinned:focus-visible,
 .data-table td.pinned:focus-visible {
   outline: 2px solid var(--vscode-focusBorder) !important;
   outline-offset: -2px;
-  background: var(--vscode-list-focusBackground) !important;
-  background-color: var(--vscode-list-focusBackground, #094771) !important;
+  background: var(--sqlite-table-row-focus-background) !important;
+  background-color: var(--sqlite-table-row-focus-background) !important;
 }
 .data-table {
   position: relative;
@@ -718,9 +722,9 @@
   left: auto !important;
   z-index: 10 !important;
   box-shadow: none !important;
-  color: var(--vscode-list-headerForeground) !important;
-  background: var(--vscode-list-headerBackground) !important;
-  background-color: var(--vscode-list-headerBackground, #2d2d2d) !important;
+  color: var(--sqlite-table-header-foreground) !important;
+  background: var(--sqlite-table-header-background) !important;
+  background-color: var(--sqlite-table-header-background) !important;
   position: sticky !important;
   top: 0;
   /* Remove any transform or pinned-specific styles */
@@ -739,8 +743,8 @@
   z-index: 10 !important;
   box-shadow: none !important;
   color: var(--vscode-foreground) !important;
-  background: var(--vscode-editor-background) !important;
-  background-color: var(--vscode-editor-background, #1e1e1e) !important;
+  background: var(--sqlite-table-row-background) !important;
+  background-color: var(--sqlite-table-row-background) !important;
   position: static !important;
   /* Remove any transform or pinned-specific styles */
   transform: none !important;
@@ -1039,7 +1043,7 @@ body.resizing {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-medium);
 }
 .data-table th.fk-column:hover::after,
 .data-table td.fk-cell:hover::after {
@@ -1048,24 +1052,24 @@ body.resizing {
 .data-table th.fk-column.pinned {
   background: linear-gradient(
     135deg,
-    var(--vscode-list-headerBackground) 0%,
-    rgba(100, 149, 237, 0.2) 100%
+    var(--sqlite-table-header-background) 0%,
+    color-mix(in srgb, var(--sqlite-info) 20%, transparent) 100%
   );
-  box-shadow: 2px 0 4px rgba(100, 149, 237, 0.2);
-  border-left-color: #4169e1;
+  box-shadow: 2px 0 4px color-mix(in srgb, var(--sqlite-info) 20%, transparent);
+  border-left-color: var(--sqlite-accent);
   border-left-width: 3px;
 }
 .data-table td.fk-cell.pinned {
-  background: rgba(100, 149, 237, 0.08);
-  box-shadow: 2px 0 4px rgba(100, 149, 237, 0.15);
-  border-left-color: rgba(100, 149, 237, 0.4);
+  background: color-mix(in srgb, var(--sqlite-info) 8%, transparent);
+  box-shadow: 2px 0 4px color-mix(in srgb, var(--sqlite-info) 15%, transparent);
+  border-left-color: color-mix(in srgb, var(--sqlite-info) 45%, transparent);
 }
 .data-table td.fk-cell .cell-content {
   color: var(--vscode-foreground);
   font-weight: 500;
 }
 .data-table td.fk-cell:hover .cell-content {
-  color: #4169e1;
+  color: var(--sqlite-accent);
 }
 @media (prefers-reduced-motion: reduce) {
   .fk-indicator,
@@ -1079,39 +1083,39 @@ body.resizing {
 }
 @media (prefers-contrast: high) {
   .data-table td.fk-cell {
-    border-left-color: #0000ff;
-    background: #fff !important;
-    color: #000 !important;
+    border-left-color: var(--vscode-contrastActiveBorder);
+    background: var(--vscode-editor-background) !important;
+    color: var(--vscode-foreground) !important;
   }
   .data-table td.fk-cell:focus-visible {
-    outline: 2px solid #0000ff;
-    background: #e6f0ff !important;
+    outline: 2px solid var(--vscode-contrastActiveBorder);
+    background: var(--vscode-list-focusBackground) !important;
   }
   .data-table tr.fk-target-row {
-    outline: 3px solid #0056b3;
-    background: #e6f0ff !important;
+    outline: 3px solid var(--vscode-contrastActiveBorder);
+    background: var(--vscode-list-activeSelectionBackground) !important;
   }
 
   .data-table th.fk-column {
-    border-left-color: #0000ff;
-    background: var(--vscode-list-headerBackground);
+    border-left-color: var(--vscode-contrastActiveBorder);
+    background: var(--sqlite-table-header-background);
   }
   .data-table td.fk-cell {
-    border-left-color: #0000ff;
-    background: rgba(0, 0, 255, 0.1);
+    border-left-color: var(--vscode-contrastActiveBorder);
+    background: var(--vscode-editor-background);
   }
   .fk-indicator {
-    color: #0000ff;
+    color: var(--vscode-contrastActiveBorder);
   }
   .data-table tr.fk-target-row {
-    background-color: rgba(0, 123, 255, 0.3);
-    border-color: #0056b3;
+    background-color: var(--vscode-list-activeSelectionBackground);
+    border-color: var(--vscode-contrastActiveBorder);
     border-width: 3px;
   }
   .data-table tr.fk-target-row td {
-    background-color: rgba(0, 123, 255, 0.3);
-    border-color: #0056b3;
-    box-shadow: 0 0 10px rgba(0, 86, 179, 0.5);
+    background-color: var(--vscode-list-activeSelectionBackground);
+    border-color: var(--vscode-contrastActiveBorder);
+    box-shadow: none;
   }
 }
 .table-container {
@@ -1132,35 +1136,24 @@ body.resizing {
     scroll-behavior: auto;
   }
 }
-@media (prefers-color-scheme: dark) {
-  .data-table tr.fk-target-row {
-    background-color: rgba(0, 123, 255, 0.2);
-    border-color: #0ea5e9;
-  }
-  .data-table tr.fk-target-row td {
-    background-color: rgba(0, 123, 255, 0.2);
-    border-color: #0ea5e9;
-    box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
-  }
-}
 .vscode-dark .data-table tr.fk-target-row {
-  background-color: rgba(0, 123, 255, 0.2);
-  border-color: #0ea5e9;
+  background-color: color-mix(in srgb, var(--sqlite-accent) 20%, var(--sqlite-table-row-background));
+  border-color: var(--sqlite-accent);
 }
 .vscode-dark .data-table tr.fk-target-row td {
-  background-color: rgba(0, 123, 255, 0.2);
-  border-color: #0ea5e9;
-  box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
+  background-color: color-mix(in srgb, var(--sqlite-accent) 20%, var(--sqlite-table-row-background));
+  border-color: var(--sqlite-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sqlite-accent) 40%, transparent);
 }
 .vscode-high-contrast .data-table tr.fk-target-row {
-  background-color: rgba(0, 123, 255, 0.3);
-  border-color: #0056b3;
+  background-color: var(--vscode-list-activeSelectionBackground);
+  border-color: var(--vscode-contrastActiveBorder);
   border-width: 3px;
 }
 .vscode-high-contrast .data-table tr.fk-target-row td {
-  background-color: rgba(0, 123, 255, 0.3);
-  border-color: #0056b3;
-  box-shadow: 0 0 10px rgba(0, 86, 179, 0.5);
+  background-color: var(--vscode-list-activeSelectionBackground);
+  border-color: var(--vscode-contrastActiveBorder);
+  box-shadow: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .data-table tr.fk-target-row {

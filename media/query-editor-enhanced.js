@@ -6,6 +6,7 @@
 class QueryEditor {
   constructor() {
     this.editor = null;
+    this.themeObserver = null;
     this.defaultQuery = `-- Welcome to SQL Query Editor
 -- Here are some example queries to get you started:
 
@@ -34,6 +35,149 @@ WHERE column2 = 'condition';
 -- DELETE example
 DELETE FROM your_table 
 WHERE column1 = 'value';`;
+  }
+
+  getCssVariable(name, fallback) {
+    const bodyValue = getComputedStyle(document.body)
+      .getPropertyValue(name)
+      .trim();
+    if (bodyValue) {
+      return bodyValue;
+    }
+    return (
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+      fallback
+    );
+  }
+
+  withAlpha(color, alphaHex, fallback) {
+    const hex = color.trim().match(/^#([0-9a-f]{3,8})$/i);
+    if (hex) {
+      let value = hex[1];
+      if (value.length === 3 || value.length === 4) {
+        value = value
+          .split("")
+          .map((character) => character + character)
+          .join("");
+      }
+      if (value.length === 6 || value.length === 8) {
+        return `#${value.slice(0, 6)}${alphaHex}`;
+      }
+    }
+
+    const rgb = color.match(
+      /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i
+    );
+    if (rgb) {
+      const toHex = (value) =>
+        Math.max(0, Math.min(255, Number(value)))
+          .toString(16)
+          .padStart(2, "0");
+      return `#${toHex(rgb[1])}${toHex(rgb[2])}${toHex(rgb[3])}${alphaHex}`;
+    }
+
+    return fallback;
+  }
+
+  getMonacoBaseTheme() {
+    if (document.body.classList.contains("vscode-high-contrast")) {
+      return "hc-black";
+    }
+    if (document.body.classList.contains("vscode-high-contrast-light")) {
+      return "hc-light";
+    }
+    if (document.body.classList.contains("vscode-light")) {
+      return "vs";
+    }
+    return "vs-dark";
+  }
+
+  defineAndApplyVSCodeTheme() {
+    if (!window.monaco) {
+      return;
+    }
+
+    const themeName = "sqlite-intelliview-vscode-theme";
+    const color = (name, fallback) => this.getCssVariable(name, fallback);
+    const editorBackground = color("--vscode-editor-background", "#1e1e1e");
+    const editorForeground = color("--vscode-editor-foreground", "#d4d4d4");
+    const lineHighlightBackground = this.withAlpha(
+      editorForeground,
+      "10",
+      "#80808010"
+    );
+
+    window.monaco.editor.defineTheme(themeName, {
+      base: this.getMonacoBaseTheme(),
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": editorBackground,
+        "editor.foreground": editorForeground,
+        "editorGutter.background": editorBackground,
+        "editorLineNumber.foreground": color(
+          "--vscode-editorLineNumber-foreground",
+          editorForeground
+        ),
+        "editorLineNumber.activeForeground": color(
+          "--vscode-editorLineNumber-activeForeground",
+          editorForeground
+        ),
+        "editorCursor.foreground": color(
+          "--vscode-editorCursor-foreground",
+          editorForeground
+        ),
+        "editor.selectionBackground": color(
+          "--vscode-editor-selectionBackground",
+          "#264f78"
+        ),
+        "editor.inactiveSelectionBackground": color(
+          "--vscode-editor-inactiveSelectionBackground",
+          "#3a3d41"
+        ),
+        "editor.lineHighlightBackground": lineHighlightBackground,
+        "editor.lineHighlightBorder": "#00000000",
+        "editorWidget.background": color(
+          "--vscode-editorWidget-background",
+          editorBackground
+        ),
+        "editorWidget.foreground": color(
+          "--vscode-editorWidget-foreground",
+          editorForeground
+        ),
+        "editorWidget.border": color(
+          "--vscode-editorWidget-border",
+          color("--vscode-panel-border", editorForeground)
+        ),
+        "editorSuggestWidget.background": color(
+          "--vscode-editorSuggestWidget-background",
+          color("--vscode-editorWidget-background", editorBackground)
+        ),
+        "editorSuggestWidget.foreground": color(
+          "--vscode-editorSuggestWidget-foreground",
+          editorForeground
+        ),
+        "editorSuggestWidget.selectedBackground": color(
+          "--vscode-editorSuggestWidget-selectedBackground",
+          color("--vscode-list-activeSelectionBackground", "#264f78")
+        ),
+      },
+    });
+    window.monaco.editor.setTheme(themeName);
+  }
+
+  observeVSCodeThemeChanges() {
+    if (this.themeObserver) {
+      return;
+    }
+
+    this.themeObserver = new MutationObserver(() => {
+      this.defineAndApplyVSCodeTheme();
+    });
+    this.themeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
   }
 
   async waitForRequire(maxWaitMs = 5000) {
@@ -125,10 +269,13 @@ WHERE column1 = 'value';`;
               "Monaco editor main module loaded successfully"
             );
           }
+          this.defineAndApplyVSCodeTheme();
+          this.observeVSCodeThemeChanges();
+
           this.editor = window.monaco.editor.create(editorContainer, {
             value: this.defaultQuery,
             language: "sql",
-            theme: "vs-dark",
+            theme: "sqlite-intelliview-vscode-theme",
             automaticLayout: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,

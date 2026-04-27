@@ -4,7 +4,7 @@
   background: var(--vscode-menu-background);
   border: 1px solid var(--vscode-menu-border);
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-soft);
   z-index: 9999;
   min-width: 150px;
   padding: 4px 0;
@@ -99,7 +99,7 @@
 
 /* ===== ACCESSIBILITY & THEME CONTEXT MENU ===== */
 .vscode-dark .context-menu {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-strong);
 }
 .vscode-high-contrast .context-menu {
   border: 2px solid var(--vscode-contrastBorder);

@@ -1,11 +1,112 @@
 /* ===== ROOT VARIABLES ===== */
 :root {
-  --vscode-font-family: var(--vscode-font-family);
   --container-padding: 20px;
   --input-padding-vertical: 6px;
   --input-padding-horizontal: 4px;
   --input-margin-vertical: 4px;
   --input-margin-horizontal: 0;
+  --sqlite-widget-background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-editor-background)
+  );
+  --sqlite-widget-foreground: var(
+    --vscode-editorWidget-foreground,
+    var(--vscode-foreground)
+  );
+  --sqlite-widget-border: var(
+    --vscode-editorWidget-border,
+    var(--vscode-panel-border)
+  );
+  --sqlite-table-header-background: var(
+    --vscode-list-headerBackground,
+    var(--sqlite-widget-background)
+  );
+  --sqlite-table-header-foreground: var(
+    --vscode-list-headerForeground,
+    var(--vscode-foreground)
+  );
+  --sqlite-table-row-background: var(--vscode-editor-background);
+  --sqlite-table-row-alt-background: var(
+    --vscode-list-oddRowsBackground,
+    var(--vscode-editor-background)
+  );
+  --sqlite-table-row-hover-background: var(
+    --vscode-list-hoverBackground,
+    var(--vscode-list-focusBackground, var(--vscode-editor-inactiveSelectionBackground))
+  );
+  --sqlite-table-row-focus-background: var(
+    --vscode-list-focusBackground,
+    var(--vscode-list-activeSelectionBackground, var(--vscode-editor-selectionBackground))
+  );
+  --sqlite-accent: var(--vscode-focusBorder);
+  --sqlite-info: var(--vscode-charts-blue, var(--vscode-focusBorder));
+  --sqlite-success: var(
+    --vscode-testing-iconPassed,
+    var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, var(--vscode-focusBorder)))
+  );
+  --sqlite-warning: var(
+    --vscode-testing-iconQueued,
+    var(
+      --vscode-editorWarning-foreground,
+      var(--vscode-charts-yellow, var(--vscode-terminal-ansiYellow, var(--vscode-focusBorder)))
+    )
+  );
+  --sqlite-error: var(
+    --vscode-errorForeground,
+    var(--vscode-inputValidation-errorBorder, var(--vscode-focusBorder))
+  );
+  --sqlite-status-background: var(
+    --vscode-statusBarItem-prominentBackground,
+    var(--vscode-badge-background, var(--sqlite-widget-background))
+  );
+  --sqlite-status-foreground: var(
+    --vscode-statusBarItem-prominentForeground,
+    var(--vscode-badge-foreground, var(--sqlite-widget-foreground))
+  );
+  --sqlite-keybinding-background: var(
+    --vscode-keybindingLabel-background,
+    var(--vscode-badge-background, var(--sqlite-widget-background))
+  );
+  --sqlite-keybinding-foreground: var(
+    --vscode-keybindingLabel-foreground,
+    var(--vscode-badge-foreground, var(--sqlite-widget-foreground))
+  );
+  --sqlite-keybinding-border: var(
+    --vscode-keybindingLabel-border,
+    transparent
+  );
+  --sqlite-shadow-color: var(
+    --vscode-widget-shadow,
+    var(--vscode-editor-background)
+  );
+  --sqlite-shadow-soft: color-mix(
+    in srgb,
+    var(--sqlite-shadow-color) 15%,
+    transparent
+  );
+  --sqlite-shadow-medium: color-mix(
+    in srgb,
+    var(--sqlite-shadow-color) 25%,
+    transparent
+  );
+  --sqlite-shadow-strong: color-mix(
+    in srgb,
+    var(--sqlite-shadow-color) 40%,
+    transparent
+  );
+  --sqlite-sidebar-background: var(
+    --vscode-sideBar-background,
+    var(--vscode-editor-background)
+  );
+  --sqlite-sidebar-foreground: var(
+    --vscode-sideBar-foreground,
+    var(--vscode-foreground)
+  );
+  --sqlite-overlay-background: color-mix(
+    in srgb,
+    var(--sqlite-shadow-color) 50%,
+    transparent
+  );
 }
 
 /* Custom scrollbars for all platforms */

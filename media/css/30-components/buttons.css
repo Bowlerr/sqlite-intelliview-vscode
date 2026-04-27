@@ -37,7 +37,7 @@
 .primary-button:hover {
   background: var(--vscode-button-hoverBackground);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-soft);
 }
 .primary-button:active {
   background: var(--vscode-button-background);
@@ -55,7 +55,7 @@
 .secondary-button:hover {
   background: var(--vscode-button-secondaryHoverBackground);
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px var(--sqlite-shadow-soft);
 }
 .secondary-button:active {
   background: var(--vscode-button-secondaryBackground);
@@ -103,7 +103,7 @@
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
   border-radius: 50%;
   border-top-color: currentColor;
   animation: spin 1s linear infinite;
@@ -115,8 +115,9 @@
   cursor: not-allowed;
 }
 .primary-button.connected {
-  background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
-  color: #ffffff;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: 1px solid var(--sqlite-success);
 }
 .primary-button.connected::before {
   content: "✓ ";

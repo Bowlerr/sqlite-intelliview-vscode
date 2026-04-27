@@ -21,11 +21,11 @@
   flex-direction: column;
   gap: 8px;
   z-index: 1000;
-  background: rgba(var(--vscode-editor-background-rgb), 0.9);
+  background: color-mix(in srgb, var(--vscode-editor-background) 90%, transparent);
   border-radius: 8px;
   padding: 8px;
   backdrop-filter: blur(10px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px var(--sqlite-shadow-medium);
 }
 #diagram-panel.active .diagram-controls-overlay {
   display: flex !important;
@@ -35,7 +35,7 @@
 .diagram-tooltip {
   color: var(--vscode-foreground) !important;
   font-family: var(--vscode-font-family) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 4px 12px var(--sqlite-shadow-medium) !important;
   border-radius: 6px !important;
   backdrop-filter: blur(10px);
 }
@@ -189,7 +189,7 @@ body:not(.diagram-tab-active) .diagram-controls-overlay,
 #diagram-container .empty-state .primary-button:hover {
   background-color: var(--vscode-button-hoverBackground);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--sqlite-shadow-soft);
 }
 .loading-title {
   font-size: 18px;

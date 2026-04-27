@@ -136,7 +136,9 @@
 .keyboard-shortcut {
   font-size: 0.75em;
   opacity: 0.7;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sqlite-keybinding-background);
+  color: var(--sqlite-keybinding-foreground);
+  border: 1px solid var(--sqlite-keybinding-border);
   padding: 2px 6px;
   border-radius: 3px;
   font-weight: 400;

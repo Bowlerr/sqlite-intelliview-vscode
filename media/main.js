@@ -801,7 +801,7 @@
     );
     // Show error in the UI
     document.body.innerHTML = `
-      <div style="padding: 20px; color: #f48771; background: #2d1b1b; border-radius: 4px; margin: 20px;">
+      <div style="padding: 20px; color: var(--vscode-errorForeground); background: var(--vscode-inputValidation-errorBackground); border: 1px solid var(--vscode-inputValidation-errorBorder); border-radius: 4px; margin: 20px;">
         <h3>SQLite IntelliView Error</h3>
         <p>Failed to initialize the extension: ${error.message}</p>
         <p>Please check the webview console for more details.</p>

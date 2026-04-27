@@ -7,7 +7,7 @@
   min-width: 280px;
   padding: 12px 16px;
   border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px var(--sqlite-shadow-medium);
   font-size: 0.9em;
   line-height: 1.5;
   z-index: 2000;
@@ -41,7 +41,7 @@
 .notification:hover {
   opacity: 0.95;
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 40px var(--sqlite-shadow-strong);
 }
 .notification.info,
 .notification.error,
@@ -55,7 +55,7 @@
   right: 10px;
   width: 24px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--vscode-toolbar-hoverBackground);
   color: currentColor;
   border-radius: 50%;
   border: none;
@@ -75,27 +75,30 @@
 }
 .notification .close-btn:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-toolbar-hoverBackground)
+  );
 }
 .notification.info {
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
-  color: #ffffff;
-  border-left-color: #60a5fa;
+  background: var(--vscode-notifications-background);
+  color: var(--vscode-notifications-foreground);
+  border-left-color: var(--sqlite-info);
 }
 .notification.error {
-  background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%);
-  color: #ffffff;
-  border-left-color: #f87171;
+  background: var(--vscode-notifications-background);
+  color: var(--vscode-notifications-foreground);
+  border-left-color: var(--sqlite-error);
 }
 .notification.warning {
-  background: linear-gradient(135deg, #a16207 0%, #ca8a04 100%);
-  color: #ffffff;
-  border-left-color: #fbbf24;
+  background: var(--vscode-notifications-background);
+  color: var(--vscode-notifications-foreground);
+  border-left-color: var(--sqlite-warning);
 }
 .notification.success {
-  background: linear-gradient(135deg, #166534 0%, #16a34a 100%);
-  color: #ffffff;
-  border-left-color: #4ade80;
+  background: var(--vscode-notifications-background);
+  color: var(--vscode-notifications-foreground);
+  border-left-color: var(--sqlite-success);
 }
 
 /* ===== ADVANCED NOTIFICATION ICONS & STACKING ===== */
@@ -128,64 +131,76 @@
   font-size: 12px;
   line-height: 16px;
   text-align: center;
-  color: white;
+  color: var(--vscode-button-foreground);
   font-weight: bold;
 }
 .notification.info::before {
   content: "\2139";
-  background: #4da6ff;
+  background: var(--sqlite-info);
 }
 .notification.error::before {
   content: "\2715";
-  background: #ff4444;
+  background: var(--sqlite-error);
 }
 .notification.warning::before {
   content: "\26a0";
-  background: #ffaa00;
+  background: var(--sqlite-warning);
 }
 .notification.success::before {
   content: "\2713";
-  background: #44cc44;
+  background: var(--sqlite-success);
 }
 .notification.info .close-btn {
-  background: rgba(77, 166, 255, 0.2);
-  color: #ffffff;
-  border: 1px solid rgba(77, 166, 255, 0.3);
+  background: var(--vscode-toolbar-hoverBackground);
+  color: currentColor;
+  border: 1px solid var(--sqlite-info);
   font-weight: bold;
 }
 .notification.info .close-btn:hover {
-  background: rgba(77, 166, 255, 0.3);
-  border-color: rgba(77, 166, 255, 0.5);
+  background: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-toolbar-hoverBackground)
+  );
+  border-color: var(--sqlite-info);
 }
 .notification.success .close-btn {
-  background: rgba(68, 204, 68, 0.2);
-  color: #ffffff;
-  border: 1px solid rgba(68, 204, 68, 0.3);
+  background: var(--vscode-toolbar-hoverBackground);
+  color: currentColor;
+  border: 1px solid var(--sqlite-success);
   font-weight: bold;
 }
 .notification.success .close-btn:hover {
-  background: rgba(68, 204, 68, 0.3);
-  border-color: rgba(68, 204, 68, 0.5);
+  background: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-toolbar-hoverBackground)
+  );
+  border-color: var(--sqlite-success);
 }
 .notification.error .close-btn {
-  background: rgba(255, 68, 68, 0.2);
-  color: #ffffff;
-  border: 1px solid rgba(255, 68, 68, 0.3);
+  background: var(--vscode-toolbar-hoverBackground);
+  color: currentColor;
+  border: 1px solid var(--sqlite-error);
   font-weight: bold;
 }
 .notification.error .close-btn:hover {
-  background: rgba(255, 68, 68, 0.3);
-  border-color: rgba(255, 68, 68, 0.5);
+  background: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-toolbar-hoverBackground)
+  );
+  border-color: var(--sqlite-error);
 }
 .notification.warning .close-btn {
-  background: rgba(255, 170, 0, 0.2);
-  color: #ffffff;
-  border: 1px solid rgba(255, 170, 0, 0.3);
+  background: var(--vscode-toolbar-hoverBackground);
+  color: currentColor;
+  border: 1px solid var(--sqlite-warning);
   font-weight: bold;
 }
 .notification.warning .close-btn:hover {
-  background: rgba(255, 170, 0, 0.3);
-  border-color: rgba(255, 170, 0, 0.5);
+  background: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-toolbar-hoverBackground)
+  );
+  border-color: var(--sqlite-warning);
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

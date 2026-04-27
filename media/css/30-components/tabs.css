@@ -1,7 +1,7 @@
 /* Tick button for tab rename confirmation */
 .tick-tab-btn {
-  background: var(--vscode-button-background, #007acc);
-  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
   border: none;
   border-radius: 4px;
   padding: 2px 8px;
@@ -9,21 +9,21 @@
   font-size: 16px;
   cursor: pointer;
   transition: background 0.13s, color 0.13s, border 0.13s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-soft);
 }
 .tick-tab-btn:hover {
-  background: var(--vscode-button-hoverBackground, #005fa3);
-  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-button-hoverBackground);
+  color: var(--vscode-button-foreground);
 }
 /* Style for inline rename input in table tabs */
 .tab-rename-input {
   font-size: 14px;
   padding: 3px 8px;
-  border: 1.5px solid var(--vscode-input-border, #007acc);
+  border: 1.5px solid var(--vscode-input-border);
   border-radius: 5px;
   outline: none;
-  background: var(--vscode-input-background, #fff);
-  color: var(--vscode-input-foreground, #222);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
   margin-right: 8px;
   box-sizing: border-box;
   width: 100%;
@@ -31,8 +31,8 @@
   /* Remove max-width so input can expand */
 }
 .tab-rename-input:focus {
-  border-color: var(--vscode-focusBorder, #1e90ff);
-  background: var(--vscode-input-background, #fff);
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-input-background);
 }
 /* Ensure table picker dropdown appears above table data */
 #table-picker-dropdown {
@@ -46,8 +46,11 @@
   flex-direction: row; /* Explicitly set horizontal direction */
   flex-wrap: nowrap; /* Prevent tabs from wrapping to a new line */
   align-items: center; /* Center align all tabs on the same horizontal level */
-  background: var(--vscode-tab-unfocusedInactiveBackground, #23272e);
-  border-bottom: 2.5px solid var(--vscode-tab-activeBorder, #007acc);
+  background: var(
+    --vscode-tab-unfocusedInactiveBackground,
+    var(--vscode-editorGroupHeader-tabsBackground)
+  );
+  border-bottom: 2.5px solid var(--vscode-tab-activeBorder, var(--vscode-focusBorder));
   padding: 0 8px;
   min-height: 40px;
   user-select: none;
@@ -55,7 +58,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px var(--sqlite-shadow-soft);
   margin-bottom: 2px;
 
   /* Add horizontal scrolling when tabs overflow */
@@ -72,14 +75,14 @@
 .table-tabs-bar::-webkit-scrollbar-track {
   background: var(
     --vscode-scrollbarSlider-background,
-    rgba(255, 255, 255, 0.1)
+    var(--vscode-scrollbar-shadow)
   );
 }
 
 .table-tabs-bar::-webkit-scrollbar-thumb {
   background: var(
     --vscode-scrollbarSlider-hoverBackground,
-    rgba(255, 255, 255, 0.3)
+    var(--vscode-scrollbarSlider-background)
   );
   border-radius: 2px;
 }
@@ -87,7 +90,7 @@
 .table-tabs-bar::-webkit-scrollbar-thumb:hover {
   background: var(
     --vscode-scrollbarSlider-activeBackground,
-    rgba(255, 255, 255, 0.5)
+    var(--vscode-scrollbarSlider-hoverBackground)
   );
 }
 /* Prevent tabs from stretching to fill the row */
@@ -95,8 +98,8 @@
 .table-tab {
   display: inline-flex;
   align-items: center;
-  background: var(--vscode-tab-inactiveBackground, #23272e);
-  color: var(--vscode-tab-inactiveForeground, #bbb);
+  background: var(--vscode-tab-inactiveBackground);
+  color: var(--vscode-tab-inactiveForeground);
   border: 1.5px solid transparent;
   border-bottom: none;
   border-radius: 7px 7px 0 0;
@@ -112,13 +115,13 @@
   white-space: nowrap; /* Prevent text wrapping */
 }
 .table-tab.active {
-  background: var(--vscode-tab-activeBackground, #1e90ff);
-  color: var(--vscode-tab-activeForeground, #fff);
-  border: 1.5px solid var(--vscode-tab-activeBorder, #007acc);
-  border-bottom: 2.5px solid var(--vscode-tab-activeBackground, #1e90ff);
+  background: var(--vscode-tab-activeBackground);
+  color: var(--vscode-tab-activeForeground);
+  border: 1.5px solid var(--vscode-tab-activeBorder, var(--vscode-focusBorder));
+  border-bottom: 2.5px solid var(--vscode-tab-activeBackground);
   font-weight: bold;
   z-index: 3;
-  box-shadow: 0 6px 18px rgba(30, 144, 255, 0.13);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--sqlite-accent) 18%, transparent);
 }
 .table-tab {
   transition: background 0.15s, color 0.15s, border-bottom 0.15s;
@@ -135,7 +138,7 @@
 .table-tab .close-tab-btn {
   background: none;
   border: none;
-  color: var(--vscode-tab-inactiveForeground, #bbb);
+  color: var(--vscode-tab-inactiveForeground);
   font-size: 16px;
   margin-left: 4px;
   padding: 0 4px;
@@ -144,16 +147,16 @@
   cursor: pointer;
 }
 .table-tab .close-tab-btn:hover {
-  background: var(--vscode-button-secondaryBackground, #333);
-  color: var(--vscode-button-secondaryForeground, #fff);
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
 }
 /* Make add-tab visually match other tabs for alignment and sit inline */
 .table-tab.add-tab {
   display: inline-flex;
   font-weight: bold;
-  color: var(--vscode-button-foreground, #fff);
-  background: var(--vscode-button-background, #007acc);
-  border: 1.5px solid var(--vscode-tab-activeBorder, #007acc);
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: 1.5px solid var(--vscode-tab-activeBorder, var(--vscode-focusBorder));
   font-size: 14px;
   padding: 0 18px;
   margin-left: 0; /* No left margin since it's at the start */
@@ -164,7 +167,7 @@
   justify-content: center;
   cursor: pointer;
   transition: background 0.13s, color 0.13s, border 0.13s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px var(--sqlite-shadow-soft);
   flex: 0 0 auto; /* Prevent shrinking */
   order: -1; /* Ensure it appears first even if DOM order changes */
 }
@@ -172,9 +175,9 @@
   opacity: 0.5;
   pointer-events: none;
   cursor: not-allowed;
-  background: var(--vscode-editorWidget-background, #f3f3f3);
-  color: var(--vscode-disabledForeground, #888);
-  border: 1px dashed var(--vscode-disabledForeground, #888);
+  background: var(--sqlite-widget-background);
+  color: var(--vscode-disabledForeground);
+  border: 1px dashed var(--vscode-disabledForeground);
   box-shadow: none;
 }
 
@@ -183,8 +186,8 @@
 }
 
 .table-tab.add-tab:hover {
-  background: var(--vscode-button-hoverBackground, #005fa3);
-  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-button-hoverBackground);
+  color: var(--vscode-button-foreground);
 }
 
 /* ===== SORTABLEJS INTEGRATION STYLES ===== */
@@ -194,22 +197,28 @@
 .table-tab.sortable-chosen {
   transform: scale(1.02);
   z-index: 1000;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 25px var(--sqlite-shadow-soft);
   background: var(--vscode-tab-hoverBackground);
 }
 
 .table-tab.sortable-ghost {
   opacity: 0.3;
-  background: var(--vscode-list-dropBackground, rgba(0, 122, 255, 0.1));
-  border: 2px dashed var(--vscode-focusBorder, #007acc);
+  background: var(
+    --vscode-list-dropBackground,
+    var(--vscode-editor-inactiveSelectionBackground)
+  );
+  border: 2px dashed var(--vscode-focusBorder);
   color: transparent;
   position: relative;
 }
 
 .table-tab.sortable-ghost {
   opacity: 0.3;
-  background: var(--vscode-list-dropBackground, rgba(0, 122, 255, 0.1));
-  border: 2px dashed var(--vscode-focusBorder, #007acc);
+  background: var(
+    --vscode-list-dropBackground,
+    var(--vscode-editor-inactiveSelectionBackground)
+  );
+  border: 2px dashed var(--vscode-focusBorder);
   color: transparent;
   position: relative;
   transform: scale(0.95);
@@ -222,7 +231,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: var(--vscode-focusBorder, #007acc);
+  color: var(--vscode-focusBorder);
   font-size: 14px;
   font-weight: bold;
   opacity: 1;
@@ -254,7 +263,7 @@
   transform: rotate(3deg);
   z-index: 999;
   transition: none;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 20px var(--sqlite-shadow-medium);
 }
 
 /* Enhanced Transitions for SortableJS */
@@ -270,7 +279,7 @@
 /* Improved Hover Effects */
 .table-tab:hover:not(.sortable-chosen):not(.sortable-ghost) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px var(--sqlite-shadow-soft);
 }
 
 /* Drag Handle Cursor */

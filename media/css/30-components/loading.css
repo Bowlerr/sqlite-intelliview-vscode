@@ -10,7 +10,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--sqlite-overlay-background);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -91,17 +91,17 @@
   bottom: 0;
   background: radial-gradient(
       circle at 20% 80%,
-      rgba(var(--vscode-progressBar-background-rgb), 0.03) 0%,
+      color-mix(in srgb, var(--vscode-progressBar-background) 3%, transparent) 0%,
       transparent 50%
     ),
     radial-gradient(
       circle at 80% 20%,
-      rgba(var(--vscode-progressBar-background-rgb), 0.03) 0%,
+      color-mix(in srgb, var(--vscode-progressBar-background) 3%, transparent) 0%,
       transparent 50%
     ),
     radial-gradient(
       circle at 40% 40%,
-      rgba(var(--vscode-progressBar-background-rgb), 0.02) 0%,
+      color-mix(in srgb, var(--vscode-progressBar-background) 2%, transparent) 0%,
       transparent 50%
     );
   pointer-events: none;
