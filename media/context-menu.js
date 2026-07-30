@@ -704,7 +704,7 @@ function copyColumnData() {
     tableWrapper && tableWrapper.__virtualTableState;
 
   // Get column header
-  const header = table.querySelector(`thead th:nth-child(${columnIndex + 1})`);
+  const header = table.querySelector(`thead th:nth-child(${columnIndex + 2})`);
   const headerText = header
     ? getColumnHeaderText(header)
     : `Column ${columnIndex + 1}`;
@@ -730,7 +730,7 @@ function copyColumnData() {
   } else {
     const rows = table.querySelectorAll("tbody tr");
     rows.forEach((row) => {
-      const cell = row.cells[columnIndex];
+      const cell = row.querySelector(`td[data-column="${columnIndex}"]`);
       if (cell) {
         const res = getCellCopyValue(cell, { mode: "tsv" });
         hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
@@ -2673,7 +2673,7 @@ function highlightForeignKeyTarget(tableWrapper) {
       ? getColumnHeaderText(headers[i])
       : headers[i].textContent.trim();
     if (headerText === foreignKeyInfo.referencedColumn) {
-      targetColumnIndex = i;
+      targetColumnIndex = parseInt(headers[i].getAttribute("data-column") || "-1", 10);
       break;
     }
   }
@@ -2719,7 +2719,7 @@ function highlightForeignKeyTarget(tableWrapper) {
   let targetRow = null;
 
   for (const row of rows) {
-    const cell = row.cells[targetColumnIndex];
+    const cell = row.querySelector(`td[data-column="${targetColumnIndex}"]`);
     if (cell) {
       const cellValue = getCellDisplayValue
         ? getCellDisplayValue(cell)

@@ -456,7 +456,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     backendPaginated ? "true" : "false"
   }" data-virtualized="${
     virtualize ? "true" : "false"
-  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}">
+  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}" data-editable="${isEditable}">
       <div class="table-controls">
         <div class="table-search">
           <input type="text" class="search-input" placeholder="Search table page..." />
@@ -504,7 +504,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                 .join("")}
             </select>
           </div>
-          <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>`
+          <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>
+          <button class="table-action-btn table-action-btn-selection" title="Export selected rows" data-action="export-selected">📤 Export Selected</button>
+          ${isEditable ? '<button class="table-action-btn table-action-btn-selection table-action-btn-danger" title="Delete selected rows" data-action="delete-selected">🗑️ Delete Selected</button>' : ""}`
               : ""
           }
         </div>
@@ -512,9 +514,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
       <div class="table-scroll-container">
         <table class="data-table resizable-table" id="${tableId}" role="table" aria-label="Database table data" style="width: ${Math.max(
     0,
-    DEFAULT_COLUMN_WIDTH * columns.length
+    32 + DEFAULT_COLUMN_WIDTH * columns.length
   )}px;">
           <colgroup>
+            <col class="checkbox-col" />
             ${columns
               .map(
                 (col, index) =>
@@ -526,6 +529,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           </colgroup>
           <thead>
             <tr role="row">
+              <th class="checkbox-th" role="columnheader">
+                <input type="checkbox" class="select-all-checkbox" title="Select / deselect all rows" />
+              </th>
               ${columns
                 .map((col, index) => {
                   let fkInfo = foreignKeyMap.get(col);
@@ -582,7 +588,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           <tbody role="rowgroup" class="table-body">
             ${
               virtualize
-                ? `<tr class="virtual-loading" role="row"><td class="virtual-loading-cell" role="cell" colspan="${columns.length}">Rendering…</td></tr>`
+                ? `<tr class="virtual-loading" role="row"><td class="virtual-loading-cell" role="cell" colspan="${columns.length + 1}">Rendering…</td></tr>`
                 : renderTableRows(
                     pageData,
                     startIndex,
@@ -668,6 +674,9 @@ function renderTableRowHtml(
 ) {
   return `
         <tr data-row-index="${globalIndex}" data-local-index="${localIndex}" class="resizable-row" role="row">
+          <td class="checkbox-cell" data-column="-1" role="gridcell">
+            <input type="checkbox" class="row-select-checkbox" data-global-index="${globalIndex}" aria-label="Select row ${globalIndex + 1}" />
+          </td>
           ${
             Array.isArray(row)
               ? row
@@ -1204,7 +1213,7 @@ function virtualRender(vs, { force }) {
   }
 
   const tbody = vs.tbody;
-  const colCount = Array.isArray(vs.columns) ? vs.columns.length : 0;
+  const colCount = Array.isArray(vs.columns) ? vs.columns.length + 1 : 0;
   const totalRows = Array.isArray(vs.order) ? vs.order.length : 0;
   const pageRows = Array.isArray(vs.pageData) ? vs.pageData.length : 0;
   const hasSearch = !!(vs.searchTerm && String(vs.searchTerm).trim().length);
@@ -1308,6 +1317,11 @@ function virtualRender(vs, { force }) {
   syncPinnedColumnsForVirtual(vs);
   syncColumnWidthsForVirtual(vs);
   syncRowHeightsForVirtual(vs);
+
+  // Re-apply multi-row selection classes to visible rows.
+  if (typeof updateSelectedUI === "function") {
+    updateSelectedUI(vs.wrapper);
+  }
 }
 
 function findRowAtOffset(prefix, offset) {
@@ -1878,15 +1892,27 @@ function filterTableByColumn(table, columnIndex, filterValue) {
 /**
  * Export table data as CSV
  * @param {Element} tableWrapper - Table wrapper element
+ * @param {object} [options] - Export options
+ * @param {boolean} [options.onlySelected] - Export only selected rows
  */
-function exportTableData(tableWrapper) {
+function exportTableData(tableWrapper, options = {}) {
   const wrapper = normalizeEnhancedTableWrapper(tableWrapper) || tableWrapper;
+  const sel = options.onlySelected ? getSelectionStore(wrapper) : null;
+  const hasSelection = sel && sel.size > 0;
+
   /** @type {any} */ const vs = wrapper && wrapper.__virtualTableState;
   if (vs && vs.enabled === true) {
     const headers = Array.from(
       vs.table.querySelectorAll("th .column-name")
     ).map((th) => th.textContent);
-    const rowData = (vs.order || []).map((sourceIndex) => {
+    let order = vs.order || [];
+    if (hasSelection) {
+      order = order.filter((sourceIndex) => {
+        const globalIndex = vs.startIndex + sourceIndex;
+        return sel.has(globalIndex);
+      });
+    }
+    const rowData = order.map((sourceIndex) => {
       const row = vs.pageData[sourceIndex];
       return Array.isArray(row)
         ? row.map((val) =>
@@ -1911,9 +1937,22 @@ function exportTableData(tableWrapper) {
   }
 
   const table = wrapper.querySelector(".data-table");
-  const visibleRows = table.querySelectorAll(
-    'tbody tr:not([style*="display: none"]):not(.filter-empty-row):not(.virtual-spacer):not(.virtual-loading):not(.virtual-empty)'
+  let visibleRows = Array.from(
+    table.querySelectorAll(
+      'tbody tr:not([style*="display: none"]):not(.filter-empty-row):not(.virtual-spacer):not(.virtual-loading):not(.virtual-empty)'
+    )
   );
+
+  // Filter to selected rows if requested
+  if (hasSelection) {
+    visibleRows = visibleRows.filter((row) => {
+      const globalIndex = parseInt(
+        row.getAttribute("data-row-index") || "",
+        10
+      );
+      return Number.isFinite(globalIndex) && sel.has(globalIndex);
+    });
+  }
 
   // Get headers
   const headers = Array.from(table.querySelectorAll("th .column-name")).map(
@@ -1922,7 +1961,9 @@ function exportTableData(tableWrapper) {
 
   // Get visible row data
   const rowData = Array.from(visibleRows).map((row) => {
-    return Array.from(row.querySelectorAll("td")).map((td) => {
+    return Array.from(row.querySelectorAll("td[data-column]"))
+      .filter((td) => parseInt(td.getAttribute("data-column") || "-1", 10) >= 0)
+      .map((td) => {
       let value = getCellValue ? getCellValue(td) : td.textContent.trim();
       return value === "NULL" ? "" : value;
     });
@@ -2260,6 +2301,275 @@ function updatePaginationControls(tableWrapper, data, currentPage, pageSize) {
   }
 }
 
+/**
+ * Selection management functions for multi-row selection.
+ * Selection state is stored in-memory per table (clears on page change / search).
+ */
+
+function getSelectionStore(tableWrapper) {
+  const tableId =
+    tableWrapper.getAttribute("data-table-id") ||
+    tableWrapper.dataset.tableId ||
+    "";
+  if (!tableId) return null;
+  if (!window.__selectionStore || !(window.__selectionStore instanceof Map))
+    window.__selectionStore = new Map();
+  if (!window.__selectionStore.has(tableId))
+    window.__selectionStore.set(tableId, new Set());
+  return window.__selectionStore.get(tableId);
+}
+
+function toggleRowSelection(tableWrapper, globalIndex) {
+  const sel = getSelectionStore(tableWrapper);
+  if (!sel) return;
+  if (sel.has(globalIndex)) sel.delete(globalIndex);
+  else sel.add(globalIndex);
+  updateSelectedUI(tableWrapper);
+}
+
+function setRowSelection(tableWrapper, globalIndex, selected) {
+  const sel = getSelectionStore(tableWrapper);
+  if (!sel) return;
+  if (selected) sel.add(globalIndex);
+  else sel.delete(globalIndex);
+  updateSelectedUI(tableWrapper);
+}
+
+function clearSelection(tableWrapper) {
+  const sel = getSelectionStore(tableWrapper);
+  if (sel) sel.clear();
+  updateSelectedUI(tableWrapper);
+}
+
+/**
+ * Return the global indices of all visible (non-filtered, non-hidden) rows.
+ * For virtualised tables uses the ordered source index; for non-virtualised
+ * excludes rows with display:none.
+ * @param {HTMLElement} tableWrapper - The .enhanced-table-wrapper element
+ * @returns {number[]} Visible global row indices
+ */
+function getVisibleRowGlobalIndices(tableWrapper) {
+  const vs = /** @type {any} */ (tableWrapper).__virtualTableState;
+  if (vs && vs.enabled === true && Array.isArray(vs.order)) {
+    return (vs.order || []).map(
+      (sourceIndex) => vs.startIndex + sourceIndex
+    );
+  }
+  const indices = [];
+  const table = tableWrapper.querySelector(".data-table");
+  if (table) {
+    table.querySelectorAll("tr.resizable-row:not([style*='display: none'])").forEach((row) => {
+      const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
+      if (Number.isFinite(idx)) indices.push(idx);
+    });
+  }
+  return indices;
+}
+
+/**
+ * Synchronise row checkbox states, selected-row classes, and action-button visibility
+ * with the current selection store state.
+ * @param {HTMLElement} tableWrapper - The .enhanced-table-wrapper element
+ */
+function updateSelectedUI(tableWrapper) {
+  const sel = getSelectionStore(tableWrapper);
+  if (!sel) return;
+
+  const count = sel.size;
+
+  // Update row classes and checkbox states
+  const table = tableWrapper.querySelector(".data-table");
+  if (table) {
+    table.querySelectorAll("tr.resizable-row:not([style*='display: none'])").forEach((row) => {
+      const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
+      if (Number.isFinite(idx)) {
+        const isSelected = sel.has(idx);
+        row.classList.toggle("selected", isSelected);
+        const cb = row.querySelector(".row-select-checkbox");
+        if (cb) cb.checked = isSelected;
+      }
+    });
+  }
+
+  // Update select-all checkbox state
+  const selectAllCb = tableWrapper.querySelector(".select-all-checkbox");
+  const visibleRows = table
+    ? table.querySelectorAll("tr.resizable-row:not([style*='display: none'])")
+    : [];
+  if (selectAllCb && visibleRows.length > 0) {
+    const checkedCount = Array.from(visibleRows).filter((row) => {
+      const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
+      return Number.isFinite(idx) && sel.has(idx);
+    }).length;
+    selectAllCb.checked = checkedCount === visibleRows.length;
+    selectAllCb.indeterminate =
+      checkedCount > 0 && checkedCount < visibleRows.length;
+  } else if (selectAllCb) {
+    selectAllCb.checked = false;
+    selectAllCb.indeterminate = false;
+  }
+
+  // Update footer info
+  const selectedInfo = tableWrapper.querySelector(".selected-info");
+  if (selectedInfo) {
+    selectedInfo.textContent = count > 0 ? `${count} selected` : "";
+  }
+
+  // Show/hide batch action buttons
+  const exportSelectedBtn = tableWrapper.querySelector(
+    '[data-action="export-selected"]'
+  );
+  const deleteSelectedBtn = tableWrapper.querySelector(
+    '[data-action="delete-selected"]'
+  );
+  if (exportSelectedBtn)
+    exportSelectedBtn.classList.toggle("hidden", count === 0);
+  if (deleteSelectedBtn)
+    deleteSelectedBtn.classList.toggle("hidden", count === 0);
+}
+
+/**
+ * Collect row identities for all currently-selected rows.
+ * Returns an array suitable for passing as rowId in a deleteRow message.
+ */
+function getSelectedRowIdentities(tableWrapper) {
+  const sel = getSelectionStore(tableWrapper);
+  if (!sel || sel.size === 0) return [];
+
+  const tableId =
+    tableWrapper.getAttribute("data-table-id") ||
+    tableWrapper.dataset.tableId ||
+    "";
+  const stash =
+    window.__tableDataStash instanceof Map
+      ? window.__tableDataStash.get(tableId)
+      : null;
+  const vs = /** @type {any} */ (tableWrapper).__virtualTableState;
+
+  if (stash && Array.isArray(stash.rowIdentities)) {
+    const startIndex = parseInt(
+      tableWrapper.getAttribute("data-start-index") || "0",
+      10
+    );
+    if (vs && vs.enabled === true) {
+      return (vs.order || [])
+        .map((sourceIndex) => vs.startIndex + sourceIndex)
+        .filter((g) => sel.has(g))
+        .map((g) => {
+          const li = g - vs.startIndex;
+          return stash.rowIdentities[li];
+        })
+        .filter(Boolean);
+    }
+    const identities = [];
+    const table = tableWrapper.querySelector(".data-table");
+    if (table) {
+      table.querySelectorAll("tr.resizable-row").forEach((row) => {
+        const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
+        if (Number.isFinite(idx) && sel.has(idx)) {
+          const localIndex = idx - startIndex;
+          if (
+            localIndex >= 0 &&
+            localIndex < stash.rowIdentities.length
+          ) {
+            identities.push(stash.rowIdentities[localIndex]);
+          }
+        }
+      });
+    }
+    return identities.filter(Boolean);
+  }
+
+  return [];
+}
+
+/**
+ * Convert a RowIdentity (from the data stash) into the simple {column, value}
+ * or {col1: val1, ...} format expected by the backend delete handler.
+ */
+function rowIdentityToSimple(identity) {
+  if (identity && identity.kind && Array.isArray(identity.parts)) {
+    if (identity.parts.length === 1) {
+      return {
+        column: identity.parts[0].column,
+        value: identity.parts[0].value,
+      };
+    }
+    const obj = {};
+    identity.parts.forEach((p) => {
+      obj[p.column] = p.value;
+    });
+    return obj;
+  }
+  return identity;
+}
+
+/**
+ * Confirm and delete all selected rows.
+ */
+/**
+ * Confirm and delete all selected rows.
+ * Checks editability via data-editable attribute before proceeding.
+ * @param {HTMLElement} tableWrapper - The .enhanced-table-wrapper element
+ */
+function deleteSelectedRows(tableWrapper) {
+  if (tableWrapper.dataset.editable !== "true") return;
+  const sel = getSelectionStore(tableWrapper);
+  if (!sel || sel.size === 0) return;
+
+  // Safety: ensure the stash has identity data (may be stale after delta)
+  const tableId = tableWrapper.getAttribute("data-table-id") || tableWrapper.dataset.tableId || "";
+  const stashData = window.__tableDataStash instanceof Map ? window.__tableDataStash.get(tableId) : null;
+  if (!stashData || !Array.isArray(stashData.rowIdentities) || stashData.rowIdentities.length === 0) {
+    if (typeof showError === "function")
+      showError("Selection data unavailable. Refresh the table and try again.");
+    return;
+  }
+
+  const count = sel.size;
+  const tableName =
+    tableWrapper.getAttribute("data-table") || tableWrapper.dataset.table || "";
+  if (!tableName) return;
+
+  const identities = getSelectedRowIdentities(tableWrapper);
+  if (identities.length === 0) {
+    if (typeof showError === "function")
+      showError("Could not identify selected rows. Refresh the table and try again.");
+    return;
+  }
+
+  const doDelete = () => {
+    if (typeof showDeleteLoading === "function") showDeleteLoading();
+    const state =
+      typeof getCurrentState === "function" ? getCurrentState() : {};
+    const encryptionKey = state.encryptionKey || "";
+    if (
+      window.vscode &&
+      typeof window.vscode.postMessage === "function"
+    ) {
+      window.vscode.postMessage({
+        type: "deleteRow",
+        tableName: tableName,
+        rowId: identities.map(rowIdentityToSimple),
+        key: encryptionKey,
+      });
+    } else if (typeof showDeleteError === "function") {
+      showDeleteError("Cannot communicate with extension");
+    }
+  };
+
+  if (typeof showEnhancedConfirmDialog === "function") {
+    showEnhancedConfirmDialog(
+      `Delete ${count} selected row${count !== 1 ? "s" : ""}?`,
+      doDelete,
+      tableName,
+      null
+    );
+  } else {
+    doDelete();
+  }
+}
+
 // Make functions available globally for cross-module access
 if (typeof window !== "undefined") {
   /** @type {any} */ (window).createDataTable = createDataTable;
@@ -2284,6 +2594,13 @@ if (typeof window !== "undefined") {
     updateRowMultilineForRow;
   /** @type {any} */ (window).updateRowMultilineForTable =
     updateRowMultilineForTable;
+  /** @type {any} */ (window).getSelectionStore = getSelectionStore;
+  /** @type {any} */ (window).toggleRowSelection = toggleRowSelection;
+  /** @type {any} */ (window).setRowSelection = setRowSelection;
+  /** @type {any} */ (window).clearSelection = clearSelection;
+  /** @type {any} */ (window).updateSelectedUI = updateSelectedUI;
+  /** @type {any} */ (window).getSelectedRowIdentities = getSelectedRowIdentities;
+  /** @type {any} */ (window).deleteSelectedRows = deleteSelectedRows;
   /** @type {any} */ (window).TABLE_ROW_HEIGHT_DEFAULT = DEFAULT_ROW_HEIGHT;
   /** @type {any} */ (window).TABLE_ROW_HEIGHT_MULTILINE = MULTILINE_ROW_HEIGHT;
   /** @type {any} */ (window).TABLE_CELL_LINE_HEIGHT = CELL_LINE_HEIGHT;

@@ -88,6 +88,64 @@
   background: var(--sqlite-table-row-hover-background) !important;
   border-left: 3px solid var(--vscode-focusBorder);
 }
+.data-table tbody tr.selected {
+  background: color-mix(
+    in srgb,
+    var(--vscode-list-activeSelectionBackground) 60%,
+    var(--sqlite-table-row-background)
+  ) !important;
+  border-left: 3px solid var(--vscode-list-activeSelectionBackground);
+  outline: 1px solid var(--vscode-list-activeSelectionBackground);
+  outline-offset: -1px;
+}
+.data-table tbody tr.selected:nth-child(even) {
+  background: color-mix(
+    in srgb,
+    var(--vscode-list-activeSelectionBackground) 60%,
+    var(--sqlite-table-row-alt-background)
+  ) !important;
+}
+.data-table tbody tr.selected:hover {
+  background: var(--vscode-list-activeSelectionBackground) !important;
+}
+
+/* Checkbox column */
+.checkbox-col {
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+}
+.checkbox-th {
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  text-align: center;
+  padding: 4px !important;
+  border-right: 1px solid var(--vscode-panel-border);
+}
+.checkbox-th .select-all-checkbox {
+  margin: 0;
+  cursor: pointer;
+  display: block;
+}
+.checkbox-cell {
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  text-align: center;
+  padding: 4px !important;
+  overflow: visible;
+  border-right: 1px solid var(--vscode-panel-border);
+}
+.checkbox-cell input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  display: block;
+}
+.data-table tbody tr:hover .checkbox-cell {
+  background: var(--sqlite-table-row-hover-background);
+}
+
 .data-table tr:nth-child(even) {
   background: var(--sqlite-table-row-alt-background);
 }
@@ -335,6 +393,20 @@
 .table-action-btn:active {
   transform: translateY(0);
   box-shadow: none;
+}
+.table-action-btn-selection.hidden {
+  display: none !important;
+}
+.table-action-btn-selection:not(.hidden) {
+  display: inline-flex;
+}
+.table-action-btn-danger {
+  background: var(--vscode-errorForeground) !important;
+  border-color: var(--vscode-errorForeground) !important;
+  color: var(--vscode-button-foreground) !important;
+}
+.table-action-btn-danger:hover {
+  background: color-mix(in srgb, var(--vscode-errorForeground) 80%, var(--vscode-button-foreground)) !important;
 }
 
 /* ===== PAGINATION CONTROLS ===== */

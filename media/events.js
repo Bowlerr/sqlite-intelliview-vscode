@@ -2458,6 +2458,10 @@ function initializeTableEvents(tableWrapper) {
         if (typeof filterTable !== "undefined") {
           filterTable(tableWrapper, searchTerm);
         }
+        // Clear multi-row selection when search changes
+        if (typeof clearSelection === "function") {
+          clearSelection(tableWrapper);
+        }
         const tableKey = tableWrapper.getAttribute("data-table");
         if (tableKey && typeof window.setTabViewState === "function") {
           window.setTabViewState(
@@ -2668,14 +2672,145 @@ function initializeTableEvents(tableWrapper) {
         }
       });
     }
-    // Export button
+    // Export button (all visible)
     const exportBtn = tableWrapper.querySelector('[data-action="export"]');
     if (exportBtn) {
       exportBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+        const wrapper = e.target.closest(".enhanced-table-wrapper");
         if (typeof exportTableData !== "undefined") {
-          exportTableData(tableWrapper);
+          exportTableData(wrapper, { onlySelected: false });
+        }
+      });
+    }
+
+    // Export selected button
+    const exportSelectedBtn = tableWrapper.querySelector(
+      '[data-action="export-selected"]'
+    );
+    if (exportSelectedBtn) {
+      exportSelectedBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const wrapper = e.target.closest(".enhanced-table-wrapper");
+        if (typeof exportTableData !== "undefined") {
+          exportTableData(wrapper, { onlySelected: true });
+        }
+      });
+    }
+
+    // Delete selected button
+    const deleteSelectedBtn = tableWrapper.querySelector(
+      '[data-action="delete-selected"]'
+    );
+    if (deleteSelectedBtn) {
+      deleteSelectedBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const wrapper = e.target.closest(".enhanced-table-wrapper");
+        if (typeof deleteSelectedRows !== "undefined") {
+          deleteSelectedRows(wrapper);
+        }
+      });
+    }
+
+    // Multi-row selection via row click or checkbox
+    if (tableWrapper.getAttribute("data-selection-delegated") !== "true") {
+      tableWrapper.setAttribute("data-selection-delegated", "true");
+
+      tableWrapper.addEventListener("click", (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+
+        // Ignore clicks on interactive elements (but NOT checkboxes — handle those via change event)
+        if (
+          target.closest(
+            "button, select, textarea, a, .resize-handle, .cell-editing-controls, th, .sortable-header, .pagination-btn, .page-input, .page-size-select"
+          )
+        ) {
+          return;
+        }
+
+        const row = target.closest("tr.resizable-row");
+        if (!row) return;
+
+        const globalIndex = parseInt(
+          row.getAttribute("data-row-index") || "",
+          10
+        );
+        if (!Number.isFinite(globalIndex)) return;
+
+        const wrapper = row.closest(".enhanced-table-wrapper");
+        if (!wrapper) return;
+
+        if (typeof toggleRowSelection === "function") {
+          toggleRowSelection(wrapper, globalIndex);
+        }
+      });
+
+      // Individual checkbox toggle
+      tableWrapper.addEventListener("change", (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+
+        const cb = target.closest(".row-select-checkbox");
+        if (!cb) return;
+
+        const row = cb.closest("tr.resizable-row");
+        const globalIndex = parseInt(
+          row?.getAttribute("data-row-index") || "",
+          10
+        );
+        if (!Number.isFinite(globalIndex)) return;
+
+        const wrapper = cb.closest(".enhanced-table-wrapper");
+        if (!wrapper) return;
+
+        // Sync the selection store with the checkbox state
+        const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
+        if (!sel) return;
+
+        if (cb.checked) {
+          sel.add(globalIndex);
+        } else {
+          sel.delete(globalIndex);
+        }
+        if (typeof updateSelectedUI === "function") {
+          updateSelectedUI(wrapper);
+        }
+      });
+
+      // Select-all checkbox
+      tableWrapper.addEventListener("change", (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+
+        const cb = target.closest(".select-all-checkbox");
+        if (!cb) return;
+
+        const wrapper = cb.closest(".enhanced-table-wrapper");
+        if (!wrapper) return;
+
+        const table = wrapper.querySelector(".data-table");
+        if (!table) return;
+
+        const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
+        if (!sel) return;
+
+        const visibleRows = table.querySelectorAll(
+          "tr.resizable-row:not([style*='display: none'])"
+        );
+        if (cb.checked) {
+          visibleRows.forEach((row) => {
+            const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
+            if (Number.isFinite(idx)) sel.add(idx);
+          });
+        } else {
+          visibleRows.forEach((row) => {
+            const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
+            if (Number.isFinite(idx)) sel.delete(idx);
+          });
+        }
+        if (typeof updateSelectedUI === "function") {
+          updateSelectedUI(wrapper);
         }
       });
     }
@@ -3152,6 +3287,44 @@ function handleCellUpdateError(message) {
 function handleDeleteRowSuccess(message) {
   const { tableName, rowId } = message;
 
+  // Batch delete handler: refresh table and clear selection
+  if (Array.isArray(rowId) && rowId.length >= 1) {
+    if (typeof showDeleteSuccess === "function") showDeleteSuccess();
+    // Clear any stale selection state
+    const wrapper = document.querySelector(
+      `.enhanced-table-wrapper[data-table="${tableName}"]`,
+    );
+    if (wrapper && typeof clearSelection === "function") {
+      clearSelection(wrapper);
+    }
+    // Trigger a data refresh for the current page
+    const state =
+      typeof getCurrentState === "function" ? getCurrentState() : {};
+    const page = wrapper ? parseInt(wrapper.getAttribute("data-current-page") || "1", 10) : 1;
+    const pageSize = wrapper ? parseInt(wrapper.getAttribute("data-page-size") || "100", 10) : 100;
+    if (
+      tableName &&
+      window.vscode &&
+      typeof window.vscode.postMessage === "function"
+    ) {
+      window.vscode.postMessage({
+        type: "getTableData",
+        tableName: tableName,
+        key: (state && state.encryptionKey) || "",
+        page,
+        pageSize,
+      });
+    }
+    if (window.debug) {
+      window.debug.debug(
+        `[Events] Batch delete successful for ${tableName}: ${rowId.length} rows`,
+      );
+    }
+    // Skip single-row handler for batches
+    return;
+  }
+
+  // Single-row delete: delegate to context-menu.js handler
   if (
     typeof window !== "undefined" &&
     typeof (/** @type {any} */ (window).handleDeleteSuccess) === "function"
@@ -3491,6 +3664,12 @@ function handleTableDataDelta({
 
     const toLocal = (globalRowIndex) => globalRowIndex - pageStart;
 
+    // Get stash to keep rowIdentities in sync with pageData
+    const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+    const stash = (typeof window.__tableDataStash !== "undefined" && window.__tableDataStash instanceof Map)
+      ? window.__tableDataStash.get(tableId) || null
+      : null;
+
     // Deletes are indices in the OLD page; apply from bottom to top.
     const deleteLocals = deletes
       .map((rowIndex) => toLocal(rowIndex))
@@ -3501,6 +3680,9 @@ function handleTableDataDelta({
       .sort((a, b) => b - a);
     deleteLocals.forEach((local) => {
       vs.pageData.splice(local, 1);
+      if (Array.isArray(stash?.rowIdentities)) {
+        stash.rowIdentities.splice(local, 1);
+      }
     });
 
     // Inserts are indices in the NEW page; apply from top to bottom.
@@ -3520,6 +3702,9 @@ function handleTableDataDelta({
     insertLocals.forEach(({ local, rowData }) => {
       const clamped = Math.max(0, Math.min(vs.pageData.length, local));
       vs.pageData.splice(clamped, 0, rowData);
+      if (Array.isArray(stash?.rowIdentities)) {
+        stash.rowIdentities.splice(clamped, 0, null);
+      }
     });
 
     // Updates are indices in the NEW page.
@@ -3562,6 +3747,28 @@ function handleTableDataDelta({
     if (typeof window.refreshVirtualTable === "function") {
       window.refreshVirtualTable(wrapper);
     }
+    if ((inserts.length > 0 || deletes.length > 0) &&
+        typeof clearSelection === "function") {
+        clearSelection(wrapper);
+    }
+    // Reconcile selection: remove stale global indices for deleted rows
+    if (Array.isArray(stash?.rowIdentities)) {
+      const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
+      if (sel && sel.size > 0) {
+        const validIds = new Set();
+        stash.rowIdentities.forEach((id) => {
+          if (id) validIds.add(JSON.stringify(id));
+        });
+        for (const gIdx of sel) {
+          const local = gIdx - pageStart;
+          const id = stash.rowIdentities[local];
+          if (!id || !validIds.has(JSON.stringify(id))) {
+            sel.delete(gIdx);
+          }
+        }
+        if (typeof updateSelectedUI === "function") updateSelectedUI(wrapper);
+      }
+    }
     return;
   }
 
@@ -3573,6 +3780,13 @@ function handleTableDataDelta({
     return;
   }
 
+  // Get stash for syncing rowIdentities with DOM row order
+  const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+  const domStash = (typeof window.__tableDataStash !== "undefined" && window.__tableDataStash instanceof Map)
+    ? window.__tableDataStash.get(tableId) || null
+    : null;
+  const startIndex = parseInt(wrapper.getAttribute("data-start-index") || "0", 10) || 0;
+
   //–– 1) APPLY UPDATES ––
   updates.forEach(({ rowIndex, rowData }) => {
     const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
@@ -3583,7 +3797,7 @@ function handleTableDataDelta({
       return;
     }
     rowData.forEach((val, colIdx) => {
-      const cell = row.children[colIdx];
+      const cell = row.querySelector(`td[data-column="${colIdx}"]`);
       if (cell) {
         const cc = cell.querySelector(".cell-content");
         if (cc) {
@@ -3617,8 +3831,15 @@ function handleTableDataDelta({
           }
         }
       });
+      // Keep stash rowIdentities aligned with the bumped indices
+      if (Array.isArray(domStash?.rowIdentities)) {
+        const insLocal = rowIndex - startIndex;
+        if (insLocal >= 0 && insLocal <= domStash.rowIdentities.length) {
+          domStash.rowIdentities.splice(insLocal, 0, null);
+        }
+      }
       // Use renderTableRows to generate the new row HTML, but robustly patch FK cells after creation
-      let columns = Array.from(wrapper.querySelectorAll("thead th")).map((th) =>
+      let columns = Array.from(wrapper.querySelectorAll("thead th[data-column-name]")).map((th) =>
         th.getAttribute("data-column-name"),
       );
       // Fallback: if any column name is missing, try to get from global schema (handle window typing)
@@ -3706,10 +3927,12 @@ function handleTableDataDelta({
           }
         });
       }
-      // Patch each cell in the new row
+      // Patch each cell in the new row (skip checkbox cell, use data-column attribute)
       if (newRow) {
-        Array.from(newRow.children).forEach((cell, idx) => {
-          const colName = columns[idx];
+        newRow.querySelectorAll("td[data-column]").forEach((cell) => {
+          const colIdx = parseInt(cell.getAttribute("data-column") || "", 10);
+          if (!Number.isFinite(colIdx) || colIdx < 0) return;
+          const colName = columns[colIdx];
           // Always set data-column-name for robust context menu detection
           if (colName) {
             cell.setAttribute("data-column-name", colName);
@@ -3768,6 +3991,14 @@ function handleTableDataDelta({
         return;
       }
       row.remove();
+      // Keep stash rowIdentities aligned with the removed row
+      if (Array.isArray(domStash?.rowIdentities)) {
+        const delLocal = rowIndex - startIndex;
+        if (delLocal >= 0 && delLocal < domStash.rowIdentities.length) {
+          domStash.rowIdentities.splice(delLocal, 1);
+        }
+      }
+
       // decrement all > rowIndex
       Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
         const idxAttr = r.getAttribute("data-row-index");
@@ -3809,6 +4040,7 @@ function handleTableDataDelta({
       new Error().stack,
     );
   }
+  clearSelection(wrapper);
 }
 
 // Remove all export statements for browser compatibility
