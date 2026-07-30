@@ -146,6 +146,8 @@ describe('Fix #6 — clearSelection on delta', () => {
     wrapper.setAttribute('data-start-index', '0');
 
     window.toggleRowSelection(wrapper, 0);
+    expect(window.getSelectionStore(wrapper).size).toBe(1);
+    window.clearSelection(wrapper);
     expect(window.getSelectedRowIdentities(wrapper)).toEqual([]);
   });
 });
