@@ -6,7 +6,7 @@ Tests for `media/table.js` (and `media/utils.js`) are in the `tests/` directory.
 
 Install dependencies and run with vitest:
 
-```
+```bash
 npm install --save-dev vitest jsdom
 npm run test-media
 ```

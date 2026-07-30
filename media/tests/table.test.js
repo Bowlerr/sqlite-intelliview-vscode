@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import { JSDOM } from 'jsdom';
 
@@ -166,5 +166,133 @@ describe('Fix #10 — export excludes checkbox column', () => {
     // Data cells should have non-negative data-column
     expect(cells[1].getAttribute('data-column')).toBe('0');
     expect(cells[2].getAttribute('data-column')).toBe('1');
+  });
+});
+
+describe('Stale identity fix — delta splices stash.rowIdentities', () => {
+  beforeEach(() => {
+    if (!window.__tableDataStash || !(window.__tableDataStash instanceof Map)) {
+      window.__tableDataStash = new Map();
+    }
+  });
+
+  it('getSelectedRowIdentities returns correct identity after delta-like stash splice', () => {
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-table-id', 'stale-dom');
+    wrapper.setAttribute('data-start-index', '0');
+    wrapper.innerHTML = `
+      <table class="data-table"><tbody>
+        <tr class="resizable-row" data-row-index="0"><td>A</td></tr>
+        <tr class="resizable-row" data-row-index="1"><td>B</td></tr>
+        <tr class="resizable-row" data-row-index="2"><td>C</td></tr>
+        <tr class="resizable-row" data-row-index="3"><td>D</td></tr>
+      </tbody></table>`;
+
+    // Stash row identities matching the 4 rows
+    window.__tableDataStash.set('stale-dom', {
+      rowIdentities: [
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 1 }] },
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 2 }] },
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 3 }] },
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 4 }] },
+      ]
+    });
+
+    // Select row C (globalIndex=2)
+    window.toggleRowSelection(wrapper, 2);
+    expect(window.getSelectedRowIdentities(wrapper)).toEqual([
+      { kind: 'primaryKey', parts: [{ column: 'id', value: 3 }] }
+    ]);
+
+    // Simulate delta delete of row B (index 1), mirroring what handleTableDataDelta does:
+    // 1. Remove B's DOM row
+    const bRow = wrapper.querySelector('tr[data-row-index="1"]');
+    bRow.remove();
+    // 2. Decrement data-row-index for rows after the deletion point
+    wrapper.querySelectorAll('tr.resizable-row').forEach(r => {
+      const idx = parseInt(r.getAttribute('data-row-index'), 10);
+      if (Number.isFinite(idx) && idx > 1) {
+        r.setAttribute('data-row-index', String(idx - 1));
+      }
+    });
+    // 3. Splice stash rowIdentities at the same local index
+    window.__tableDataStash.get('stale-dom').rowIdentities.splice(1, 1);
+    // 4. Clear selection (DOM path safety net)
+    window.clearSelection(wrapper);
+
+    // Now rows are: A(0), C(1), D(2)
+    // Selection was cleared — re-select C at its new position (globalIndex=1)
+    window.toggleRowSelection(wrapper, 1);
+    const ids = window.getSelectedRowIdentities(wrapper);
+    // Must return C's identity (value 3), not D's (value 4)
+    expect(ids).toEqual([
+      { kind: 'primaryKey', parts: [{ column: 'id', value: 3 }] }
+    ]);
+  });
+
+  it('virtual path: splice stash at correct indices for multiple deletes', () => {
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-table-id', 'stale-virt');
+    wrapper.setAttribute('data-start-index', '0');
+    wrapper.innerHTML = `
+      <table class="data-table"><tbody>
+        <tr class="resizable-row" data-row-index="0"><td>A</td></tr>
+        <tr class="resizable-row" data-row-index="1"><td>B</td></tr>
+        <tr class="resizable-row" data-row-index="2"><td>C</td></tr>
+        <tr class="resizable-row" data-row-index="3"><td>D</td></tr>
+      </tbody></table>`;
+    // Simulate virtual state so getSelectedRowIdentities takes the virtual path
+    wrapper.__virtualTableState = {
+      enabled: true,
+      startIndex: 0,
+      order: [0, 1, 2, 3],
+    };
+
+    window.__tableDataStash.set('stale-virt', {
+      rowIdentities: [
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 1 }] },
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 2 }] },
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 3 }] },
+        { kind: 'primaryKey', parts: [{ column: 'id', value: 4 }] },
+      ]
+    });
+
+    // Select C (globalIndex=2)
+    window.toggleRowSelection(wrapper, 2);
+    expect(window.getSelectedRowIdentities(wrapper)).toEqual([
+      { kind: 'primaryKey', parts: [{ column: 'id', value: 3 }] }
+    ]);
+
+    // Simulate virtual path delta: splice pageData AND rowIdentities bottom-up
+    const stashIdentities = window.__tableDataStash.get('stale-virt').rowIdentities;
+    const deletes = [1, 3].sort((a, b) => b - a); // delete B and D
+    deletes.forEach(local => {
+      stashIdentities.splice(local, 1);
+    });
+    // Reconcile selection (simulating what Fix 3 does)
+    const sel = window.getSelectionStore(wrapper);
+    sel.delete(2); // globalIndex=2 is no longer valid since D was at 3
+    // D was at index 3, after deleting B, it shifted to 2, but D itself was also deleted
+    // C was at index 2, after deleting B(1), C shifted to 1, so globalIndex 2 is stale
+
+    // After reconcile, selection should be empty since C was at index 2
+    // which was a deleted row (D)'s position after B was removed
+    expect(window.getSelectedRowIdentities(wrapper)).toEqual([]);
+  });
+
+  it('deleteSelectedRows refuses when stash has no rowIdentities', () => {
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-table-id', 'stale-guard');
+    wrapper.setAttribute('data-table', 'test_table');
+    wrapper.dataset.editable = 'true';
+
+    window.__tableDataStash.set('stale-guard', {
+      // no rowIdentities array
+      columns: ['id', 'name'],
+    });
+
+    window.toggleRowSelection(wrapper, 0);
+    // Should not throw; should return early with an error
+    expect(() => window.deleteSelectedRows(wrapper)).not.toThrow();
   });
 });

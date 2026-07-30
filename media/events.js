@@ -2754,8 +2754,9 @@ function initializeTableEvents(tableWrapper) {
         const cb = target.closest(".row-select-checkbox");
         if (!cb) return;
 
+        const row = cb.closest("tr.resizable-row");
         const globalIndex = parseInt(
-          cb.getAttribute("data-global-index") || "",
+          row?.getAttribute("data-row-index") || "",
           10
         );
         if (!Number.isFinite(globalIndex)) return;
@@ -3663,6 +3664,12 @@ function handleTableDataDelta({
 
     const toLocal = (globalRowIndex) => globalRowIndex - pageStart;
 
+    // Get stash to keep rowIdentities in sync with pageData
+    const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+    const stash = (typeof window.__tableDataStash !== "undefined" && window.__tableDataStash instanceof Map)
+      ? window.__tableDataStash.get(tableId) || null
+      : null;
+
     // Deletes are indices in the OLD page; apply from bottom to top.
     const deleteLocals = deletes
       .map((rowIndex) => toLocal(rowIndex))
@@ -3673,6 +3680,9 @@ function handleTableDataDelta({
       .sort((a, b) => b - a);
     deleteLocals.forEach((local) => {
       vs.pageData.splice(local, 1);
+      if (Array.isArray(stash?.rowIdentities)) {
+        stash.rowIdentities.splice(local, 1);
+      }
     });
 
     // Inserts are indices in the NEW page; apply from top to bottom.
@@ -3692,6 +3702,9 @@ function handleTableDataDelta({
     insertLocals.forEach(({ local, rowData }) => {
       const clamped = Math.max(0, Math.min(vs.pageData.length, local));
       vs.pageData.splice(clamped, 0, rowData);
+      if (Array.isArray(stash?.rowIdentities)) {
+        stash.rowIdentities.splice(clamped, 0, null);
+      }
     });
 
     // Updates are indices in the NEW page.
@@ -3734,6 +3747,24 @@ function handleTableDataDelta({
     if (typeof window.refreshVirtualTable === "function") {
       window.refreshVirtualTable(wrapper);
     }
+    // Reconcile selection: remove stale global indices for deleted rows
+    if (Array.isArray(stash?.rowIdentities)) {
+      const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
+      if (sel && sel.size > 0) {
+        const validIds = new Set();
+        stash.rowIdentities.forEach((id) => {
+          if (id) validIds.add(JSON.stringify(id));
+        });
+        for (const gIdx of sel) {
+          const local = gIdx - pageStart;
+          const id = stash.rowIdentities[local];
+          if (!id || !validIds.has(JSON.stringify(id))) {
+            sel.delete(gIdx);
+          }
+        }
+        if (typeof updateSelectedUI === "function") updateSelectedUI(wrapper);
+      }
+    }
     return;
   }
 
@@ -3744,6 +3775,13 @@ function handleTableDataDelta({
     }
     return;
   }
+
+  // Get stash for syncing rowIdentities with DOM row order
+  const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+  const domStash = (typeof window.__tableDataStash !== "undefined" && window.__tableDataStash instanceof Map)
+    ? window.__tableDataStash.get(tableId) || null
+    : null;
+  const startIndex = parseInt(wrapper.getAttribute("data-start-index") || "0", 10) || 0;
 
   //–– 1) APPLY UPDATES ––
   updates.forEach(({ rowIndex, rowData }) => {
@@ -3789,6 +3827,13 @@ function handleTableDataDelta({
           }
         }
       });
+      // Keep stash rowIdentities aligned with the bumped indices
+      if (Array.isArray(domStash?.rowIdentities)) {
+        const insLocal = rowIndex - startIndex;
+        if (insLocal >= 0 && insLocal <= domStash.rowIdentities.length) {
+          domStash.rowIdentities.splice(insLocal, 0, null);
+        }
+      }
       // Use renderTableRows to generate the new row HTML, but robustly patch FK cells after creation
       let columns = Array.from(wrapper.querySelectorAll("thead th[data-column-name]")).map((th) =>
         th.getAttribute("data-column-name"),
@@ -3942,6 +3987,14 @@ function handleTableDataDelta({
         return;
       }
       row.remove();
+      // Keep stash rowIdentities aligned with the removed row
+      if (Array.isArray(domStash?.rowIdentities)) {
+        const delLocal = rowIndex - startIndex;
+        if (delLocal >= 0 && delLocal < domStash.rowIdentities.length) {
+          domStash.rowIdentities.splice(delLocal, 1);
+        }
+      }
+
       // decrement all > rowIndex
       Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
         const idxAttr = r.getAttribute("data-row-index");

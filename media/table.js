@@ -2517,6 +2517,14 @@ function deleteSelectedRows(tableWrapper) {
   const sel = getSelectionStore(tableWrapper);
   if (!sel || sel.size === 0) return;
 
+  // Safety: ensure the stash has identity data (may be stale after delta)
+  const tableId = tableWrapper.getAttribute("data-table-id") || tableWrapper.dataset.tableId || "";
+  const stashData = window.__tableDataStash instanceof Map ? window.__tableDataStash.get(tableId) : null;
+  if (!stashData || !Array.isArray(stashData.rowIdentities) || stashData.rowIdentities.length === 0) {
+    if (typeof showError === "function")
+      showError("Selection data unavailable. Refresh the table and try again.");
+    return;
+  }
 
   const count = sel.size;
   const tableName =
