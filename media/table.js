@@ -456,7 +456,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     backendPaginated ? "true" : "false"
   }" data-virtualized="${
     virtualize ? "true" : "false"
-  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}">
+  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}" data-editable="${isEditable}">
       <div class="table-controls">
         <div class="table-search">
           <input type="text" class="search-input" placeholder="Search table page..." />
@@ -505,8 +505,8 @@ function createDataTable(data, columns, tableName = "", options = {}) {
             </select>
           </div>
           <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>
-          <button class="table-action-btn table-action-btn-selection" title="Export selected rows" data-action="export-selected" style="display:none">📤 Export Selected</button>
-          <button class="table-action-btn table-action-btn-selection table-action-btn-danger" title="Delete selected rows" data-action="delete-selected" style="display:none">🗑️ Delete Selected</button>`
+          <button class="table-action-btn table-action-btn-selection" title="Export selected rows" data-action="export-selected">📤 Export Selected</button>
+          ${isEditable ? '<button class="table-action-btn table-action-btn-selection table-action-btn-danger" title="Delete selected rows" data-action="delete-selected">🗑️ Delete Selected</button>' : ""}`
               : ""
           }
         </div>
@@ -517,7 +517,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     32 + DEFAULT_COLUMN_WIDTH * columns.length
   )}px;">
           <colgroup>
-            <col class="checkbox-col" style="width: 32px; min-width: 32px; max-width: 32px;" />
+            <col class="checkbox-col" />
             ${columns
               .map(
                 (col, index) =>
@@ -675,7 +675,7 @@ function renderTableRowHtml(
   return `
         <tr data-row-index="${globalIndex}" data-local-index="${localIndex}" class="resizable-row" role="row">
           <td class="checkbox-cell" data-column="-1" role="gridcell">
-            <input type="checkbox" class="row-select-checkbox" data-global-index="${globalIndex}" />
+            <input type="checkbox" class="row-select-checkbox" data-global-index="${globalIndex}" aria-label="Select row ${globalIndex + 1}" />
           </td>
           ${
             Array.isArray(row)
@@ -1961,7 +1961,9 @@ function exportTableData(tableWrapper, options = {}) {
 
   // Get visible row data
   const rowData = Array.from(visibleRows).map((row) => {
-    return Array.from(row.querySelectorAll("td")).map((td) => {
+    return Array.from(row.querySelectorAll("td[data-column]"))
+      .filter((td) => parseInt(td.getAttribute("data-column") || "-1", 10) >= 0)
+      .map((td) => {
       let value = getCellValue ? getCellValue(td) : td.textContent.trim();
       return value === "NULL" ? "" : value;
     });
@@ -2339,6 +2341,13 @@ function clearSelection(tableWrapper) {
   updateSelectedUI(tableWrapper);
 }
 
+/**
+ * Return the global indices of all visible (non-filtered, non-hidden) rows.
+ * For virtualised tables uses the ordered source index; for non-virtualised
+ * excludes rows with display:none.
+ * @param {HTMLElement} tableWrapper - The .enhanced-table-wrapper element
+ * @returns {number[]} Visible global row indices
+ */
 function getVisibleRowGlobalIndices(tableWrapper) {
   const vs = /** @type {any} */ (tableWrapper).__virtualTableState;
   if (vs && vs.enabled === true && Array.isArray(vs.order)) {
@@ -2349,7 +2358,7 @@ function getVisibleRowGlobalIndices(tableWrapper) {
   const indices = [];
   const table = tableWrapper.querySelector(".data-table");
   if (table) {
-    table.querySelectorAll("tr.resizable-row").forEach((row) => {
+    table.querySelectorAll("tr.resizable-row:not([style*='display: none'])").forEach((row) => {
       const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
       if (Number.isFinite(idx)) indices.push(idx);
     });
@@ -2357,6 +2366,11 @@ function getVisibleRowGlobalIndices(tableWrapper) {
   return indices;
 }
 
+/**
+ * Synchronise row checkbox states, selected-row classes, and action-button visibility
+ * with the current selection store state.
+ * @param {HTMLElement} tableWrapper - The .enhanced-table-wrapper element
+ */
 function updateSelectedUI(tableWrapper) {
   const sel = getSelectionStore(tableWrapper);
   if (!sel) return;
@@ -2366,7 +2380,7 @@ function updateSelectedUI(tableWrapper) {
   // Update row classes and checkbox states
   const table = tableWrapper.querySelector(".data-table");
   if (table) {
-    table.querySelectorAll("tr.resizable-row").forEach((row) => {
+    table.querySelectorAll("tr.resizable-row:not([style*='display: none'])").forEach((row) => {
       const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
       if (Number.isFinite(idx)) {
         const isSelected = sel.has(idx);
@@ -2380,7 +2394,7 @@ function updateSelectedUI(tableWrapper) {
   // Update select-all checkbox state
   const selectAllCb = tableWrapper.querySelector(".select-all-checkbox");
   const visibleRows = table
-    ? table.querySelectorAll("tr.resizable-row")
+    ? table.querySelectorAll("tr.resizable-row:not([style*='display: none'])")
     : [];
   if (selectAllCb && visibleRows.length > 0) {
     const checkedCount = Array.from(visibleRows).filter((row) => {
@@ -2409,9 +2423,9 @@ function updateSelectedUI(tableWrapper) {
     '[data-action="delete-selected"]'
   );
   if (exportSelectedBtn)
-    exportSelectedBtn.style.display = count > 0 ? "inline-flex" : "none";
+    exportSelectedBtn.classList.toggle("hidden", count === 0);
   if (deleteSelectedBtn)
-    deleteSelectedBtn.style.display = count > 0 ? "inline-flex" : "none";
+    deleteSelectedBtn.classList.toggle("hidden", count === 0);
 }
 
 /**
@@ -2493,9 +2507,16 @@ function rowIdentityToSimple(identity) {
 /**
  * Confirm and delete all selected rows.
  */
+/**
+ * Confirm and delete all selected rows.
+ * Checks editability via data-editable attribute before proceeding.
+ * @param {HTMLElement} tableWrapper - The .enhanced-table-wrapper element
+ */
 function deleteSelectedRows(tableWrapper) {
+  if (tableWrapper.dataset.editable !== "true") return;
   const sel = getSelectionStore(tableWrapper);
   if (!sel || sel.size === 0) return;
+
 
   const count = sel.size;
   const tableName =

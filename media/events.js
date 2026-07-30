@@ -2794,7 +2794,9 @@ function initializeTableEvents(tableWrapper) {
         const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
         if (!sel) return;
 
-        const visibleRows = table.querySelectorAll("tr.resizable-row");
+        const visibleRows = table.querySelectorAll(
+          "tr.resizable-row:not([style*='display: none'])"
+        );
         if (cb.checked) {
           visibleRows.forEach((row) => {
             const idx = parseInt(row.getAttribute("data-row-index") || "", 10);
@@ -3285,7 +3287,7 @@ function handleDeleteRowSuccess(message) {
   const { tableName, rowId } = message;
 
   // Batch delete handler: refresh table and clear selection
-  if (Array.isArray(rowId) && rowId.length > 1) {
+  if (Array.isArray(rowId) && rowId.length >= 1) {
     if (typeof showDeleteSuccess === "function") showDeleteSuccess();
     // Clear any stale selection state
     const wrapper = document.querySelector(
@@ -3297,11 +3299,8 @@ function handleDeleteRowSuccess(message) {
     // Trigger a data refresh for the current page
     const state =
       typeof getCurrentState === "function" ? getCurrentState() : {};
-    const vs =
-      wrapper &&
-      /** @type {any} */ (wrapper).__virtualTableState;
-    const page = vs ? parseInt(wrapper.getAttribute("data-current-page") || "1", 10) : 1;
-    const pageSize = vs ? parseInt(wrapper.getAttribute("data-page-size") || "100", 10) : 100;
+    const page = wrapper ? parseInt(wrapper.getAttribute("data-current-page") || "1", 10) : 1;
+    const pageSize = wrapper ? parseInt(wrapper.getAttribute("data-page-size") || "100", 10) : 100;
     if (
       tableName &&
       window.vscode &&
@@ -3756,7 +3755,7 @@ function handleTableDataDelta({
       return;
     }
     rowData.forEach((val, colIdx) => {
-      const cell = row.children[colIdx];
+      const cell = row.querySelector(`td[data-column="${colIdx}"]`);
       if (cell) {
         const cc = cell.querySelector(".cell-content");
         if (cc) {
@@ -3791,7 +3790,7 @@ function handleTableDataDelta({
         }
       });
       // Use renderTableRows to generate the new row HTML, but robustly patch FK cells after creation
-      let columns = Array.from(wrapper.querySelectorAll("thead th")).map((th) =>
+      let columns = Array.from(wrapper.querySelectorAll("thead th[data-column-name]")).map((th) =>
         th.getAttribute("data-column-name"),
       );
       // Fallback: if any column name is missing, try to get from global schema (handle window typing)
@@ -3984,6 +3983,7 @@ function handleTableDataDelta({
       new Error().stack,
     );
   }
+  clearSelection(wrapper);
 }
 
 // Remove all export statements for browser compatibility

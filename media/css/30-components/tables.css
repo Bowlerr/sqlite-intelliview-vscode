@@ -394,8 +394,11 @@
   transform: translateY(0);
   box-shadow: none;
 }
-.table-action-btn-selection {
-  /* Hidden by inline style; shown dynamically by updateSelectedUI */
+.table-action-btn-selection.hidden {
+  display: none !important;
+}
+.table-action-btn-selection:not(.hidden) {
+  display: inline-flex;
 }
 .table-action-btn-danger {
   background: var(--vscode-errorForeground) !important;
@@ -403,7 +406,7 @@
   color: var(--vscode-button-foreground) !important;
 }
 .table-action-btn-danger:hover {
-  background: color-mix(in srgb, var(--vscode-errorForeground) 80%, white) !important;
+  background: color-mix(in srgb, var(--vscode-errorForeground) 80%, var(--vscode-button-foreground)) !important;
 }
 
 /* ===== PAGINATION CONTROLS ===== */

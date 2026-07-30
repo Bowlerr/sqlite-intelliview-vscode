@@ -2673,7 +2673,7 @@ function highlightForeignKeyTarget(tableWrapper) {
       ? getColumnHeaderText(headers[i])
       : headers[i].textContent.trim();
     if (headerText === foreignKeyInfo.referencedColumn) {
-      targetColumnIndex = i;
+      targetColumnIndex = parseInt(headers[i].getAttribute("data-column") || "-1", 10);
       break;
     }
   }
