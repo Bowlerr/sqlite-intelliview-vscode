@@ -3747,6 +3747,10 @@ function handleTableDataDelta({
     if (typeof window.refreshVirtualTable === "function") {
       window.refreshVirtualTable(wrapper);
     }
+    if ((inserts.length > 0 || deletes.length > 0) &&
+        typeof clearSelection === "function") {
+        clearSelection(wrapper);
+    }
     // Reconcile selection: remove stale global indices for deleted rows
     if (Array.isArray(stash?.rowIdentities)) {
       const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
