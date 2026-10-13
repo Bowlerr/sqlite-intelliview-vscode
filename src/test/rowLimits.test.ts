@@ -24,10 +24,12 @@ suite('Configurable row limits', () => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-intelliview-row-limits-'));
         databasePath = path.join(tempDir, 'test.sqlite');
         service = new DatabaseService();
-        // Remember any pre-existing user preferences so teardown can restore them.
+        // Remember any pre-existing global overrides so teardown can restore
+        // them. inspect().globalValue (unlike get()) reflects only the global
+        // scope, so we never invent a global override from a workspace value.
         const config = vscode.workspace.getConfiguration('sqliteIntelliView');
-        previousQueryMaxRows = config.get<number>('queryMaxRows');
-        previousMaxTablePageSize = config.get<number>('maxTablePageSize');
+        previousQueryMaxRows = config.inspect<number>('queryMaxRows')?.globalValue;
+        previousMaxTablePageSize = config.inspect<number>('maxTablePageSize')?.globalValue;
     });
 
     teardown(async () => {
