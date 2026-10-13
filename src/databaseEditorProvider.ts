@@ -663,7 +663,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             let totalRowsKnown = true;
             
             if (page !== undefined && pageSize !== undefined) {
-                // Get paginated data
+                // Normalize against the configured cap so the webview's
+                // pagination math matches the rows actually returned.
+                pageSize = dbService.getEffectiveTablePageSize(pageSize);
                 result = await dbService.getTableDataPaginated(tableName, page, pageSize);
                 // Get total row count for pagination controls (cache + async)
                 const cacheKey = `${databasePath}:${tableName}`;
@@ -1153,7 +1155,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             const { table, page, pageSize, key } = sync;
             this.debugLog('DatabaseChange', '[handleExternalDatabaseChange] Using sync state', { table, page, pageSize });
             const db = await this.getOrCreateConnection(databasePath, key);
-            const newResult = await db.getTableDataPaginated(table, page, pageSize);
+            const effectivePageSize = db.getEffectiveTablePageSize(pageSize);
+            const newResult = await db.getTableDataPaginated(table, page, effectivePageSize);
             const newTotalCount = await db.getRowCount(table);
             const [foreignKeys, columnInfo] = await Promise.all([
                 db.getForeignKeys(table),
@@ -1177,7 +1180,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 foreignKeys,
                 columnInfo,
                 page,
-                pageSize,
+                pageSize: effectivePageSize,
                 totalRows: newTotalCount,
                 totalRowsKnown: true
             });

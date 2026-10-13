@@ -1360,10 +1360,12 @@ function handleTableRowCount(message) {
   wrapper.setAttribute("data-total-rows", String(totalRows));
   wrapper.setAttribute("data-total-rows-known", "true");
 
-  const pageSize = parseInt(
-    wrapper.getAttribute("data-page-size") || "100",
-    10,
-  );
+  // Prefer the effective page size from the extension: it may be lower than
+  // the requested one when sqliteIntelliView.maxTablePageSize caps it.
+  const pageSize =
+    typeof message.pageSize === "number" && message.pageSize > 0
+      ? message.pageSize
+      : parseInt(wrapper.getAttribute("data-page-size") || "100", 10);
   const currentPage = parseInt(
     wrapper.getAttribute("data-current-page") || "1",
     10,

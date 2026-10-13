@@ -505,7 +505,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
               ${
                 PAGINATION_CONFIG.pageSizeOptions.includes(pageSize)
                   ? `<option value="custom">Custom…</option>`
-                  : `<option value="custom" selected>Custom (${pageSize})</option>`
+                  : `<option value="${pageSize}" selected>Custom (${pageSize})</option><option value="custom">Custom…</option>`
               }
             </select>
           </div>
@@ -2125,18 +2125,18 @@ function showCustomPageSizeInput(tableWrapper, selectEl) {
   const restoreSelect = () => {
     input.remove();
     selectEl.style.display = "";
-    const active = parseInt(wrapper.dataset.pageSize || "100", 10);
-    selectEl.value = PAGINATION_CONFIG.pageSizeOptions.includes(active)
-      ? String(active)
-      : "custom";
+    // The select always has an option matching the active page size: either a
+    // preset or the rendered "Custom (N)" option.
+    selectEl.value = wrapper.dataset.pageSize || "100";
   };
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      const value = parseInt(input.value, 10);
+      // Number() rejects trailing junk like "100abc" and parses "1e3" as 1000.
+      const value = Number(input.value);
       restoreSelect();
-      if (Number.isFinite(value) && value > 0) {
+      if (Number.isSafeInteger(value) && value > 0) {
         handlePageSizeChange(wrapper, value);
       }
     } else if (e.key === "Escape") {

@@ -568,9 +568,20 @@ export class DatabaseService {
         return configured > 0 ? configured : Number.MAX_SAFE_INTEGER;
     }
 
+    /**
+     * Normalizes a requested table page size against the configured
+     * `sqliteIntelliView.maxTablePageSize` cap (0 or negative = unlimited).
+     * Use this everywhere a page size crosses the extension/webview boundary
+     * so the UI pagination math matches what was actually read.
+     */
+    public getEffectiveTablePageSize(pageSize: number): number {
+        const requested = Number.isInteger(pageSize) && pageSize > 0 ? pageSize : 100;
+        return Math.min(requested, this.getConfiguredRowLimit('maxTablePageSize', 100000));
+    }
+
     public async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<EditableTableData> {
         const safePage = Number.isInteger(page) && page > 0 ? page : 1;
-        const safePageSize = Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, this.getConfiguredRowLimit('maxTablePageSize', 100000)) : 100;
+        const safePageSize = this.getEffectiveTablePageSize(pageSize);
         const offset = (safePage - 1) * safePageSize;
         return this.getTableDataWithIdentities(tableName, safePageSize, offset);
     }

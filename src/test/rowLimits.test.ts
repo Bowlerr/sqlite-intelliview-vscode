@@ -11,6 +11,8 @@ suite('Configurable row limits', () => {
     let databasePath: string;
     let service: DatabaseService;
     let SQL: initSqlJs.SqlJsStatic;
+    let previousQueryMaxRows: number | undefined;
+    let previousMaxTablePageSize: number | undefined;
 
     suiteSetup(async () => {
         SQL = await initSqlJs({
@@ -22,15 +24,19 @@ suite('Configurable row limits', () => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-intelliview-row-limits-'));
         databasePath = path.join(tempDir, 'test.sqlite');
         service = new DatabaseService();
+        // Remember any pre-existing user preferences so teardown can restore them.
+        const config = vscode.workspace.getConfiguration('sqliteIntelliView');
+        previousQueryMaxRows = config.get<number>('queryMaxRows');
+        previousMaxTablePageSize = config.get<number>('maxTablePageSize');
     });
 
     teardown(async () => {
         service.closeDatabase();
         fs.rmSync(tempDir, { recursive: true, force: true });
-        // Restore defaults so other suites are unaffected.
+        // Restore the user's previous settings (undefined clears the override).
         const config = vscode.workspace.getConfiguration('sqliteIntelliView');
-        await config.update('queryMaxRows', undefined, vscode.ConfigurationTarget.Global);
-        await config.update('maxTablePageSize', undefined, vscode.ConfigurationTarget.Global);
+        await config.update('queryMaxRows', previousQueryMaxRows, vscode.ConfigurationTarget.Global);
+        await config.update('maxTablePageSize', previousMaxTablePageSize, vscode.ConfigurationTarget.Global);
     });
 
     function createDatabase(sql: string): void {
@@ -88,5 +94,17 @@ suite('Configurable row limits', () => {
 
         const allRows = await service.getTableData('many_rows', 150000);
         assert.strictEqual(allRows.values.length, 100001);
+    });
+
+    test('positive maxTablePageSize applies to paginated reads', async () => {
+        createWideDatabase(1001);
+        await vscode.workspace.getConfiguration('sqliteIntelliView')
+            .update('maxTablePageSize', 1000, vscode.ConfigurationTarget.Global);
+        await service.openDatabase(databasePath);
+
+        // Requesting page 2 with a page size above the cap must use the
+        // effective (capped) size for both the offset and the read.
+        const secondPage = await service.getTableDataPaginated('many_rows', 2, 200000);
+        assert.deepStrictEqual(secondPage.values, [[1001]]);
     });
 });
