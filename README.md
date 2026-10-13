@@ -173,6 +173,12 @@ These settings control WAL behavior and external refresh noise:
 - `sqliteIntelliView.externalRefreshDebounceMs` (default: `500`): coalesces bursts of DB/WAL/SHM file events into a single refresh. Increase this if external writers are noisy.
 - `sqliteIntelliView.defaultPageSize`: default rows per page in table views.
 
+These settings control how many rows are loaded at once:
+
+- `sqliteIntelliView.maxTablePageSize` (default: `100000`): caps the rows per page in table views. The page-size selector also offers a **Custom…** entry so you can type any page size for the current table. Set to `0` for no limit.
+- `sqliteIntelliView.queryMaxRows` (default: `10000`): caps rows returned by the query editor. Set to `0` for no limit.
+
+Note: databases are loaded into memory (sql.js WASM), so very large pages or unbounded query results may affect performance and memory usage.
 Tip: if you see repeated refresh notifications from busy external writers, keep `walMonitoring` on and increase `externalRefreshDebounceMs` (for example, `750` or `1000`).
 
 ## Commands

@@ -181,8 +181,19 @@
           "type": "number",
           "default": 1000,
           "minimum": 10,
-          "maximum": 100000,
-          "description": "Default number of rows per page in data tables."
+          "description": "Default number of rows per page in data tables. Capped by sqliteIntelliView.maxTablePageSize unless that setting is 0 (unlimited)."
+        },
+        "sqliteIntelliView.maxTablePageSize": {
+          "type": "number",
+          "default": 100000,
+          "minimum": 0,
+          "description": "Maximum number of rows per page in data tables. Set to 0 for no limit. Very large pages may affect performance and memory usage."
+        },
+        "sqliteIntelliView.queryMaxRows": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 0,
+          "description": "Maximum number of rows returned by the query editor. Set to 0 for no limit. Very large result sets may affect performance and memory usage."
         },
         "sqliteIntelliView.walAutoCheckpoint": {
           "type": "boolean",

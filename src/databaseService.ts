@@ -530,8 +530,9 @@ export class DatabaseService {
                 values: []
             };
 
-            // Limit results to prevent memory issues
-            const maxRows = 10000;
+            // Limit results to prevent memory issues. Configurable via
+            // `sqliteIntelliView.queryMaxRows`; 0 or negative means unlimited.
+            const maxRows = this.getConfiguredRowLimit('queryMaxRows', 10000);
             let rowCount = 0;
 
             while (stmt.step() && rowCount < maxRows) {
@@ -555,9 +556,21 @@ export class DatabaseService {
         return this.getTableDataWithIdentities(tableName, limit, offset);
     }
 
+    /**
+     * Reads a row-limit setting. Values <= 0 mean "no limit" and resolve to
+     * Number.MAX_SAFE_INTEGER; non-integer values fall back to the default.
+     */
+    private getConfiguredRowLimit(setting: 'queryMaxRows' | 'maxTablePageSize', defaultValue: number): number {
+        const configured = vscode.workspace.getConfiguration('sqliteIntelliView').get<number>(setting, defaultValue);
+        if (!Number.isSafeInteger(configured)) {
+            return defaultValue;
+        }
+        return configured > 0 ? configured : Number.MAX_SAFE_INTEGER;
+    }
+
     public async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<EditableTableData> {
         const safePage = Number.isInteger(page) && page > 0 ? page : 1;
-        const safePageSize = Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 100000) : 100;
+        const safePageSize = Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, this.getConfiguredRowLimit('maxTablePageSize', 100000)) : 100;
         const offset = (safePage - 1) * safePageSize;
         return this.getTableDataWithIdentities(tableName, safePageSize, offset);
     }
@@ -656,7 +669,7 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        const safeLimit = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 100000) : 1000;
+        const safeLimit = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, this.getConfiguredRowLimit('maxTablePageSize', 100000)) : 1000;
         const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
         const editability = await this.getTableEditability(tableName);
         const definition = editability.definition;

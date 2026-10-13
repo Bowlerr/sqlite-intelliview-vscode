@@ -2658,11 +2658,17 @@ function initializeTableEvents(tableWrapper) {
         }
       });
     }
-    // Page size selector
+    // Page size selector ("Custom…" opens an inline input for any value)
     const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
     if (pageSizeSelect) {
       pageSizeSelect.addEventListener("change", (e) => {
         const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+        if (e.target.value === "custom") {
+          if (typeof showCustomPageSizeInput !== "undefined") {
+            showCustomPageSizeInput(tableWrapper, e.target);
+          }
+          return;
+        }
         if (typeof handlePageSizeChange !== "undefined") {
           handlePageSizeChange(tableWrapper, parseInt(e.target.value));
         }

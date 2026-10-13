@@ -130,7 +130,9 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         const config = vscode.workspace.getConfiguration('sqliteIntelliView');
         const configuredPageSize = config.get<number>('defaultPageSize', 1000);
         const configuredExternalRefreshDebounceMs = config.get<number>('externalRefreshDebounceMs', 500);
-        const defaultPageSize = Math.min(100000, Math.max(10, Number.isFinite(configuredPageSize) ? configuredPageSize : 1000));
+        const configuredMaxPageSize = config.get<number>('maxTablePageSize', 100000);
+        const maxPageSize = Number.isSafeInteger(configuredMaxPageSize) && configuredMaxPageSize > 0 ? configuredMaxPageSize : Number.MAX_SAFE_INTEGER;
+        const defaultPageSize = Math.min(maxPageSize, Math.max(10, Number.isFinite(configuredPageSize) ? configuredPageSize : 1000));
         const externalRefreshDebounceMs = Math.min(10000, Math.max(50, Number.isFinite(configuredExternalRefreshDebounceMs) ? configuredExternalRefreshDebounceMs : 500));
         return {
             defaultPageSize,

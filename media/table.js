@@ -502,6 +502,11 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                     }>${size}</option>`
                 )
                 .join("")}
+              ${
+                PAGINATION_CONFIG.pageSizeOptions.includes(pageSize)
+                  ? `<option value="custom">Custom…</option>`
+                  : `<option value="custom" selected>Custom (${pageSize})</option>`
+              }
             </select>
           </div>
           <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>`
@@ -2091,6 +2096,65 @@ function handlePageSizeChange(tableWrapper, newPageSize) {
 
   // Update to new page
   updateTablePage(tableWrapper, newCurrentPage);
+}
+
+/**
+ * Replaces the page-size <select> with an inline number input so users can
+ * type a custom page size. Enter applies, Escape or clicking away cancels.
+ * @param {Element} tableWrapper - Table wrapper element
+ * @param {HTMLSelectElement} selectEl - The page-size select element
+ */
+function showCustomPageSizeInput(tableWrapper, selectEl) {
+  if (!tableWrapper || !selectEl) {
+    return;
+  }
+  const wrapper = /** @type {HTMLElement} */ (tableWrapper);
+  const container = selectEl.closest(".page-size-selector");
+  if (!container || container.querySelector(".page-size-custom-input")) {
+    return;
+  }
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.step = "1";
+  input.className = "page-size-custom-input";
+  input.value = wrapper.dataset.pageSize || "100";
+  input.title = "Type a custom page size and press Enter";
+
+  const restoreSelect = () => {
+    input.remove();
+    selectEl.style.display = "";
+    const active = parseInt(wrapper.dataset.pageSize || "100", 10);
+    selectEl.value = PAGINATION_CONFIG.pageSizeOptions.includes(active)
+      ? String(active)
+      : "custom";
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const value = parseInt(input.value, 10);
+      restoreSelect();
+      if (Number.isFinite(value) && value > 0) {
+        handlePageSizeChange(wrapper, value);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      restoreSelect();
+    }
+  });
+  input.addEventListener("blur", () => {
+    // Clicking away cancels so the UI never gets stuck in edit mode.
+    if (input.isConnected) {
+      restoreSelect();
+    }
+  });
+
+  selectEl.style.display = "none";
+  container.appendChild(input);
+  input.focus();
+  input.select();
 }
 
 /**

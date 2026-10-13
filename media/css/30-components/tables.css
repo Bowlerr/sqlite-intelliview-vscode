@@ -451,6 +451,20 @@
   outline: none;
   border-color: var(--vscode-focusBorder);
 }
+.page-size-custom-input {
+  height: 24px;
+  width: 90px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 0.75em;
+}
+.page-size-custom-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
 
 /* ===== ADVANCED TABLE INFO & PAGINATION (from vscode.css) ===== */
 .table-info {
