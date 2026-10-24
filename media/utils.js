@@ -93,16 +93,18 @@ function compareValues(a, b, direction = "asc") {
     return direction === "asc" ? -1 : 1;
   }
 
-  // Try numeric comparison first
+  // Use one numeric/text ordering for every pair. Falling back to lexical
+  // comparison only when one side is numeric creates comparison cycles.
   const numA = parseFloat(a);
   const numB = parseFloat(b);
-
-  if (!isNaN(numA) && !isNaN(numB)) {
-    return direction === "asc" ? numA - numB : numB - numA;
-  }
-
-  // String comparison
-  const result = a.localeCompare(b);
+  const numericA = !Number.isNaN(numA);
+  const numericB = !Number.isNaN(numB);
+  const result = numericA !== numericB
+    ? numericA ? -1 : 1
+    : numericA
+      // Relational comparison also handles equal infinities without NaN.
+      ? numA < numB ? -1 : numA > numB ? 1 : 0
+      : a.localeCompare(b);
   return direction === "asc" ? result : -result;
 }
 
@@ -145,29 +147,64 @@ function sanitizeFilename(filename) {
  * @returns {string} CSV content
  */
 function createCSVContent(headers, rows) {
-  let csvContent = "";
+  const escapeField = (cell) => {
+    const value = cell === null || cell === undefined ? "" : String(cell);
+    return /[,"\r\n]/.test(value)
+      ? '"' + value.replace(/"/g, '""') + '"'
+      : value;
+  };
+  return [headers, ...rows].map((row) => row.map(escapeField).join(",")).join("\n") + "\n";
+}
 
-  // Add headers
-  csvContent += headers.join(",") + "\n";
+/** Escape control characters and literal backslashes without losing their distinction. */
+function encodeCellText(value) {
+  const escapes = { "\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t", "\b": "\\b", "\f": "\\f" };
+  return String(value).replace(/[\\\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, (character) =>
+    escapes[character] || `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`
+  );
+}
 
-  // Add rows
-  rows.forEach((row) => {
-    const csvRow = row.map((cell) => {
-      let value = cell;
-      if (value === "NULL") {
-        value = "";
-      }
+/** Decode the visible text editor representation; reject ambiguous escape sequences. */
+function decodeCellText(value) {
+  const escapes = { "\\": "\\", n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" };
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== "\\") {
+      result += value[index];
+      continue;
+    }
+    const escape = value[++index];
+    if (Object.prototype.hasOwnProperty.call(escapes, escape)) {
+      result += escapes[escape];
+    } else if (escape === "u" && /^[0-9a-fA-F]{4}$/.test(value.slice(index + 1, index + 5))) {
+      result += String.fromCharCode(parseInt(value.slice(index + 1, index + 5), 16));
+      index += 4;
+    } else {
+      throw new Error("Invalid escape. Use \\n, \\r, \\t, \\b, \\f, \\u0000, or \\\\ for a literal backslash.");
+    }
+  }
+  return result;
+}
 
-      // Escape commas and quotes
-      if (value.includes(",") || value.includes('"')) {
-        value = '"' + value.replace(/"/g, '""') + '"';
-      }
-      return value;
-    });
-    csvContent += csvRow.join(",") + "\n";
-  });
+/** Read original text independently of HTML attribute/newline normalization. */
+function getCellOriginalText(content) {
+  const value = content?.getAttribute("data-original-value") || "";
+  return content?.getAttribute("data-original-encoding") === "escaped"
+    ? decodeCellText(value)
+    : value;
+}
 
-  return csvContent;
+function setCellContentValue(content, value) {
+  const isNull = value === null || value === undefined;
+  const text = isNull ? "" : encodeCellText(value);
+  content.setAttribute("data-original-value", text);
+  content.setAttribute("data-original-encoding", "escaped");
+  content.setAttribute("data-original-is-null", String(isNull));
+  if (isNull) {
+    content.innerHTML = "<em>NULL</em>";
+  } else {
+    content.textContent = text;
+  }
 }
 
 /**
@@ -244,6 +281,10 @@ if (typeof module !== "undefined" && module.exports) {
     pluralize,
     sanitizeFilename,
     createCSVContent,
+    encodeCellText,
+    decodeCellText,
+    getCellOriginalText,
+    setCellContentValue,
     downloadFile,
     formatCellValue,
     formatFileSize,

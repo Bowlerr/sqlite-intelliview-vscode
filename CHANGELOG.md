@@ -1,5 +1,32 @@
 # Change Log
 
+## [0.5.0] - 2026-10-24
+
+### Added
+
+- Row checkboxes, selection counts, filtered-page select-all, and selected-row CSV export.
+- Centered, theme-aware checkboxes with a full-cell click target and keyboard support; deletion dialogs contain and restore keyboard focus.
+- Atomic deletion of selected rows using stable identities, with one transaction and file save for the entire selection. Selected rows removed by triggers or cascades count toward the batch; stale, replaced, or renamed selected identities reject the entire operation.
+- Configurable query-result and table-page limits, custom page sizes, and an explicit notice when query results are truncated. Internal schema reads remain complete regardless of the query limit.
+- Automated webview regression tests in CI and a Node-only database test command for local development.
+- A database-and-eye extension logo, a matching README banner, and clearer installation, feature, and demo sections.
+
+### Fixed
+
+- Control characters and literal backslashes display as reversible escapes and survive cell editing. Invalid escape sequences are rejected without writing.
+- ER diagrams and schema metadata load for FTS5 virtual tables even when the bundled query engine lacks the FTS5 module. Query execution against FTS5 remains unsupported by that engine.
+- Selection controls preserve sorting, pinning, copying, pagination, and BLOB/composite row identities. Stale selections are invalidated before destructive operations.
+- CSV export preserves raw newlines, carriage returns, whitespace, and literal `NULL` strings.
+- Embedded NUL characters and padded numeric-looking text survive reads, edits, and reloads without truncation or unwanted conversion.
+- Large SQLite INTEGER values remain exact and distinct from identical-looking TEXT during edits, deletion, queries, and foreign-key navigation.
+- Pagination preserves active edits and pending saves; filtering and sorting use stored values consistently across regular and virtual tables.
+- Deletion refreshes counts across affected tables and clamps pagination using the actual remaining rows, including additional trigger or cascade deletions. Virtual scrolling spacers cannot target a data row for deletion.
+- Switching tables during a queued or saving deletion refreshes the destination after the write, while preserving any active edit. Virtual tables retain selection, export, and supported cell editing while unsupported row deletion is disabled.
+- Virtual scrolling updates selection only for rendered rows, avoiding full-page scans on each viewport change.
+- Saving or restoring a database preserves its foreign-key, recursive-trigger, read-only, and check-constraint settings.
+- Schema metadata remains fully visible with small page caps; separate query executions retain their own tabs and valid pagination.
+- Lint no longer changes source files during validation. Extension packages exclude local databases, SQL fixtures, and test/development files.
+
 ## [0.4.10] - 2026-07-12
 
 ### Added

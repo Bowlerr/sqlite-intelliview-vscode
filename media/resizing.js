@@ -499,10 +499,11 @@ function initializeTableLayout(tableWrapper) {
   }
 
   // Set initial column widths based on content
-  const headers = table.querySelectorAll("th");
-  headers.forEach((header, index) => {
-    // Get the maximum content width for this column
-    const columnCells = table.querySelectorAll(`td[data-column="${index}"]`);
+  const headers = table.querySelectorAll("th[data-column]");
+  headers.forEach((header) => {
+    const colIdx = header.getAttribute("data-column");
+    if (colIdx === null) return;
+    const columnCells = table.querySelectorAll(`td[data-column="${colIdx}"]`);
     let maxWidth = header.offsetWidth;
 
     columnCells.forEach((cell) => {

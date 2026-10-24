@@ -12,6 +12,18 @@
   justify-content: center;
   z-index: 10000;
 }
+dialog.confirm-dialog-overlay {
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  box-sizing: border-box;
+  max-width: none;
+  max-height: none;
+  color: var(--vscode-foreground);
+}
+dialog.confirm-dialog-overlay::backdrop {
+  background: transparent;
+}
 .confirm-dialog {
   background: var(--vscode-editor-background);
   border: 1px solid var(--vscode-panel-border);
@@ -22,6 +34,13 @@
   padding: 24px;
   overflow-y: auto;
   font-family: var(--vscode-font-family);
+  box-sizing: border-box;
+  max-height: 100%;
+  overflow-wrap: anywhere;
+}
+.confirm-dialog-btn:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
 }
 .confirm-dialog-title {
   color: var(--vscode-foreground);

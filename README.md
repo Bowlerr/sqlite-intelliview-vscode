@@ -1,232 +1,202 @@
-# SQLite IntelliView (Beta)
+<p align="center">
+  <img src="images/banner.png" width="1536" alt="SQLite IntelliView — See, Edit, Explore SQLite — right in your editor." />
+</p>
 
-[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/bowlerr.sqlite-intelliview-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/bowlerr.sqlite-intelliview-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/bowlerr.sqlite-intelliview-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<h1 align="center">SQLite IntelliView</h1>
 
-Modern SQLite (and SQLCipher) database viewer/editor for VS Code: table browsing, Monaco-powered queries, ER diagrams, and quality-of-life tooling for JSON/BLOBs and large tables.
+<p align="center">
+  <strong>See · Edit · Explore SQLite — right in your editor.</strong><br />
+  Browse tables, run queries, and follow relationships.<br />
+  Local, offline, and free. Available through VS Code Marketplace and Open VSX.
+</p>
 
-> Beta note: features and stability are evolving. Please report issues/feedback on GitHub.
+<p align="center">
+  <a href="https://github.com/Bowlerr/sqlite-intelliview-vscode/releases/latest"><img src="https://img.shields.io/github/v/release/Bowlerr/sqlite-intelliview-vscode?label=release" alt="Latest release" /></a>
+  <a href="https://github.com/Bowlerr/sqlite-intelliview-vscode/blob/HEAD/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+</p>
 
-**Offline + Secure**: runs locally inside VS Code and the extension does not send your database contents anywhere (no cloud, no telemetry).
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode"><strong>Install for VS Code</strong></a>
+  &nbsp;·&nbsp; <a href="https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode"><strong>Install from Open VSX</strong></a>
+  &nbsp;·&nbsp; <a href="#supported-editors">Supported editors</a>
+  &nbsp;·&nbsp; <a href="#quick-start">Quick start</a>
+  &nbsp;·&nbsp; <a href="#see-it-in-action">Demos</a>
+  &nbsp;·&nbsp; <a href="#settings">Settings</a>
+  &nbsp;·&nbsp; <a href="https://github.com/Bowlerr/sqlite-intelliview-vscode/issues">Report an issue</a>
+</p>
 
-## GIF Demos
+> **Beta:** actively evolving. Your database contents stay on your machine; the extension has no cloud service or telemetry. See [editing and limits](#editing-and-limits) before working with important or shared data.
 
-A quick tour of the main workflows (all offline, inside VS Code):
+## Your database, in context
+
+| Work with | What you can do |
+| --- | --- |
+| **Tables** | Open multiple tabs, reorder them, and browse with pagination, page search, column filters, sorting, pinning, and resizable rows and columns. |
+| **Cells and rows** | Edit values inline, select rows with checkboxes, export a selection, and delete selected rows in one transaction. |
+| **SQL** | Use the bundled Monaco editor, keep query results in separate tabs, and choose your result limits. |
+| **Relationships** | Inspect columns and keys, follow foreign-key links, and explore an interactive ER diagram. |
+| **JSON and BLOBs** | Expand values, view formatted JSON and images, or copy data as JSON, Base64, or Hex. |
+| **Files** | Open SQLite or SQLCipher databases, monitor external changes, and checkpoint write-ahead logs. |
+
+## Supported editors
+
+SQLite IntelliView uses the **VS Code 1.101+ extension API** and a desktop Node.js extension host. The same extension is distributed through VS Code Marketplace, Open VSX, and the release VSIX.
+
+| Editor | Installation |
+| --- | --- |
+| **Visual Studio Code** | [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode). |
+| **[VSCodium](https://github.com/VSCodium/vscodium/blob/master/docs/extensions.md)** | Search for **SQLite IntelliView** in Extensions, using its default [Open VSX registry](https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode). |
+| **[Cursor](https://cursor.com/help/customization/extensions)** | Search for **SQLite IntelliView** in its Open VSX-backed extension catalog. Availability can depend on the editor's catalog policies. |
+| **Other compatible desktop editors** | Install from [Open VSX](https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode) when supported, or use **Extensions: Install from VSIX…** with a package from [GitHub Releases](https://github.com/Bowlerr/sqlite-intelliview-vscode/releases). |
+
+Release tests run in Visual Studio Code. Other editors must provide the required extension API and are not individually validated by this project's test suite. Browser-only extension hosts are not supported.
+
+Missing your editor, or something is not working? **[Report an editor compatibility issue](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues/new?title=Editor+compatibility%3A+&body=%23%23%23+Editor%0AName+and+version%3A%0A%0A%23%23%23+Environment%0AOperating+system%3A%0ASQLite+IntelliView+version%3A%0AInstalled+from+%28VS+Code+Marketplace+%2F+Open+VSX+%2F+VSIX%29%3A%0A%0A%23%23%23+What+happened%3F%0ADescribe+the+missing+support+or+problem%2C+and+what+you+expected.%0A%0A%23%23%23+Steps+to+reproduce%0A1.+%0A%0A%23%23%23+Relevant+error+messages%0AInclude+non-sensitive+messages+if+available.%0A)**. The form includes fields for your editor, version, operating system, installation source, and steps to reproduce.
+
+## Quick start
+
+1. [Install SQLite IntelliView](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode) in **VS Code 1.101 or later**, or install it from [Open VSX](https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode) in a compatible editor supporting the same extension API.
+2. Open a database file. Supported extensions are `.sqlite`, `.sqlite3`, `.db`, `.db3`, `.s3db`, and `.sl3`, including uppercase variants.
+3. If prompted, choose **Open With… → SQLite Database IntelliView**. You can also right-click a file and choose **Open SQLite Database**.
+4. Choose a table, then use **Data** to browse and edit, **Schema** to inspect columns, **Query** to run SQL, or **Diagram** to explore relationships.
+
+The **Database Explorer** lists tables and columns alongside your editor. For a different filename extension, use [custom file extensions](#custom-file-extensions). For an encrypted file, follow [SQLCipher setup](#sqlcipher-encrypted-databases).
+
+## See it in action
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <strong>Browse + edit tables</strong><br/>
-      <img src="images/Database-Viewer-normal.gif" width="430" alt="Browse and edit table data"/>
+      <strong>Browse and edit</strong><br />
+      <img src="images/Database-Viewer-normal.gif" width="430" alt="Browsing a SQLite table and editing cells in VS Code" />
     </td>
     <td width="50%" valign="top">
-      <strong>Multi-table tabs</strong><br/>
-      <img src="images/Tab-Organisation.gif" width="430" alt="Open and reorder multiple table tabs"/>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>Schema view</strong><br/>
-      <img src="images/Schema.gif" width="430" alt="Inspect table schema"/>
-    </td>
-    <td width="50%" valign="top">
-      <strong>Query editor (Monaco)</strong><br/>
-      <img src="images/Query.gif" width="430" alt="Run SQL queries in Monaco editor"/>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>Foreign-key navigation</strong><br/>
-      <img src="images/Relationation-Query.gif" width="430" alt="Navigate relationships via foreign keys"/>
-    </td>
-    <td width="50%" valign="top">
-      <strong>ER diagram</strong><br/>
-      <img src="images/Diagram.gif" width="430" alt="Generate an ER diagram"/>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>JSON viewer</strong><br/>
-      <img src="images/Json-Viewer.gif" width="430" alt="View formatted JSON from cells"/>
-    </td>
-    <td width="50%" valign="top">
-      <strong>BLOB viewer</strong><br/>
-      <img src="images/Blob-Viewer.gif" width="430" alt="View and copy/download BLOB data"/>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>SQLCipher (encrypted DBs)</strong><br/>
-      <img src="images/encryption.gif" width="430" alt="Connect to encrypted SQLCipher database"/>
-    </td>
-    <td width="50%" valign="top">
-      <strong>External updates</strong><br/>
-      <img src="images/external-updates.gif" width="430" alt="Auto-refresh on external database changes"/>
+      <strong>Ask your data a question</strong><br />
+      <img src="images/Query.gif" width="430" alt="Writing SQL in the query editor and viewing results" />
     </td>
   </tr>
 </table>
 
-## What You Get
+Open a focused demo:
 
-- **Free**: no paywalls; MIT-licensed.
-- **Offline + secure by design**: database contents stay on your machine (the extension doesn’t make network requests).
-- **Custom database editor** for `.sqlite`, `.sqlite3`, `.db`, `.db3`, `.s3db`, and `.sl3` (opens as a rich UI, not plain text).
-- **Database Explorer view** (tables + columns) while a database is open.
-- **Multi-table tabs** (open multiple tables/results, drag to reorder).
-- **Fast table browsing**: pagination, quick search, sorting, column filters, resizable columns/rows, column pinning.
-- **Editing**: inline cell edit + row delete (writes changes back to the database file).
-- **Context menu tools**: copy cell/row/column, copy row/table as JSON, JSON viewer for JSON cells, BLOB viewer + copy as Base64/Hex.
-- **Export from the table UI**: export currently visible rows to CSV.
-- **Foreign-key navigation**: jump to referenced rows from FK cells.
-- **ER diagram**: interactive relationship diagram (zoom/pan) built with D3.
-- **WAL-aware**: checkpoints WAL on open (best-effort) and refreshes when `-wal`/`-shm` change.
+| Explore | Inspect | Connect |
+| --- | --- | --- |
+| [Multiple table tabs](images/Tab-Organisation.gif) | [Schema view](images/Schema.gif) | [Foreign-key navigation](images/Relationation-Query.gif) |
+| [ER diagrams](images/Diagram.gif) | [JSON viewer](images/Json-Viewer.gif) | [SQLCipher databases](images/encryption.gif) |
+| [External updates](images/external-updates.gif) | [BLOB viewer](images/Blob-Viewer.gif) | |
 
-## Quick Start
+## Editing and limits
 
-1. Open any `.sqlite`, `.sqlite3`, `.db`, `.db3`, `.s3db`, or `.sl3` file.
-2. If VS Code asks, choose **Open With… → SQLite Database IntelliView**.
-3. Use the left **Database Explorer** to open tables, then:
-   - **Data** tab: browse/edit rows
-   - **Schema** tab: inspect columns/keys
-   - **Query** tab: run SQL
-   - **Diagram** tab: generate an ER diagram
+**Select, export, delete.** Use a row checkbox or click a row to select it. The header checkbox selects all filtered rows on the current page, including rows outside the virtual viewport. A new table snapshot or filter change clears the selection. **Export Selected** writes the selected rows as CSV; **Delete Selected** asks for confirmation and commits the selection together or rolls it back.
 
-Tip: right-click a database file in Explorer → **Open SQLite Database**.
+**Keep text intact.** Control characters display as `\n`, `\r`, `\t`, `\b`, `\f`, or `\u0000`; a literal backslash displays as `\\`. Use the same escapes while editing. Invalid escapes keep the editor open without saving. CSV exports preserve original text and quote multiline fields.
 
-## Requirements (Optional, but Recommended)
-
-SQLite IntelliView runs locally inside VS Code. For best functionality, install these command-line tools and ensure they’re available on your `PATH`:
-
-- `sqlite3` (recommended): used for WAL checkpointing on unencrypted databases.
-- `sqlcipher` (only for encrypted DBs): used to decrypt/re-encrypt SQLCipher databases and checkpoint encrypted WAL databases.
-
-If you don’t install these:
-- Unencrypted databases will still open, but WAL checkpointing may be limited.
-- Encrypted (SQLCipher) databases won’t be able to open/decrypt.
-
-### Install `sqlite3`
-
-- macOS (Homebrew): `brew install sqlite`
-- Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y sqlite3`
-- Windows:
-  - Winget: `winget install --id SQLite.SQLite -e`
-  - Chocolatey: `choco install sqlite`
-
-Verify: `sqlite3 --version`
-
-### Install `sqlcipher`
-
-- macOS (Homebrew): `brew install sqlcipher`
-- Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y sqlcipher`
-- Windows:
-  - MSYS2: `pacman -S mingw-w64-x86_64-sqlcipher`
-  - Or install a SQLCipher build and add `sqlcipher.exe` to your `PATH`.
-
-Verify: `sqlcipher -version`
-
-### Detailed PATH setup guides
-
-- Windows: `readme/windows-path-setup.md`
-- macOS: `readme/macos-path-setup.md`
-
-## SQLCipher (Encrypted Databases)
-
-- Run **SQLite IntelliView: Connect with SQLCipher Key** and enter your key.
-- Or use the input box at the top of the Database Explorer view.
-- SQLCipher support requires the `sqlcipher` CLI to be available on your `PATH` (used for decrypt/re-encrypt and WAL operations).
-
-## WAL Mode (Write-Ahead Logging)
-
-If your database uses WAL mode, IntelliView will try to checkpoint the WAL before loading so you see up-to-date data, and will refresh when WAL/SHM files change.
-
-If the database is locked by another process (or you only have read-only access), you may see stale data. Use:
-
-- **SQLite IntelliView: Checkpoint WAL and Refresh**
-
-For best results, ensure the `sqlite3` CLI is available on your `PATH` (used for WAL checkpointing on unencrypted databases).
+| Keep in mind | Current behavior |
+| --- | --- |
+| **Persisted changes** | Inline edits and row deletion write to the database file. Work on a copy when the data is important or another process also uses it. |
+| **Query-editor writes** | SQL writes change the in-memory database and are **not saved automatically**. A later inline edit or deletion can save that in-memory state. Use a dedicated SQLite client for SQL write workflows. |
+| **Safe row identity** | Views and tables without a usable, stable row identity are read-only. |
+| **Virtual tables** | Selection and export remain available; row deletion is disabled. Supported modules, such as FTS3, retain inline cell editing when rows have stable identities. |
+| **FTS5** | Schema and ER views can read FTS5 declarations. The bundled engine does **not** support executing FTS5 queries or views that query those tables. |
+| **Search and export scope** | Table search and filters operate on the loaded page. CSV export includes that page's visible or selected rows. |
+| **Result size** | Queries return up to **10,000 rows** by default, with a notice when truncated. [Configure the limits](#settings) for larger results; larger pages and unlimited results use more memory. |
+| **Restricted SQL** | The query editor blocks statements such as `PRAGMA key`, `ATTACH DATABASE`, and `DETACH DATABASE`. |
 
 ## Settings
 
-SQLite IntelliView recognizes `.sqlite`, `.sqlite3`, `.db`, `.db3`, `.s3db`, and `.sl3` files by default. Add other extensions with `sqliteIntelliView.additionalFileExtensions`. Values may include a leading dot, are matched case-insensitively, and invalid or duplicate entries are ignored:
+Open your editor's Settings and search for **SQLite IntelliView**, or edit `settings.json`. All names below use the `sqliteIntelliView.` prefix.
+
+### Rows and results
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `defaultPageSize` | `1000` | Initial table page size, capped by `maxTablePageSize`. |
+| `maxTablePageSize` | `100000` | Maximum rows per table page. Set to `0` for no configured cap. |
+| `queryMaxRows` | `10000` | Maximum query-result rows. Set to `0` for no configured cap. Schema and ER metadata are unaffected. |
+
+Choose **Custom…** in the rows-per-page selector to enter a positive whole number. The cap is applied before calculating the new page. Caps accept non-negative safe integers; invalid settings fall back to their defaults.
+
+### WAL and external changes
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `walCheckpointMode` | `"full"` | `full` attempts a full checkpoint, `passive` makes a less intrusive attempt, and `off` skips automatic checkpointing. |
+| `walAutoCheckpoint` | `true` | Compatibility switch: `false` disables automatic checkpointing regardless of the mode. |
+| `walMonitoring` | `true` | Watches database, WAL, and SHM files for external changes. |
+| `externalRefreshDebounceMs` | `500` | Groups nearby file events into one refresh. Increase this for busy external writers. |
+
+### Custom file extensions
 
 ```json
 {
-  "sqliteIntelliView.additionalFileExtensions": [
-    ".database",
-    "sqlite-backup"
-  ]
+  "sqliteIntelliView.additionalFileExtensions": [".database", "sqlite-backup"]
 }
 ```
 
-The additional extensions are available immediately in SQLite IntelliView's open dialogs and commands. VS Code custom editor associations, activation events, and Explorer context-menu visibility are static `package.json` contributions, so they cannot be changed dynamically from this setting. To open a custom-extension file, run **SQLite IntelliView: Open SQLite Database** and select it.
+Values may include a leading dot and are matched case-insensitively. Invalid or duplicate entries are ignored. The setting updates IntelliView's open dialogs and commands; it does not dynamically change VS Code's custom-editor associations or Explorer context menu. Use **SQLite IntelliView: Open SQLite Database** to choose a custom-extension file.
 
-These settings control WAL behavior and external refresh noise:
+## SQLCipher encrypted databases
 
-- `sqliteIntelliView.walCheckpointMode` (`"full" | "passive" | "off"`, default: `"full"`): controls how WAL checkpointing runs when opening a database with a `-wal` file.
-  - `full`: more aggressive checkpoint (best chance of up-to-date data).
-  - `passive`: less intrusive checkpoint attempt.
-  - `off`: skip auto-checkpoint on open.
-- `sqliteIntelliView.walAutoCheckpoint` (default: `true`): backward-compatibility toggle. If set to `false`, auto-checkpoint is disabled even if `walCheckpointMode` is `full` or `passive`.
-- `sqliteIntelliView.walMonitoring` (default: `true`): watches DB/WAL/SHM files and auto-refreshes when changes are detected.
-- `sqliteIntelliView.externalRefreshDebounceMs` (default: `500`): coalesces bursts of DB/WAL/SHM file events into a single refresh. Increase this if external writers are noisy.
-- `sqliteIntelliView.defaultPageSize`: default rows per page in table views.
+Install the `sqlcipher` command-line tool and make it available on your `PATH`. Then run **SQLite IntelliView: Connect with SQLCipher Key** from the Command Palette and enter your key. IntelliView uses SQLCipher to decrypt, re-encrypt, and checkpoint encrypted databases.
 
-Tip: if you see repeated refresh notifications from busy external writers, keep `walMonitoring` on and increase `externalRefreshDebounceMs` (for example, `750` or `1000`).
+| Platform | Install SQLCipher |
+| --- | --- |
+| macOS / Homebrew | `brew install sqlcipher` |
+| Ubuntu / Debian | `sudo apt-get update && sudo apt-get install -y sqlcipher` |
+| Windows / MSYS2 | `pacman -S mingw-w64-x86_64-sqlcipher`, or install another SQLCipher build and add `sqlcipher.exe` to `PATH`. |
 
-## Commands
+Verify with `sqlcipher -version`. Need help with `PATH`? See the [Windows guide](readme/windows-path-setup.md) or [macOS guide](readme/macos-path-setup.md).
 
-| Command                                          | Purpose                                                        |
-| ------------------------------------------------ | -------------------------------------------------------------- |
-| `SQLite IntelliView: Open SQLite Database`       | Open a database in the custom editor                           |
-| `SQLite IntelliView: Connect with SQLCipher Key` | Connect to an encrypted database                               |
-| `SQLite IntelliView: Refresh Database`           | Refresh the Database Explorer view                             |
-| `SQLite IntelliView: Checkpoint WAL and Refresh` | Force a WAL checkpoint (best-effort)                           |
-| `SQLite IntelliView: Export Data`                | Placeholder command (use the in-table **Export** button today) |
+## WAL and SQLite tools
 
-## Keybindings (VS Code)
+For databases using write-ahead logging, IntelliView attempts a checkpoint before loading and refreshes when monitored files change. It uses a bundled `sqlite3` executable when available, then falls back to one on your `PATH`. Ordinary SQLite files can still open without a CLI, but checkpointing may be unavailable.
 
-| Command                    | Windows/Linux  | macOS         |
-| -------------------------- | -------------- | ------------- |
-| Open SQLite Database       | `Ctrl+Shift+O` | `Cmd+Shift+O` |
-| Connect with SQLCipher Key | `Ctrl+Shift+K` | `Cmd+Shift+K` |
-| Refresh Database           | `Ctrl+Shift+R` | `Cmd+Shift+R` |
-| Export Data                | `Ctrl+Shift+E` | `Cmd+Shift+E` |
+To install a system SQLite CLI:
 
-## Keyboard Shortcuts (Inside IntelliView)
+| Platform | Install SQLite |
+| --- | --- |
+| macOS / Homebrew | `brew install sqlite` |
+| Ubuntu / Debian | `sudo apt-get update && sudo apt-get install -y sqlite3` |
+| Windows | `winget install --id SQLite.SQLite -e` or `choco install sqlite` |
 
-These work while focus is inside the database editor webview:
+Verify with `sqlite3 --version`. Use **SQLite IntelliView: Checkpoint WAL and Refresh** to request a checkpoint manually. A locked database or read-only access can prevent checkpointing and leave the displayed data stale.
 
-| Action                  | Shortcut                                    |
-| ----------------------- | ------------------------------------------- |
-| Execute query           | `Ctrl+Enter` / `Cmd+Enter`                  |
-| Clear query editor      | `Ctrl+K` / `Cmd+K`                          |
-| Focus table search      | `Ctrl+F` / `Cmd+F` (or `/` on the Data tab) |
-| Refresh view (re-fetch) | `Ctrl+Shift+R` / `Cmd+Shift+R`              |
-| Hard reload from disk   | `Ctrl+Alt+R` / `Cmd+Option+R`               |
+## Commands and shortcuts
 
-## Notes, Limits, and Safety
+All commands below appear under **SQLite IntelliView:** in the Command Palette.
 
-- **Query results are capped** (to keep the UI responsive). For very large exports, use the table UI’s CSV export or a dedicated SQLite client.
-- **Query editor writes are not persisted yet**: non-`SELECT` statements may run in-memory but are not currently written back to disk; use inline cell editing / row delete for persisted changes.
-- **Edits write to the database file**. Consider working on a copy if the database is important or shared with other processes.
-- **SQL restrictions**: some sensitive statements are blocked in the query editor (for example: `PRAGMA key`, `ATTACH DATABASE`, `DETACH DATABASE`).
+| Command | Windows / Linux | macOS |
+| --- | --- | --- |
+| **Open SQLite Database** | `Ctrl+Shift+O` | `Cmd+Shift+O` |
+| **Connect with SQLCipher Key** | `Ctrl+Shift+K` | `Cmd+Shift+K` |
+| **Refresh Database** | `Ctrl+Shift+R` | `Cmd+Shift+R` |
+| **Checkpoint WAL and Refresh** | — | — |
+
+The Command Palette's **Export Data** command (`Ctrl+Shift+E` / `Cmd+Shift+E`) is a placeholder. Use the table's **Export** or **Export Selected** controls for CSV export.
+
+While focus is inside the IntelliView editor:
+
+| Action | Windows / Linux | macOS |
+| --- | --- | --- |
+| Run query | `Ctrl+Enter` | `Cmd+Enter` |
+| Clear query | `Ctrl+K` | `Cmd+K` |
+| Focus table search | `Ctrl+F` or `/` on the Data tab | `Cmd+F` or `/` on the Data tab |
+| Refresh the current view | `Ctrl+Shift+R` | `Cmd+Shift+R` |
+| Reload the database from disk | `Ctrl+Alt+R` | `Cmd+Option+R` |
 
 ## Troubleshooting
 
-- **“Database is locked” / WAL checkpoint fails**: close other apps holding the DB, or run **Checkpoint WAL and Refresh**.
-- **Encrypted DB won’t open**: ensure `sqlcipher` is installed and on `PATH`, then reconnect with the correct key.
-- **Stale data in WAL mode**: checkpoint requires write access; read-only workspaces may not be able to merge WAL changes.
+| Symptom | Try this |
+| --- | --- |
+| Database locked or checkpoint fails | Close other apps holding the file, then run **Checkpoint WAL and Refresh**. |
+| Encrypted database will not open | Check that `sqlcipher -version` works, then reconnect with the correct key. |
+| WAL data appears stale | Confirm that checkpointing is enabled and the database is writable. Another active writer may prevent a complete checkpoint. |
+| Repeated external-change notifications | Keep monitoring enabled and increase `externalRefreshDebounceMs`, for example to `750` or `1000`. |
 
-## Changelog
+Still stuck? [Open an issue](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues) with your editor's name, version, and steps to reproduce. Avoid including private database contents or encryption keys.
 
-See `CHANGELOG.md`.
+## Project
 
-## License
+[Release notes](CHANGELOG.md) · [MIT license](LICENSE) · [Issues and feedback](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues)
 
-MIT License – see `LICENSE`.
-
-## Credits
-
-Built with (bundled locally): `sql.js` (WASM SQLite), `monaco-editor`, `d3`, `sortablejs`.
+Built with locally bundled **sql.js**, **Monaco Editor**, **D3**, and **SortableJS**.
