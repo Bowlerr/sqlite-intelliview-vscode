@@ -54,6 +54,7 @@ function restorePageSizeFocus(wrapper) {
 /** Keep the custom action separate from the active size so it can be reopened. */
 function showCustomPageSizeInput(wrapper, select) {
   if (!wrapper || !select || wrapper.querySelector(".page-size-custom-input")) return;
+  if (tableNavigationBlockedByEdit(wrapper)) return;
   const currentSize = positivePageInteger(wrapper.dataset.pageSize) || 100;
   const maximum = normalizeTablePageLimit(Number(wrapper.dataset.maxTablePageSize));
   select.value = String(currentSize);
@@ -1315,6 +1316,21 @@ function rowMatchesSearchTerm(row, termLower) {
   return false;
 }
 
+/** Filter the stored value, not its escaped display or adjacent editing controls. */
+function getCellFilterText(cell, snapshot) {
+  if (!cell) return "";
+  const row = cell.closest("tr[data-row-index]");
+  const localIndex = Number(row?.getAttribute("data-row-index")) - (snapshot?.startIndex || 0);
+  const columnIndex = Number(cell.getAttribute("data-column"));
+  const source = snapshot?.pageData?.[localIndex];
+  if (Array.isArray(source) && Number.isInteger(columnIndex) && columnIndex >= 0 && columnIndex < source.length) {
+    return String(source[columnIndex] ?? "");
+  }
+  const content = cell.querySelector(".cell-content");
+  if (content?.getAttribute("data-original-is-null") === "true") return "";
+  return content ? getCellOriginalText(content) : "";
+}
+
 function virtualRender(vs, { force }) {
   if (!vs || !vs.enabled) {
     return;
@@ -1560,6 +1576,7 @@ function filterTable(tableWrapper, searchTerm) {
   tbody.querySelectorAll("tr.filter-empty-row").forEach((row) => row.remove());
 
   const rows = tbody.querySelectorAll("tr");
+  const snapshot = getTableSnapshot(wrapper);
   let visibleCount = 0;
 
   const term = searchTerm.toLowerCase();
@@ -1568,11 +1585,11 @@ function filterTable(tableWrapper, searchTerm) {
     if (row.classList.contains("filter-empty-row")) {
       return;
     }
-    const cells = row.querySelectorAll("td");
+    const cells = row.querySelectorAll('td[data-column]:not([data-column="-1"])');
     let rowMatches = false;
 
     cells.forEach((cell) => {
-      const cellText = getCellValue ? getCellValue(cell) : cell.textContent;
+      const cellText = getCellFilterText(cell, snapshot);
       if (cellText.toLowerCase().includes(term)) {
         rowMatches = true;
       }
@@ -1935,6 +1952,7 @@ function filterTableByColumn(table, columnIndex, filterValue) {
   tbody.querySelectorAll("tr.filter-empty-row").forEach((row) => row.remove());
 
   const rows = tbody.querySelectorAll("tr");
+  const snapshot = getTableSnapshot(wrapper);
   let visibleCount = 0;
 
   rows.forEach((row) => {
@@ -1942,12 +1960,7 @@ function filterTableByColumn(table, columnIndex, filterValue) {
       return;
     }
     const cell = row.querySelector(`td[data-column="${columnIndex}"]`);
-    const rawCellValue = getCellValue
-      ? getCellValue(cell)
-      : cell
-      ? cell.textContent
-      : "";
-    const cellValue = String(rawCellValue ?? "");
+    const cellValue = getCellFilterText(cell, snapshot);
     const shouldShow =
       filterValue === "" ||
       cellValue.toLowerCase().includes(filterValue.toLowerCase());
@@ -2138,6 +2151,7 @@ function handlePagination(tableWrapper, action, value) {
  */
 function handlePageSizeChange(tableWrapper, requestedSize, options = {}) {
   if (!tableWrapper || positivePageInteger(requestedSize) === null) return false;
+  if (tableNavigationBlockedByEdit(tableWrapper)) return false;
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
   const maximum = normalizeTablePageLimit(Number(wrapper.dataset.maxTablePageSize));
   const newPageSize = effectiveTablePageSize(requestedSize, maximum);
@@ -2173,6 +2187,7 @@ function updateTablePage(tableWrapper, pageNumber) {
   if (!tableWrapper) {
     return;
   }
+  if (tableNavigationBlockedByEdit(tableWrapper)) return;
   clearSelection(tableWrapper);
   const snapshot = getTableSnapshot(tableWrapper);
   if (snapshot) snapshot.identitiesInvalid = true;
@@ -2235,6 +2250,24 @@ function updateTablePage(tableWrapper, pageNumber) {
       key: currentState.encryptionKey || "",
     });
   }
+}
+
+/** Navigation must not invalidate the identity needed by a delayed blur save. */
+function tableNavigationBlockedByEdit(wrapper) {
+  const tableId = wrapper.getAttribute("data-table-id");
+  const pendingEdits = window.__pendingCellEdits;
+  const hasPendingSave = pendingEdits instanceof Map && Array.from(pendingEdits.values())
+    .some(edit => edit.tableId === tableId);
+  if (!hasPendingSave && !wrapper.querySelector(".data-cell.editing, .data-cell.saving")) return false;
+  // Native select/page inputs have already changed by the time their event fires.
+  const select = wrapper.querySelector(".page-size-select");
+  if (select) select.value = wrapper.getAttribute("data-page-size") || "100";
+  const pageInput = wrapper.querySelector(".page-input");
+  if (pageInput) pageInput.value = wrapper.getAttribute("data-current-page") || "1";
+  if (typeof showError === "function") {
+    showError(hasPendingSave ? "Wait for the cell update to finish before changing pages." : "Save or cancel the cell edit before changing pages.");
+  }
+  return true;
 }
 
 /**

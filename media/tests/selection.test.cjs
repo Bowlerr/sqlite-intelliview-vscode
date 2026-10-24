@@ -444,3 +444,41 @@ test('external text and changed clipboard plain text remain raw paste inputs', t
   win.saveCellEdit(cell);
   assert.equal(messages[0].newValue, 'literal\\n and raw\n');
 });
+
+for (const virtualize of [false, true]) {
+  for (const filterKind of ['search', 'column']) {
+    test(`${filterKind} filters raw stored paths and controls (virtual=${virtualize})`, t => {
+      const values = ['C:\\temp', 'line\nbreak', 'line\\nbreak', ' padded ', null, 'NULL', [65, 255]];
+      const { win, wrapper, api } = fixture(t, values.map((value, index) => [index, value]), { virtualize });
+      const expected = [['C:\\temp', [0]], ['line\nbreak', [1]], ['line\\nbreak', [2]], [' padded ', [3]], ['NULL', [5]], ['65,255', [6]]];
+      for (const [search, indices] of expected) {
+        if (filterKind === 'search') api.filterTable(wrapper, search);
+        else api.filterTableByColumn(wrapper.querySelector('table'), 1, search);
+        assert.deepEqual(Array.from(win.getVisibleRowGlobalIndices(wrapper)), indices, search);
+      }
+    });
+  }
+}
+
+test('cached local pagination preserves an active editor until it is cancelled', t => {
+  const { win, wrapper, messages, api } = fixture(t, [[1, 'first'], [2, 'second']], {
+    pageSize: 1, totalRows: undefined, backendPaginated: false,
+  });
+  const cell = wrapper.querySelector('td[data-column="1"]');
+  win.startCellEditing(cell);
+  cell.querySelector('.cell-input').value = 'unsaved';
+  const snapshot = api.getTableSnapshot(wrapper);
+  win.updateTablePage(wrapper, 2);
+  assert.equal(wrapper.isConnected, true);
+  assert.equal(wrapper.dataset.currentPage, '1');
+  assert.equal(snapshot.identitiesInvalid, undefined);
+  assert.equal(cell.querySelector('.cell-input').value, 'unsaved');
+  assert.equal(messages.length, 0);
+  win.cancelCellEdit(cell);
+  win.updateTablePage(wrapper, 2);
+  assert.equal(wrapper.isConnected, false);
+  const replacement = win.document.querySelector('.enhanced-table-wrapper');
+  assert.equal(replacement.dataset.currentPage, '2');
+  assert.equal(replacement.querySelector('td[data-column="1"] .cell-content').textContent, 'second');
+  assert.equal(messages.length, 0);
+});

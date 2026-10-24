@@ -12,6 +12,8 @@ function fixture(t, options = {}) {
   const dom = new JSDOM('<!doctype html><body><div id="data-content"></div><button id="outside">Outside</button></body>', { runScripts: 'outside-only', pretendToBeVisual: true });
   t.after(() => dom.window.close());
   const win = dom.window;
+  win.tables = [];
+  win.getCurrentTableName = () => 'items';
   const messages = [], persisted = [];
   win.debug = { debug() {}, warn() {}, error() {} };
   win.vscode = { postMessage: message => messages.push(plain(message)), setState: state => persisted.push(plain(state)) };
@@ -23,7 +25,9 @@ function fixture(t, options = {}) {
   win.updateState({ selectedTable: 'items', activeTable: 'items', pageSize, currentPage: page,
     openTables: [{ key: 'items', label: 'items', viewState: { page, pageSize } }] });
   win.testApi.handleTableData({ type: 'tableData', success: true, tableName: 'items', data: [[1, 'one'], [2, 'two']], columns: ['id', 'name'],
-    totalRows: 10000, totalRowsKnown: true, editable: false, page, pageSize, maxTablePageSize: options.maximum ?? 100000 });
+    totalRows: 10000, totalRowsKnown: true, editable: options.editable === true,
+    rowIdentities: [1, 2].map(value => ({ kind: 'primaryKey', parts: [{ column: 'id', value }] })),
+    page, pageSize, maxTablePageSize: options.maximum ?? 100000 });
   const wrapper = () => win.document.querySelector('.enhanced-table-wrapper');
   const custom = () => {
     const select = wrapper().querySelector('.page-size-select');
@@ -200,3 +204,66 @@ test('same-second executions get separate result tabs and local restores clamp s
   assert.equal(wrapper().dataset.currentPage, '2');
   assert.equal(wrapper().querySelectorAll('tbody tr.resizable-row').length, 1);
 });
+
+test('Next preserves dirty edits until the blur save succeeds, without invalidating their snapshot', async t => {
+  const { win, wrapper, messages } = fixture(t, { editable: true });
+  const table = wrapper();
+  const cell = table.querySelector('td[data-column="1"]');
+  const snapshot = win.__tableDataStash.get(table.dataset.tableId);
+  win.toggleRowSelection(table, 0);
+  win.startCellEditing(cell);
+  const input = cell.querySelector('.cell-input');
+  input.value = 'unsaved\\nvalue';
+  input.dispatchEvent(new win.Event('input', { bubbles: true }));
+  input.dispatchEvent(new win.FocusEvent('focusout', { bubbles: true }));
+  table.querySelector('.pagination-btn[data-action="next"]').click();
+  assert.equal(table.dataset.currentPage, '1');
+  assert.equal(snapshot.identitiesInvalid, undefined);
+  assert.equal(win.getSelectionStore(table).size, 1);
+  assert.equal(win.getCurrentState().currentPage, 1);
+  assert.equal(win.getTabViewState('items').page, 1);
+  assert.equal(messages.length, 0);
+  await new Promise(resolve => setTimeout(resolve, 180));
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, 'updateCellData');
+  assert.equal(messages[0].newValue, 'unsaved\nvalue');
+  table.querySelector('.pagination-btn[data-action="next"]').click();
+  assert.equal(messages.length, 1, 'navigation also waits for an in-flight save');
+  win.handleCellUpdateSuccess({ ...messages[0], rowIdentity: messages[0].rowIdentity });
+  table.querySelector('.pagination-btn[data-action="next"]').click();
+  assert.equal(messages[1].type, 'getTableData');
+  assert.equal(messages[1].page, 2);
+});
+
+for (const phase of ['editing', 'saving']) {
+  test(`preset and custom page-size changes do not mutate state while a cell is ${phase}`, t => {
+    const { win, wrapper, messages } = fixture(t, { editable: true });
+    const table = wrapper();
+    const cell = table.querySelector('td[data-column="1"]');
+    const snapshot = win.__tableDataStash.get(table.dataset.tableId);
+    const select = table.querySelector('.page-size-select');
+    win.startCellEditing(cell);
+    cell.querySelector('.cell-input').value = 'changed';
+    if (phase === 'saving') win.saveCellEdit(cell);
+    const beforeMessages = messages.length;
+    win.handlePageSizeChange(table, 500);
+    assert.equal(table.dataset.pageSize, '100');
+    select.value = '500';
+    select.dispatchEvent(new win.Event('change', { bubbles: true }));
+    assert.equal(select.value, '100');
+    select.value = 'custom';
+    select.dispatchEvent(new win.Event('change', { bubbles: true }));
+    assert.equal(select.value, '100');
+    assert.equal(table.querySelector('.page-size-custom-input'), null);
+    assert.equal(win.getCurrentState().pageSize, 100);
+    assert.equal(win.getTabViewState('items').pageSize, 100);
+    assert.equal(snapshot.identitiesInvalid, undefined);
+    assert.equal(messages.length, beforeMessages);
+    assert.equal(cell.querySelector('.cell-input').value, 'changed');
+    if (phase === 'saving') {
+      cell.remove();
+      win.updateTablePage(table, 2);
+      assert.equal(messages.length, beforeMessages, 'pending save remains guarded after virtualized cell detaches');
+    }
+  });
+}
