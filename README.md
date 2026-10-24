@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>See, edit, and explore SQLite—right in your editor.</strong><br />
+  <strong>See, edit, and explore SQLite — right in your editor.</strong><br />
   Browse tables, run queries, and follow relationships.<br />
   Local, offline, and free. Available through VS Code Marketplace and Open VSX.
 </p>
@@ -18,6 +18,7 @@
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode"><strong>Install for VS Code</strong></a>
   &nbsp;·&nbsp; <a href="https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode"><strong>Install from Open VSX</strong></a>
+  &nbsp;·&nbsp; <a href="#supported-editors">Supported editors</a>
   &nbsp;·&nbsp; <a href="#quick-start">Quick start</a>
   &nbsp;·&nbsp; <a href="#see-it-in-action">Demos</a>
   &nbsp;·&nbsp; <a href="#settings">Settings</a>
@@ -36,6 +37,21 @@
 | **Relationships** | Inspect columns and keys, follow foreign-key links, and explore an interactive ER diagram. |
 | **JSON and BLOBs** | Expand values, view formatted JSON and images, or copy data as JSON, Base64, or Hex. |
 | **Files** | Open SQLite or SQLCipher databases, monitor external changes, and checkpoint write-ahead logs. |
+
+## Supported editors
+
+SQLite IntelliView uses the **VS Code 1.101+ extension API** and a desktop Node.js extension host. The same extension is distributed through VS Code Marketplace, Open VSX, and the release VSIX.
+
+| Editor | Installation |
+| --- | --- |
+| **Visual Studio Code** | [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=bowlerr.sqlite-intelliview-vscode). |
+| **[VSCodium](https://github.com/VSCodium/vscodium/blob/master/docs/extensions.md)** | Search for **SQLite IntelliView** in Extensions, using its default [Open VSX registry](https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode). |
+| **[Cursor](https://cursor.com/help/customization/extensions)** | Search for **SQLite IntelliView** in its Open VSX-backed extension catalog. Availability can depend on the editor's catalog policies. |
+| **Other compatible desktop editors** | Install from [Open VSX](https://open-vsx.org/extension/bowlerr/sqlite-intelliview-vscode) when supported, or use **Extensions: Install from VSIX…** with a package from [GitHub Releases](https://github.com/Bowlerr/sqlite-intelliview-vscode/releases). |
+
+Release tests run in Visual Studio Code. Other editors must provide the required extension API and are not individually validated by this project's test suite. Browser-only extension hosts are not supported.
+
+Missing your editor, or something is not working? **[Report an editor compatibility issue](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues/new?title=Editor+compatibility%3A+&body=%23%23%23+Editor%0AName+and+version%3A%0A%0A%23%23%23+Environment%0AOperating+system%3A%0ASQLite+IntelliView+version%3A%0AInstalled+from+%28VS+Code+Marketplace+%2F+Open+VSX+%2F+VSIX%29%3A%0A%0A%23%23%23+What+happened%3F%0ADescribe+the+missing+support+or+problem%2C+and+what+you+expected.%0A%0A%23%23%23+Steps+to+reproduce%0A1.+%0A%0A%23%23%23+Relevant+error+messages%0AInclude+non-sensitive+messages+if+available.%0A)**. The form includes fields for your editor, version, operating system, installation source, and steps to reproduce.
 
 ## Quick start
 
@@ -88,7 +104,7 @@ Open a focused demo:
 
 ## Settings
 
-Open VS Code Settings and search for **SQLite IntelliView**, or edit `settings.json`. All names below use the `sqliteIntelliView.` prefix.
+Open your editor's Settings and search for **SQLite IntelliView**, or edit `settings.json`. All names below use the `sqliteIntelliView.` prefix.
 
 ### Rows and results
 
@@ -177,7 +193,7 @@ While focus is inside the IntelliView editor:
 | WAL data appears stale | Confirm that checkpointing is enabled and the database is writable. Another active writer may prevent a complete checkpoint. |
 | Repeated external-change notifications | Keep monitoring enabled and increase `externalRefreshDebounceMs`, for example to `750` or `1000`. |
 
-Still stuck? [Open an issue](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues) with your VS Code version and steps to reproduce. Avoid including private database contents or encryption keys.
+Still stuck? [Open an issue](https://github.com/Bowlerr/sqlite-intelliview-vscode/issues) with your editor's name, version, and steps to reproduce. Avoid including private database contents or encryption keys.
 
 ## Project
 
