@@ -4,6 +4,7 @@ export type WalCheckpointModeSetting = 'full' | 'passive' | 'off';
 
 export interface WebviewSettingsPayload {
     defaultPageSize: number;
+    maxTablePageSize: number;
     externalRefreshDebounceMs: number;
     walMonitoring: boolean;
     walAutoCheckpoint: boolean;
@@ -58,6 +59,14 @@ export interface DeleteRowMessage {
     key?: string;
 }
 
+export interface DeleteRowsMessage {
+    type: 'deleteRows';
+    tableName: string;
+    requestId: string;
+    rowIdentities: RowIdentity[];
+    key?: string;
+}
+
 export interface GenerateERDiagramMessage {
     type: 'generateERDiagram';
     key?: string;
@@ -79,6 +88,7 @@ export type WebviewToExtensionMessage =
     | GetTableDataMessage
     | UpdateCellDataMessage
     | DeleteRowMessage
+    | DeleteRowsMessage
     | GenerateERDiagramMessage
     | DownloadBlobMessage;
 
@@ -135,6 +145,8 @@ export interface GenericExtensionToWebviewMessage {
         | 'cellUpdateError'
         | 'deleteRowSuccess'
         | 'deleteRowError'
+        | 'deleteRowsSuccess'
+        | 'deleteRowsError'
         | 'maximizeSidebar';
     [key: string]: unknown;
 }
@@ -225,6 +237,8 @@ const EXTENSION_TO_WEBVIEW_TYPES = new Set<ExtensionToWebviewMessage['type']>([
     'cellUpdateError',
     'deleteRowSuccess',
     'deleteRowError',
+    'deleteRowsSuccess',
+    'deleteRowsError',
     'downloadBlobResult',
     'maximizeSidebar'
 ]);
@@ -237,6 +251,7 @@ const WEBVIEW_TO_EXTENSION_TYPES = new Set<WebviewToExtensionMessage['type']>([
     'getTableData',
     'updateCellData',
     'deleteRow',
+    'deleteRows',
     'generateERDiagram',
     'downloadBlob'
 ]);
@@ -252,6 +267,8 @@ export function isExtensionToWebviewMessage(value: unknown): value is ExtensionT
                 isString(value.databasePath) &&
                 isRecord(value.settings) &&
                 typeof value.settings.defaultPageSize === 'number' &&
+                typeof value.settings.maxTablePageSize === 'number' &&
+                Number.isSafeInteger(value.settings.maxTablePageSize) && value.settings.maxTablePageSize >= 0 &&
                 typeof value.settings.externalRefreshDebounceMs === 'number' &&
                 typeof value.settings.walMonitoring === 'boolean' &&
                 typeof value.settings.walAutoCheckpoint === 'boolean' &&
@@ -313,6 +330,13 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
             );
         case 'deleteRow':
             return isString(value.tableName) && hasDefinedProperty(value, 'rowId') && isOptionalString(value.key);
+        case 'deleteRows':
+            return (
+                isString(value.tableName) && value.tableName.length > 0 &&
+                isString(value.requestId) && value.requestId.length > 0 &&
+                Array.isArray(value.rowIdentities) && value.rowIdentities.length > 0 &&
+                value.rowIdentities.every(isRowIdentity) && isOptionalString(value.key)
+            );
         case 'downloadBlob':
             return (
                 isString(value.requestId) &&

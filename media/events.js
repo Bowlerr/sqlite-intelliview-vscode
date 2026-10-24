@@ -35,6 +35,8 @@ const EXTENSION_TO_WEBVIEW_MESSAGE_TYPES = new Set([
   "cellUpdateError",
   "deleteRowSuccess",
   "deleteRowError",
+  "deleteRowsSuccess",
+  "deleteRowsError",
   "downloadBlobResult",
   "maximizeSidebar",
 ]);
@@ -762,6 +764,12 @@ function handleExtensionMessage(event) {
     case "cellUpdateError":
       handleCellUpdateError(message);
       break;
+    case "deleteRowsSuccess":
+      handleRowsDeletionResult(message, true);
+      break;
+    case "deleteRowsError":
+      handleRowsDeletionResult(message, false);
+      break;
     case "deleteRowSuccess":
       handleDeleteRowSuccess(message);
       break;
@@ -888,19 +896,11 @@ function handleUpdate(message) {
   const isInitialDatabaseBind =
     !!message.databasePath && (!currentState || !currentState.databasePath);
 
-  if (
-    settings &&
-    typeof settings.defaultPageSize === "number" &&
-    !isNaN(settings.defaultPageSize) &&
-    settings.defaultPageSize > 0
-  ) {
-    if (
-      typeof PAGINATION_CONFIG !== "undefined" &&
-      PAGINATION_CONFIG &&
-      typeof PAGINATION_CONFIG === "object"
-    ) {
-      PAGINATION_CONFIG.defaultPageSize = settings.defaultPageSize;
+  if (typeof PAGINATION_CONFIG !== "undefined") {
+    if (Object.prototype.hasOwnProperty.call(settings, "maxTablePageSize")) {
+      PAGINATION_CONFIG.maxTablePageSize = normalizeTablePageLimit(settings.maxTablePageSize);
     }
+    PAGINATION_CONFIG.defaultPageSize = effectiveTablePageSize(settings.defaultPageSize);
   }
 
   // Reset connect button state
@@ -923,10 +923,8 @@ function handleUpdate(message) {
       databasePath: message.databasePath,
       isConnected: message.isConnected,
       connectionError: message.connectionError,
-      ...(isInitialDatabaseBind &&
-      typeof settings.defaultPageSize === "number" &&
-      settings.defaultPageSize > 0
-        ? { pageSize: settings.defaultPageSize }
+      ...(isInitialDatabaseBind
+        ? { pageSize: PAGINATION_CONFIG.defaultPageSize }
         : {}),
       // Preserve the encryption key from current state
       encryptionKey: currentState.encryptionKey || "",
@@ -1183,12 +1181,14 @@ function handleQueryResult(message) {
   if (message.success) {
     // Show query results as a new Results tab in the data area
     // Pass the query to displayQueryResults if available
-    displayQueryResults(message.data, message.columns, message.query);
+    displayQueryResults(message.data, message.columns, message.query, {
+      truncated: message.truncated === true, maxRows: message.maxRows,
+    });
     const rowCount = message.data.length;
     const rowText = rowCount === 1 ? "row" : "rows";
     if (typeof showSuccess !== "undefined") {
       showSuccess(
-        `Query executed successfully. ${rowCount} ${rowText} returned. Results are available in the Data tab.`,
+        `Query executed successfully. ${rowCount} ${rowText} returned.${message.truncated ? " Result limited by Query Max Rows." : ""} Results are available in the Data tab.`,
       );
     }
   } else {
@@ -1323,9 +1323,9 @@ function handleTableData(message) {
       return;
     }
 
+    const pagination = acceptTablePagination(message);
     displayTableData(message.data, message.columns, message.tableName, {
-      page: message.page,
-      pageSize: message.pageSize,
+      ...pagination,
       totalRows: message.totalRows,
       totalRowsKnown:
         message.totalRowsKnown !== false &&
@@ -1344,18 +1344,43 @@ function handleTableData(message) {
   }
 }
 
+/** Store the values actually read by the service, including a changed settings cap. */
+function acceptTablePagination(message) {
+  if (message.maxTablePageSize !== undefined) {
+    PAGINATION_CONFIG.maxTablePageSize = normalizeTablePageLimit(message.maxTablePageSize);
+  }
+  const page = positivePageInteger(message.page) || 1;
+  const pageSize = positivePageInteger(message.pageSize) || effectiveTablePageSize();
+  if (message.tableName && typeof window.setTabViewState === "function") {
+    window.setTabViewState(message.tableName, { page, pageSize }, { renderTabs: false, renderSidebar: false });
+  }
+  if (typeof window.updateState === "function") {
+    window.updateState({ currentPage: page, pageSize }, { renderTabs: false, renderSidebar: false });
+  }
+  return { page, pageSize, maxTablePageSize: PAGINATION_CONFIG.maxTablePageSize };
+}
+
 function handleTableRowCount(message) {
   const { tableName, totalRows } = message;
-  if (!tableName || typeof totalRows !== "number") {
+  if (!tableName || !Number.isSafeInteger(totalRows) || totalRows < 0) {
     return;
   }
 
-  const wrapper = document.querySelector(
-    `.enhanced-table-wrapper[data-table="${tableName}"]`,
-  );
+  const wrapper = Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+    .find(candidate => candidate.dataset.table === tableName);
   if (!wrapper) {
     return;
   }
+
+  // A background count belongs to the rendered page, never to a newer pending request.
+  if (wrapper.dataset.paginationPending === "true" ||
+    (message.page !== undefined && message.page !== Number(wrapper.dataset.currentPage)) ||
+    (message.pageSize !== undefined && message.pageSize !== Number(wrapper.dataset.pageSize))) return;
+  const accepted = acceptTablePagination({ ...message,
+    page: message.page ?? Number(wrapper.dataset.currentPage),
+    pageSize: message.pageSize ?? Number(wrapper.dataset.pageSize),
+  });
+  wrapper.dataset.maxTablePageSize = String(accepted.maxTablePageSize);
 
   wrapper.setAttribute("data-total-rows", String(totalRows));
   wrapper.setAttribute("data-total-rows-known", "true");
@@ -1608,9 +1633,8 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
           }
         }
       } else {
-        const header = table.querySelector(
-          `th[data-column-name="${columnName}"]`,
-        );
+        const header = Array.from(table.querySelectorAll("th[data-column-name]"))
+          .find(candidate => candidate.dataset.columnName === columnName);
         const colIndex = header
           ? parseInt(header.getAttribute("data-column") || "-1", 10)
           : -1;
@@ -1942,9 +1966,9 @@ function displayTablesList(tables) {
       const isSelected = state.selectedTable === table.name;
       return `
         <div class="table-item${isSelected ? " selected" : ""}" data-table="${
-          table.name
+          escapeHtmlFast(table.name)
         }">
-          <span class="table-name">${table.name}</span>
+          <span class="table-name">${escapeHtmlFast(table.name)}</span>
         </div>
       `;
     })
@@ -1965,8 +1989,8 @@ function displayTablesList(tables) {
           return `
               <div class="table-item result-tab-item${
                 isSelected ? " selected" : ""
-              }" data-table="${tab.key}">
-                <span class="table-name">${tab.label || tab.key}</span>
+              }" data-table="${escapeHtmlFast(tab.key)}">
+                <span class="table-name">${escapeHtmlFast(tab.label || tab.key)}</span>
                 <span class="tab-icon" title="Query Result">🧮</span>
               </div>
             `;
@@ -2121,7 +2145,7 @@ function detectQueryResultForeignKeys(columns, state) {
  * @param {string|null} query - The SQL query that generated these results
  */
 // Replace displayQueryResults to use modal
-function displayQueryResults(data, columns, query = null) {
+function displayQueryResults(data, columns, query = null, metadata = {}) {
   if (typeof window.captureCurrentDataViewState === "function") {
     window.captureCurrentDataViewState();
   }
@@ -2132,7 +2156,14 @@ function displayQueryResults(data, columns, query = null) {
   const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
     now.getDate(),
   )} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  let tabKey = `Results (${dateStr})`;
+  const baseTabKey = `Results (${dateStr})`;
+  let tabKey = baseTabKey;
+  let suffix = 2;
+  const currentTabs = typeof window.getCurrentState === "function"
+    ? window.getCurrentState().openTables || [] : [];
+  while ((window._resultCache instanceof Map && window._resultCache.has(tabKey)) || currentTabs.some(tab => tab.key === tabKey)) {
+    tabKey = `${baseTabKey} #${suffix++}`;
+  }
   let tabLabel = tabKey;
   // Store the result data in state.tableCache under the tab key
   if (
@@ -2156,6 +2187,8 @@ function displayQueryResults(data, columns, query = null) {
       isQueryResult: true,
       query: query, // Store the original query
       foreignKeys: detectedForeignKeys, // Store detected foreign keys for tab restoration
+      truncated: metadata.truncated === true,
+      maxRows: metadata.maxRows,
     };
 
     if (!window._resultCache) {
@@ -2167,8 +2200,8 @@ function displayQueryResults(data, columns, query = null) {
       : [];
     // Only add if not already present
     if (!openTables.find((t) => t.key === tabKey)) {
-      const initialPageSize =
-        Math.min(Array.isArray(data) ? data.length : 0, 100) || 100;
+      const initialPageSize = effectiveTablePageSize(
+        Math.min(Array.isArray(data) ? data.length : 0, 100) || 100);
       // Also store the query in the tab object for easy access
       openTables.push({
         key: tabKey,
@@ -2214,6 +2247,8 @@ function displayQueryResults(data, columns, query = null) {
               pageSize: Math.min(data.length, 100),
               foreignKeys: detectedForeignKeys,
               allowEditing: false, // Query results are typically read-only for data integrity
+              truncated: metadata.truncated === true,
+              maxRows: metadata.maxRows,
             })
           : `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
       const dataContent = document.getElementById("data-content");
@@ -2369,6 +2404,7 @@ function displayTableData(data, columns, tableName, options = {}) {
   if (tableWrapper && typeof window.applyTabViewStateToWrapper === "function") {
     window.applyTabViewStateToWrapper(tableWrapper, tableName);
   }
+  if (tableWrapper) restorePageSizeFocus(tableWrapper);
 
   // Check for pending foreign key highlight
   if (tableWrapper && typeof highlightForeignKeyTarget !== "undefined") {
@@ -2457,6 +2493,10 @@ function initializeTableEvents(tableWrapper) {
         const searchTerm = e.target.value;
         if (typeof filterTable !== "undefined") {
           filterTable(tableWrapper, searchTerm);
+        }
+        // Clear multi-row selection when search changes
+        if (typeof clearSelection === "function") {
+          clearSelection(tableWrapper);
         }
         const tableKey = tableWrapper.getAttribute("data-table");
         if (tableKey && typeof window.setTabViewState === "function") {
@@ -2663,22 +2703,88 @@ function initializeTableEvents(tableWrapper) {
     if (pageSizeSelect) {
       pageSizeSelect.addEventListener("change", (e) => {
         const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+        if (e.target.value === "custom") {
+          showCustomPageSizeInput(tableWrapper, e.target);
+          return;
+        }
         if (typeof handlePageSizeChange !== "undefined") {
-          handlePageSizeChange(tableWrapper, parseInt(e.target.value));
+          handlePageSizeChange(tableWrapper, Number(e.target.value));
         }
       });
     }
-    // Export button
+    // Export button (all visible)
     const exportBtn = tableWrapper.querySelector('[data-action="export"]');
     if (exportBtn) {
       exportBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        const tableWrapper = e.target.closest(".enhanced-table-wrapper");
+        const wrapper = e.target.closest(".enhanced-table-wrapper");
         if (typeof exportTableData !== "undefined") {
-          exportTableData(tableWrapper);
+          exportTableData(wrapper, { onlySelected: false });
         }
       });
     }
+
+    // Export selected button
+    const exportSelectedBtn = tableWrapper.querySelector(
+      '[data-action="export-selected"]'
+    );
+    if (exportSelectedBtn) {
+      exportSelectedBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const wrapper = e.target.closest(".enhanced-table-wrapper");
+        if (typeof exportTableData !== "undefined") {
+          exportTableData(wrapper, { onlySelected: true });
+        }
+      });
+    }
+
+    // Delete selected button
+    const deleteSelectedBtn = tableWrapper.querySelector(
+      '[data-action="delete-selected"]'
+    );
+    if (deleteSelectedBtn) {
+      deleteSelectedBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const wrapper = e.target.closest(".enhanced-table-wrapper");
+        if (typeof deleteSelectedRows !== "undefined") {
+          deleteSelectedRows(wrapper);
+        }
+      });
+    }
+
+    // Row clicks and native checkbox changes each update selection once.
+    tableWrapper.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : null;
+      const selectionCell = target?.closest(".checkbox-cell, .checkbox-th");
+      if (selectionCell && !target.matches('input[type="checkbox"]')) {
+        const checkbox = selectionCell.querySelector('input[type="checkbox"]');
+        if (checkbox && !checkbox.disabled && !tableWrapper.dataset.deletePending) {
+          checkbox.focus();
+          checkbox.click();
+        }
+        return;
+      }
+      if (!target || target.closest("input, button, select, textarea, a, th, .resize-handle, .row-resize-handle, .column-resize-handle, .cell-editing-controls, .editing")) return;
+      if (window.getSelection()?.toString()) return;
+      const row = target.closest("tr.resizable-row");
+      if (row) toggleRowSelection(tableWrapper, Number(row.dataset.rowIndex));
+    });
+    tableWrapper.addEventListener("change", event => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!target || tableWrapper.dataset.deletePending) return;
+      if (target.matches(".row-select-checkbox")) {
+        const row = target.closest("tr.resizable-row");
+        if (row) setRowSelection(tableWrapper, Number(row.dataset.rowIndex), target.checked);
+      } else if (target.matches(".select-all-checkbox")) {
+        const selection = getSelectionStore(tableWrapper);
+        getVisibleRowGlobalIndices(tableWrapper).forEach(index => {
+          if (target.checked) selection.add(index);
+          else selection.delete(index);
+        });
+        updateSelectedUI(tableWrapper);
+      }
+    });
+    updateSelectedUI(tableWrapper);
   }
 
   // Delegated cell editing listeners (avoid attaching listeners to every cell).
@@ -2768,6 +2874,15 @@ function initializeTableEvents(tableWrapper) {
       target.closest(".data-cell")?.setAttribute("data-edit-dirty", "true");
     });
 
+    tableWrapper.addEventListener("paste", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.matches(".cell-input") || !event.clipboardData) return;
+      event.preventDefault();
+      const raw = event.clipboardData.getData("text/plain");
+      target.setRangeText(encodeCellText(raw), target.selectionStart ?? 0, target.selectionEnd ?? 0, "end");
+      target.closest(".data-cell")?.setAttribute("data-edit-dirty", "true");
+    });
+
     tableWrapper.addEventListener("focusout", (e) => {
       const target = e.target instanceof HTMLElement ? e.target : null;
       if (!target) {
@@ -2795,6 +2910,8 @@ function initializeTableEvents(tableWrapper) {
  * @param {Element} cell - The cell element to edit
  */
 function startCellEditing(cell) {
+  const wrapper = cell?.closest(".enhanced-table-wrapper");
+  if (wrapper?.dataset.deletePending || getTableSnapshot(wrapper)?.identitiesInvalid) return;
   if (!cell || cell.classList.contains("editing")) {
     return;
   }
@@ -2815,14 +2932,14 @@ function startCellEditing(cell) {
 
   // Get current value
   const cellContent = cell.querySelector(".cell-content");
-  const originalValue = cellContent.getAttribute("data-original-value") || "";
+  const originalValue = getCellOriginalText(cellContent);
   const nullAttribute = cellContent.getAttribute("data-original-is-null");
   const isNull =
     nullAttribute === "true" ||
     (nullAttribute === null &&
       cellContent.querySelector("em") &&
       cellContent.textContent.trim() === "NULL");
-  const currentValue = isNull ? "" : originalValue;
+  const currentValue = isNull ? "" : encodeCellText(originalValue);
 
   // Set up editing state
   cell.classList.add("editing");
@@ -2870,6 +2987,8 @@ function startCellEditing(cell) {
  * @param {Element} cell - The cell element being edited
  */
 function saveCellEdit(cell) {
+  const deletionWrapper = cell?.closest(".enhanced-table-wrapper");
+  if (deletionWrapper?.dataset.deletePending || getTableSnapshot(deletionWrapper)?.identitiesInvalid) return;
   if (!cell || !cell.classList.contains("editing")) {
     return;
   }
@@ -2890,9 +3009,18 @@ function saveCellEdit(cell) {
     return;
   }
 
-  const newValue = /** @type {HTMLInputElement} */ (input).value;
+  let newValue;
+  try {
+    newValue = decodeCellText(/** @type {HTMLInputElement} */ (input).value);
+  } catch (error) {
+    cell.classList.add("error");
+    if (typeof showError === "function") {
+      showError(error.message);
+    }
+    return;
+  }
   const cellContent = cell.querySelector(".cell-content");
-  const originalValue = cellContent?.getAttribute("data-original-value") || "";
+  const originalValue = getCellOriginalText(cellContent);
   const nullAttribute = cellContent?.getAttribute("data-original-is-null");
   const originalIsNull =
     nullAttribute === "true" ||
@@ -3079,18 +3207,7 @@ function handleCellUpdateSuccess(message) {
     // Update the cell content
     const cellContent = cell.querySelector(".cell-content");
     if (cellContent) {
-      const isNull = newValue === null || newValue === undefined;
-      cellContent.setAttribute(
-        "data-original-value",
-        isNull ? "" : String(newValue),
-      );
-      cellContent.setAttribute("data-original-is-null", String(isNull));
-
-      if (isNull) {
-        cellContent.innerHTML = "<em>NULL</em>";
-      } else {
-        cellContent.textContent = newValue;
-      }
+      setCellContentValue(cellContent, newValue);
     }
 
     // Remove editing state
@@ -3152,6 +3269,7 @@ function handleCellUpdateError(message) {
 function handleDeleteRowSuccess(message) {
   const { tableName, rowId } = message;
 
+  // Single-row delete: delegate to context-menu.js handler
   if (
     typeof window !== "undefined" &&
     typeof (/** @type {any} */ (window).handleDeleteSuccess) === "function"
@@ -3315,11 +3433,22 @@ function handleTableDataDelta({
     });
   }
 
+  if (inserts.length || updates.length || deletes.length) {
+    const affected = Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+      .find(candidate => candidate.dataset.table === tableName);
+    if (affected) {
+      const snapshot = getTableSnapshot(affected);
+      if (snapshot) snapshot.identitiesInvalid = true;
+      clearSelection(affected);
+      requestTableSnapshot(affected);
+    }
+    return;
+  }
+
   // Capture old total count BEFORE updating anything (for notification)
   let oldTotalCountForNotification = 0;
-  const wrapperForOldCount = document.querySelector(
-    `.enhanced-table-wrapper[data-table="${tableName}"]`,
-  );
+  const wrapperForOldCount = Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+    .find(candidate => candidate.dataset.table === tableName);
   if (wrapperForOldCount) {
     oldTotalCountForNotification = parseInt(
       wrapperForOldCount.getAttribute("data-total-rows") || "0",
@@ -3329,9 +3458,8 @@ function handleTableDataDelta({
 
   // Update the total count display if provided
   if (totalCount !== null) {
-    const wrapper = document.querySelector(
-      `.enhanced-table-wrapper[data-table="${tableName}"]`,
-    );
+    const wrapper = Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+      .find(candidate => candidate.dataset.table === tableName);
     if (wrapper) {
       // Update the header "125 RECORDS" count
       const statValue = wrapper.querySelector(".records-info .stat-value");
@@ -3468,9 +3596,8 @@ function handleTableDataDelta({
     }
   }
 
-  const wrapper = document.querySelector(
-    `.enhanced-table-wrapper[data-table="${tableName}"]`,
-  );
+  const wrapper = Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+    .find(candidate => candidate.dataset.table === tableName);
   if (!wrapper) {
     if (window.debug) {
       window.debug.debug("[events.js] No wrapper found for table", tableName);
@@ -3491,6 +3618,12 @@ function handleTableDataDelta({
 
     const toLocal = (globalRowIndex) => globalRowIndex - pageStart;
 
+    // Get stash to keep rowIdentities in sync with pageData
+    const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+    const stash = (typeof window.__tableDataStash !== "undefined" && window.__tableDataStash instanceof Map)
+      ? window.__tableDataStash.get(tableId) || null
+      : null;
+
     // Deletes are indices in the OLD page; apply from bottom to top.
     const deleteLocals = deletes
       .map((rowIndex) => toLocal(rowIndex))
@@ -3501,6 +3634,9 @@ function handleTableDataDelta({
       .sort((a, b) => b - a);
     deleteLocals.forEach((local) => {
       vs.pageData.splice(local, 1);
+      if (Array.isArray(stash?.rowIdentities)) {
+        stash.rowIdentities.splice(local, 1);
+      }
     });
 
     // Inserts are indices in the NEW page; apply from top to bottom.
@@ -3520,6 +3656,9 @@ function handleTableDataDelta({
     insertLocals.forEach(({ local, rowData }) => {
       const clamped = Math.max(0, Math.min(vs.pageData.length, local));
       vs.pageData.splice(clamped, 0, rowData);
+      if (Array.isArray(stash?.rowIdentities)) {
+        stash.rowIdentities.splice(clamped, 0, null);
+      }
     });
 
     // Updates are indices in the NEW page.
@@ -3562,6 +3701,28 @@ function handleTableDataDelta({
     if (typeof window.refreshVirtualTable === "function") {
       window.refreshVirtualTable(wrapper);
     }
+    if ((inserts.length > 0 || deletes.length > 0) &&
+        typeof clearSelection === "function") {
+        clearSelection(wrapper);
+    }
+    // Reconcile selection: remove stale global indices for deleted rows
+    if (Array.isArray(stash?.rowIdentities)) {
+      const sel = typeof getSelectionStore === "function" ? getSelectionStore(wrapper) : null;
+      if (sel && sel.size > 0) {
+        const validIds = new Set();
+        stash.rowIdentities.forEach((id) => {
+          if (id) validIds.add(JSON.stringify(id));
+        });
+        for (const gIdx of sel) {
+          const local = gIdx - pageStart;
+          const id = stash.rowIdentities[local];
+          if (!id || !validIds.has(JSON.stringify(id))) {
+            sel.delete(gIdx);
+          }
+        }
+        if (typeof updateSelectedUI === "function") updateSelectedUI(wrapper);
+      }
+    }
     return;
   }
 
@@ -3573,6 +3734,13 @@ function handleTableDataDelta({
     return;
   }
 
+  // Get stash for syncing rowIdentities with DOM row order
+  const tableId = wrapper.getAttribute("data-table-id") || wrapper.dataset.tableId || "";
+  const domStash = (typeof window.__tableDataStash !== "undefined" && window.__tableDataStash instanceof Map)
+    ? window.__tableDataStash.get(tableId) || null
+    : null;
+  const startIndex = parseInt(wrapper.getAttribute("data-start-index") || "0", 10) || 0;
+
   //–– 1) APPLY UPDATES ––
   updates.forEach(({ rowIndex, rowData }) => {
     const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`);
@@ -3583,21 +3751,11 @@ function handleTableDataDelta({
       return;
     }
     rowData.forEach((val, colIdx) => {
-      const cell = row.children[colIdx];
+      const cell = row.querySelector(`td[data-column="${colIdx}"]`);
       if (cell) {
         const cc = cell.querySelector(".cell-content");
         if (cc) {
-          const isNull = val === null || val === undefined;
-          cc.setAttribute(
-            "data-original-value",
-            isNull ? "" : String(val),
-          );
-          cc.setAttribute("data-original-is-null", String(isNull));
-          if (isNull) {
-            cc.innerHTML = "<em>NULL</em>";
-          } else {
-            cc.textContent = String(val);
-          }
+          setCellContentValue(cc, val);
         }
       }
     });
@@ -3617,8 +3775,15 @@ function handleTableDataDelta({
           }
         }
       });
+      // Keep stash rowIdentities aligned with the bumped indices
+      if (Array.isArray(domStash?.rowIdentities)) {
+        const insLocal = rowIndex - startIndex;
+        if (insLocal >= 0 && insLocal <= domStash.rowIdentities.length) {
+          domStash.rowIdentities.splice(insLocal, 0, null);
+        }
+      }
       // Use renderTableRows to generate the new row HTML, but robustly patch FK cells after creation
-      let columns = Array.from(wrapper.querySelectorAll("thead th")).map((th) =>
+      let columns = Array.from(wrapper.querySelectorAll("thead th[data-column-name]")).map((th) =>
         th.getAttribute("data-column-name"),
       );
       // Fallback: if any column name is missing, try to get from global schema (handle window typing)
@@ -3706,10 +3871,12 @@ function handleTableDataDelta({
           }
         });
       }
-      // Patch each cell in the new row
+      // Patch each cell in the new row (skip checkbox cell, use data-column attribute)
       if (newRow) {
-        Array.from(newRow.children).forEach((cell, idx) => {
-          const colName = columns[idx];
+        newRow.querySelectorAll("td[data-column]").forEach((cell) => {
+          const colIdx = parseInt(cell.getAttribute("data-column") || "", 10);
+          if (!Number.isFinite(colIdx) || colIdx < 0) return;
+          const colName = columns[colIdx];
           // Always set data-column-name for robust context menu detection
           if (colName) {
             cell.setAttribute("data-column-name", colName);
@@ -3768,6 +3935,14 @@ function handleTableDataDelta({
         return;
       }
       row.remove();
+      // Keep stash rowIdentities aligned with the removed row
+      if (Array.isArray(domStash?.rowIdentities)) {
+        const delLocal = rowIndex - startIndex;
+        if (delLocal >= 0 && delLocal < domStash.rowIdentities.length) {
+          domStash.rowIdentities.splice(delLocal, 1);
+        }
+      }
+
       // decrement all > rowIndex
       Array.from(tbody.querySelectorAll("tr")).forEach((r) => {
         const idxAttr = r.getAttribute("data-row-index");
@@ -3809,6 +3984,7 @@ function handleTableDataDelta({
       new Error().stack,
     );
   }
+  clearSelection(wrapper);
 }
 
 // Remove all export statements for browser compatibility

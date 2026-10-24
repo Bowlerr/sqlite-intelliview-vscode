@@ -76,9 +76,9 @@ A quick tour of the main workflows (all offline, inside VS Code):
 - **Database Explorer view** (tables + columns) while a database is open.
 - **Multi-table tabs** (open multiple tables/results, drag to reorder).
 - **Fast table browsing**: pagination, quick search, sorting, column filters, resizable columns/rows, column pinning.
-- **Editing**: inline cell edit + row delete (writes changes back to the database file).
+- **Editing**: inline cell edit and atomic deletion of selected rows (writes changes back to the database file).
 - **Context menu tools**: copy cell/row/column, copy row/table as JSON, JSON viewer for JSON cells, BLOB viewer + copy as Base64/Hex.
-- **Export from the table UI**: export currently visible rows to CSV.
+- **Export from the table UI**: export visible or selected rows to CSV.
 - **Foreign-key navigation**: jump to referenced rows from FK cells.
 - **ER diagram**: interactive relationship diagram (zoom/pan) built with D3.
 - **WAL-aware**: checkpoints WAL on open (best-effort) and refreshes when `-wal`/`-shm` change.
@@ -171,7 +171,14 @@ These settings control WAL behavior and external refresh noise:
 - `sqliteIntelliView.walAutoCheckpoint` (default: `true`): backward-compatibility toggle. If set to `false`, auto-checkpoint is disabled even if `walCheckpointMode` is `full` or `passive`.
 - `sqliteIntelliView.walMonitoring` (default: `true`): watches DB/WAL/SHM files and auto-refreshes when changes are detected.
 - `sqliteIntelliView.externalRefreshDebounceMs` (default: `500`): coalesces bursts of DB/WAL/SHM file events into a single refresh. Increase this if external writers are noisy.
-- `sqliteIntelliView.defaultPageSize`: default rows per page in table views.
+
+These settings control table pages and query results:
+
+- `sqliteIntelliView.defaultPageSize` (default: `1000`): initial table page size, limited by `maxTablePageSize`.
+- `sqliteIntelliView.maxTablePageSize` (default: `100000`): maximum rows per table page. Set to `0` for no configured cap.
+- `sqliteIntelliView.queryMaxRows` (default: `10000`): maximum rows returned by the query editor. Set to `0` for no configured cap. Schema and ER metadata are unaffected. A notice identifies results that were truncated.
+
+Choose **Custom…** in the rows-per-page selector to enter a positive whole number. The table cap is applied before calculating the new page. Larger pages and unlimited results use more memory. Limits accept non-negative safe integers; invalid values fall back to their documented defaults.
 
 Tip: if you see repeated refresh notifications from busy external writers, keep `walMonitoring` on and increase `externalRefreshDebounceMs` (for example, `750` or `1000`).
 
@@ -208,7 +215,11 @@ These work while focus is inside the database editor webview:
 
 ## Notes, Limits, and Safety
 
-- **Query results are capped** (to keep the UI responsive). For very large exports, use the table UI’s CSV export or a dedicated SQLite client.
+- **Row selection:** Use the row checkboxes or click a row to select it. The header checkbox selects all filtered rows on the current page, including rows outside the virtual viewport. Selection is cleared when the table snapshot or filter changes. **Export Selected** writes those rows as CSV; **Delete Selected** confirms the complete selection and either deletes all selected rows or rolls the operation back.
+- **Text editing:** Cell text displays control characters as `\n`, `\r`, `\t`, `\b`, `\f`, or `\u0000` escapes. A literal backslash displays as `\\`. Use those same escapes while editing; invalid escapes keep the editor open without saving. CSV exports contain the original text, with multiline fields quoted.
+- **FTS5 metadata:** Schema and ER views can read FTS5 table declarations without loading the FTS5 module. This does not enable FTS5 queries or views that execute FTS5 queries; those require an SQLite engine with FTS5 support.
+
+- **Query results are capped by default** at 10,000 rows. Adjust `sqliteIntelliView.queryMaxRows` for larger results, or use a dedicated SQLite client for very large exports. Table exports include only the loaded page's visible or selected rows.
 - **Query editor writes are not persisted yet**: non-`SELECT` statements may run in-memory but are not currently written back to disk; use inline cell editing / row delete for persisted changes.
 - **Edits write to the database file**. Consider working on a copy if the database is important or shared with other processes.
 - **SQL restrictions**: some sensitive statements are blocked in the query editor (for example: `PRAGMA key`, `ATTACH DATABASE`, `DETACH DATABASE`).

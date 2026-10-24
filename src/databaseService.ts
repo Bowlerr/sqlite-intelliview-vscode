@@ -5,6 +5,7 @@ import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { markInternalUpdate } from './databaseWatcher';
 import { hasWalFiles, checkpointWalWithRetry, getWalStatus, getSqlite3CliInfo, WalCheckpointMode } from './walUtils';
+import { normalizePageSize, normalizeTablePage, readRowLimitSettings, RowLimitReader } from './rowLimits';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -43,6 +44,11 @@ export interface QueryResult {
     values: any[][];
 }
 
+export interface UserQueryResult extends QueryResult {
+    truncated: boolean;
+    maxRows: number;
+}
+
 export type SQLiteValue = number | string | Uint8Array | null;
 
 export interface SerializedBlobIdentityValue {
@@ -66,6 +72,13 @@ export interface EditableTableData extends QueryResult {
     rowIdentities: Array<RowIdentity | null>;
     editable: boolean;
     editError?: string;
+}
+
+export interface PaginatedTableData extends EditableTableData {
+    page: number;
+    pageSize: number;
+    offset: number;
+    maxTablePageSize: number;
 }
 
 export interface CellUpdateResult {
@@ -104,6 +117,9 @@ export class DatabaseService {
     private editQueue: Promise<void> = Promise.resolve();
     private isDevelopment = process.env.NODE_ENV === 'development' || (typeof process !== 'undefined' && process.env.VSCODE_PID !== undefined);
 
+    constructor(private readonly readRowLimit: RowLimitReader = (setting, defaultValue) =>
+        vscode.workspace.getConfiguration('sqliteIntelliView').get(setting, defaultValue)) { }
+
     private debugLog(component: string, message: string, ...args: any[]): void {
         if (this.isDevelopment) {
             console.log(`[${component}] ${message}`, ...args);
@@ -124,6 +140,105 @@ export class DatabaseService {
 
     private quoteIdentifier(identifier: string): string {
         return `"${identifier.replace(/"/g, '""')}"`;
+    }
+
+    private readStatementRow(statement: any, useBigInt = false): Array<SQLiteValue | bigint> {
+        const row = statement.get(null, { useBigInt }) as Array<SQLiteValue | bigint>;
+        // sql.js get() reads TEXT as a NUL-terminated C string. Its byte reader
+        // uses sqlite3_column_bytes, so embedded NULs and their suffix survive.
+        return row.map((value, index) => typeof value === 'string'
+            ? Buffer.from(statement.getBlob(index)).toString('utf8')
+            : value);
+    }
+
+    /** Read FTS5 metadata without loading its module or changing the database. */
+    private getFts5SchemaFallback(tableName: string, error: unknown): QueryResult | null {
+        if (!/\bno such module:\s*fts5\s*$/i.test(String(error))) {
+            return null;
+        }
+
+        const statement = this.db.prepare(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ? COLLATE NOCASE"
+        );
+        let sql: unknown;
+        try {
+            statement.bind([tableName]);
+            sql = statement.step() ? statement.getAsObject().sql : null;
+        } finally {
+            statement.free();
+        }
+        if (typeof sql !== 'string') {
+            return null;
+        }
+
+        // Keep quoted strings intact: names and tokenizer options may contain
+        // commas, parentheses, equals signs, escaped quotes, and SQL comments.
+        const tokenPattern = /\s+|--[^\r\n]*|\/\*[\s\S]*?\*\/|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|[(),;=.]|[A-Za-z_0-9$\u0080-\uFFFF]+/gy;
+        const tokens: string[] = [];
+        let offset = 0;
+        while (offset < sql.length) {
+            const match = tokenPattern.exec(sql);
+            if (!match) {
+                return null;
+            }
+            const token = match[0];
+            if (!/^\s|^--|^\/\*/.test(token)) {
+                tokens.push(token);
+            }
+            offset = tokenPattern.lastIndex;
+        }
+
+        const unquote = (token: string): string => {
+            const quote = token[0];
+            if (quote === '[') {
+                return token.slice(1, -1);
+            }
+            if (quote === '"' || quote === "'" || quote === '`') {
+                return token.slice(1, -1).split(quote + quote).join(quote);
+            }
+            return token;
+        };
+        if (tokens.slice(0, 3).join(' ').toUpperCase() !== 'CREATE VIRTUAL TABLE') {
+            return null;
+        }
+        let cursor = 3;
+        if (tokens.slice(cursor, cursor + 3).join(' ').toUpperCase() === 'IF NOT EXISTS') {
+            cursor += 3;
+        }
+        cursor++; // table name
+        if (tokens[cursor] === '.') {
+            cursor += 2; // optional schema qualifier
+        }
+        if (tokens[cursor]?.toUpperCase() !== 'USING' ||
+            unquote(tokens[cursor + 1] || '').toLowerCase() !== 'fts5' || tokens[cursor + 2] !== '(') {
+            return null;
+        }
+        cursor += 3;
+
+        const values: QueryResult['values'] = [];
+        while (cursor < tokens.length) {
+            const argument: string[] = [];
+            while (cursor < tokens.length && tokens[cursor] !== ',' && tokens[cursor] !== ')') {
+                argument.push(tokens[cursor++]);
+            }
+            // FTS5 accepts column names with optional UNINDEXED, or name=value
+            // options. It does not declare types, defaults, keys, or constraints.
+            if (argument.length === 1 || (argument.length === 2 && unquote(argument[1]).toUpperCase() === 'UNINDEXED')) {
+                values.push([values.length, unquote(argument[0]), '', 0, null, 0]);
+            } else if (argument.length !== 3 || argument[1] !== '=') {
+                return null;
+            }
+            const separator = tokens[cursor++];
+            if (separator === ')') {
+                if (tokens[cursor] === ';') {
+                    cursor++;
+                }
+                return cursor === tokens.length && values.length > 0
+                    ? { columns: ['cid', 'name', 'type', 'notnull', 'dflt_value', 'pk'], values }
+                    : null;
+            }
+        }
+        return null;
     }
 
     private serializeIdentityValue(value: unknown): RowIdentityValue {
@@ -465,24 +580,14 @@ export class DatabaseService {
     }
 
     async getTableInfo(tableName: string): Promise<ColumnInfo[]> {
-        if (!this.db) {
-            throw new Error('Database not opened');
-        }
-
-        const stmt = this.db.prepare(`PRAGMA table_info(${this.quoteIdentifier(tableName)})`);
-        const columns: ColumnInfo[] = [];
-        
-        while (stmt.step()) {
-            const row = stmt.getAsObject();
-            columns.push({
-                name: row.name as string,
-                type: row.type as string,
-                notnull: row.notnull === 1,
-                dflt_value: row.dflt_value,
-                pk: row.pk === 1
-            });
-        }
-        stmt.free();
+        const schema = await this.getTableSchema(tableName);
+        const columns: ColumnInfo[] = schema.values.map(row => ({
+            name: row[1] as string,
+            type: row[2] as string,
+            notnull: row[3] === 1,
+            dflt_value: row[4],
+            pk: row[5] === 1
+        }));
 
         // Get foreign key information and merge with column info
         const foreignKeys = await this.getForeignKeys(tableName);
@@ -501,7 +606,17 @@ export class DatabaseService {
         return columns;
     }
 
+    /** Internal reads must not inherit the query editor's configurable cap. */
     async executeQuery(query: string): Promise<QueryResult> {
+        const { columns, values } = await this.readQuery(query, 0);
+        return { columns, values };
+    }
+
+    async executeUserQuery(query: string): Promise<UserQueryResult> {
+        return this.readQuery(query, readRowLimitSettings(this.readRowLimit).queryMaxRows);
+    }
+
+    private async readQuery(query: string, maxRows: number): Promise<UserQueryResult> {
         if (!this.db) {
             throw new Error('Database not opened');
         }
@@ -523,43 +638,46 @@ export class DatabaseService {
             throw new Error('This type of query is not allowed for security reasons');
         }
 
+        let stmt: any;
         try {
-            const stmt = this.db.prepare(trimmedQuery);
-            const result: QueryResult = {
+            stmt = this.db.prepare(trimmedQuery);
+            const result: UserQueryResult = {
                 columns: stmt.getColumnNames(),
-                values: []
+                values: [],
+                truncated: false,
+                maxRows
             };
 
-            // Limit results to prevent memory issues
-            const maxRows = 10000;
-            let rowCount = 0;
-
-            while (stmt.step() && rowCount < maxRows) {
-                result.values.push(stmt.get());
-                rowCount++;
-            }
-
-            stmt.free();
-
-            if (rowCount >= maxRows) {
-                this.debugWarn('Query', `Query result truncated to ${maxRows} rows`);
+            while (stmt.step()) {
+                // Read one additional row to distinguish truncation from an
+                // exact-size result, without materializing that row's values.
+                if (maxRows > 0 && result.values.length === maxRows) {
+                    result.truncated = true;
+                    break;
+                }
+                result.values.push(this.readStatementRow(stmt));
             }
 
             return result;
         } catch (error) {
             throw new Error(`Query execution failed: ${error}`);
+        } finally {
+            stmt?.free();
         }
     }
 
     async getTableData(tableName: string, limit: number = 1000, offset: number = 0): Promise<EditableTableData> {
-        return this.getTableDataWithIdentities(tableName, limit, offset);
+        const { maxTablePageSize } = readRowLimitSettings(this.readRowLimit);
+        const safeLimit = normalizePageSize(limit, maxTablePageSize, 1000);
+        const safeOffset = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
+        return this.getTableDataWithIdentities(tableName, safeLimit, safeOffset);
     }
 
-    public async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<EditableTableData> {
-        const safePage = Number.isInteger(page) && page > 0 ? page : 1;
-        const safePageSize = Number.isInteger(pageSize) && pageSize > 0 ? Math.min(pageSize, 100000) : 100;
-        const offset = (safePage - 1) * safePageSize;
-        return this.getTableDataWithIdentities(tableName, safePageSize, offset);
+    public async getTableDataPaginated(tableName: string, page: number = 1, pageSize: number = 100): Promise<PaginatedTableData> {
+        const { maxTablePageSize } = readRowLimitSettings(this.readRowLimit);
+        const pagination = normalizeTablePage(page, pageSize, maxTablePageSize);
+        const result = await this.getTableDataWithIdentities(tableName, pagination.pageSize, pagination.offset);
+        return { ...result, ...pagination };
     }
 
     async getRowCount(tableName: string): Promise<number> {
@@ -656,8 +774,6 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        const safeLimit = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 100000) : 1000;
-        const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
         const editability = await this.getTableEditability(tableName);
         const definition = editability.definition;
         const hiddenIdentity = definition?.kind === 'rowid';
@@ -669,13 +785,13 @@ export class DatabaseService {
             : '';
         const query = `SELECT ${identitySelection}* FROM ${this.quoteIdentifier(tableName)}${identityOrder} LIMIT ? OFFSET ?`;
         const stmt = this.db.prepare(query);
-        stmt.bind([safeLimit, safeOffset]);
+        stmt.bind([limit, offset]);
 
         let columns = stmt.getColumnNames();
         const rawRows: any[][] = [];
         const identityRows: Array<Array<SQLiteValue | bigint>> = [];
         while (stmt.step()) {
-            const identityRow = stmt.get(null, { useBigInt: true }) as Array<SQLiteValue | bigint>;
+            const identityRow = this.readStatementRow(stmt, true);
             identityRows.push(identityRow);
             rawRows.push(identityRow.map(value => {
                 if (typeof value !== 'bigint') {
@@ -730,7 +846,7 @@ export class DatabaseService {
         }
         if (typeof newValue === 'string') {
             const numValue = Number(newValue);
-            if (Number.isFinite(numValue) && newValue.trim() !== '' && newValue.trim() === String(numValue)) {
+            if (Number.isFinite(numValue) && newValue !== '' && newValue === String(numValue)) {
                 if (Number.isInteger(numValue) && !Number.isSafeInteger(numValue)) {
                     return newValue;
                 }
@@ -877,6 +993,86 @@ export class DatabaseService {
         if (this.tempDecryptedPath) {
             fs.writeFileSync(this.tempDecryptedPath, Buffer.from(databaseState));
         }
+    }
+
+    /** Delete a complete selection in one queued transaction and one file write. */
+    async deleteRows(tableName: string, identities: RowIdentity[]): Promise<number> {
+        return this.enqueueEdit(async () => {
+            if (!this.db) {
+                throw new Error('Database not opened');
+            }
+            if (!Array.isArray(identities) || identities.length === 0) {
+                throw new Error('Select at least one row to delete.');
+            }
+            const editability = await this.getTableEditability(tableName);
+            const definition = editability.definition;
+            if (!definition) {
+                throw new Error(editability.reason || 'This table has no safe row identity.');
+            }
+            const seen = new Set<string>();
+            const parameters = identities.map(identity => {
+                if (!identity || identity.kind !== definition.kind || !Array.isArray(identity.parts) ||
+                    identity.parts.length !== definition.columns.length ||
+                    identity.parts.some((part, index) => !part || part.column !== definition.columns[index] || part.value === undefined)) {
+                    throw new Error('A selected row identity no longer matches the table schema. Refresh the table and try again.');
+                }
+                const values = identity.parts.map(part => this.deserializeIdentityValue(part.value));
+                const key = JSON.stringify(values.map(value => this.serializeIdentityValue(value)));
+                if (seen.has(key)) {
+                    throw new Error('The selection contains a duplicate row identity. Refresh the table and try again.');
+                }
+                seen.add(key);
+                return values;
+            });
+            const where = definition.columns.map(column => `${this.quoteIdentifier(column)} IS ?`).join(' AND ');
+            const query = `DELETE FROM ${this.quoteIdentifier(tableName)} WHERE ${where}`;
+            const snapshot = this.db.export();
+            let fileSnapshot: Buffer | undefined;
+            let transactionOpen = false;
+            let committed = false;
+            let statement: any;
+            try {
+                this.db.run('BEGIN IMMEDIATE TRANSACTION');
+                transactionOpen = true;
+                statement = this.db.prepare(query);
+                for (const values of parameters) {
+                    statement.run(values);
+                    const changes = Number(this.db.getRowsModified());
+                    if (changes !== 1) {
+                        throw new Error('A selected row changed or was deleted. The entire selection was rolled back; refresh the table and try again.');
+                    }
+                }
+                statement.free();
+                statement = undefined;
+                fileSnapshot = this.captureFileState();
+                this.db.run('COMMIT');
+                transactionOpen = false;
+                committed = true;
+                await this.saveChangesToFile(this.db.export());
+            } catch (error) {
+                statement?.free();
+                let restoreSnapshot = committed;
+                if (transactionOpen) {
+                    try {
+                        this.db.run('ROLLBACK');
+                    } catch {
+                        restoreSnapshot = true;
+                    }
+                }
+                if (restoreSnapshot) {
+                    try {
+                        this.restoreDatabaseState(snapshot, fileSnapshot);
+                    } catch (restoreError) {
+                        throw new Error(`Failed to delete rows: ${error}. Failed to restore the previous database state: ${restoreError}`);
+                    }
+                }
+                throw new Error(`Failed to delete rows: ${error}`);
+            }
+            if (this.currentDatabasePath) {
+                markInternalUpdate(this.currentDatabasePath);
+            }
+            return parameters.length;
+        });
     }
 
     async deleteRow(tableName: string, rowIdentifier: any): Promise<void> {
@@ -1114,9 +1310,15 @@ export class DatabaseService {
         // Use executeQuery instead of direct prepared statements to ensure
         // compatibility with SQLCipher encrypted databases
         const query = `PRAGMA table_info(${this.quoteIdentifier(tableName)})`;
-        const result = await this.executeQuery(query);
-        
-        return result;
+        try {
+            return await this.executeQuery(query);
+        } catch (error) {
+            const fallback = this.getFts5SchemaFallback(tableName, error);
+            if (fallback) {
+                return fallback;
+            }
+            throw error;
+        }
     }
 
     async getForeignKeys(tableName: string): Promise<ForeignKeyInfo[]> {
@@ -1124,20 +1326,27 @@ export class DatabaseService {
             throw new Error('Database not opened');
         }
 
-        const stmt = this.db.prepare(`PRAGMA foreign_key_list(${this.quoteIdentifier(tableName)})`);
-        const foreignKeys: ForeignKeyInfo[] = [];
-        
-        while (stmt.step()) {
-            const row = stmt.getAsObject();
-            foreignKeys.push({
-                column: row.from as string,
-                referencedTable: row.table as string,
-                referencedColumn: row.to as string
-            });
+        let stmt;
+        try {
+            stmt = this.db.prepare(`PRAGMA foreign_key_list(${this.quoteIdentifier(tableName)})`);
+            const foreignKeys: ForeignKeyInfo[] = [];
+            while (stmt.step()) {
+                const row = stmt.getAsObject();
+                foreignKeys.push({
+                    column: row.from as string,
+                    referencedTable: row.table as string,
+                    referencedColumn: row.to as string
+                });
+            }
+            return foreignKeys;
+        } catch (error) {
+            if (this.getFts5SchemaFallback(tableName, error)) {
+                return [];
+            }
+            throw error;
+        } finally {
+            stmt?.free();
         }
-        stmt.free();
-
-        return foreignKeys;
     }
 
     /**

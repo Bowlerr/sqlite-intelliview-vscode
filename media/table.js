@@ -7,9 +7,107 @@
 // Pagination settings
 const PAGINATION_CONFIG = {
   defaultPageSize: 100,
+  maxTablePageSize: 100000,
   pageSizeOptions: [50, 100, 200, 500, 1000, 10000, 100000],
   maxVisiblePages: 5,
 };
+
+function positivePageInteger(value) {
+  if (typeof value === "string" && !value.trim()) return null;
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+function normalizeTablePageLimit(value) {
+  return value === 0 ? 0 : positivePageInteger(value) || 100000;
+}
+
+function effectiveTablePageSize(value, maximum = PAGINATION_CONFIG.maxTablePageSize) {
+  const size = positivePageInteger(value) || positivePageInteger(PAGINATION_CONFIG.defaultPageSize) || 100;
+  const limit = normalizeTablePageLimit(maximum);
+  return limit === 0 ? size : Math.min(size, limit);
+}
+
+function createPageSizeOptions(pageSize, maximum = PAGINATION_CONFIG.maxTablePageSize) {
+  const limit = normalizeTablePageLimit(maximum);
+  const presets = PAGINATION_CONFIG.pageSizeOptions.filter(size => limit === 0 || size <= limit);
+  return presets.map(size => `<option value="${size}"${size === pageSize ? " selected" : ""}>${size}</option>`).join("") +
+    (presets.includes(pageSize) ? "" : `<option value="${pageSize}" selected>Custom (${pageSize})</option>`) +
+    '<option value="custom">Custom…</option>';
+}
+
+let pendingPageSizeFocus = null;
+
+function restorePageSizeFocus(wrapper) {
+  const pending = pendingPageSizeFocus;
+  if (!pending || pending.tableName !== wrapper.dataset.table) return;
+  pendingPageSizeFocus = null;
+  const status = wrapper.querySelector(".page-size-status");
+  if (status && pending.notice) status.textContent = pending.notice;
+  const focused = document.activeElement;
+  if (focused === pending.source || focused === document.body) {
+    wrapper.querySelector(".page-size-select")?.focus();
+  }
+}
+
+/** Keep the custom action separate from the active size so it can be reopened. */
+function showCustomPageSizeInput(wrapper, select) {
+  if (!wrapper || !select || wrapper.querySelector(".page-size-custom-input")) return;
+  const currentSize = positivePageInteger(wrapper.dataset.pageSize) || 100;
+  const maximum = normalizeTablePageLimit(Number(wrapper.dataset.maxTablePageSize));
+  select.value = String(currentSize);
+  select.hidden = true;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.className = "page-size-custom-input";
+  input.value = String(currentSize);
+  input.setAttribute("aria-label", "Rows per page");
+  const help = document.createElement("span");
+  help.id = `${select.id}-help`;
+  help.className = "page-size-help";
+  help.setAttribute("role", "status");
+  const instructions = `Enter a positive whole number. Enter to apply; Escape to cancel.${maximum ? ` Maximum ${maximum.toLocaleString()} rows per page.` : ""}`;
+  help.textContent = instructions;
+  input.setAttribute("aria-describedby", help.id);
+  select.after(input, help);
+  let finished = false;
+  const close = (focusSelect) => {
+    if (finished) return false;
+    finished = true;
+    input.remove();
+    help.remove();
+    select.hidden = false;
+    select.value = String(currentSize);
+    if (focusSelect) select.focus();
+    return true;
+  };
+  input.addEventListener("input", () => {
+    input.removeAttribute("aria-invalid");
+    help.textContent = instructions;
+  });
+  input.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const requested = positivePageInteger(input.value);
+      if (requested === null) {
+        input.setAttribute("aria-invalid", "true");
+        help.textContent = "Enter a positive whole number within the safe integer range.";
+        return;
+      }
+      if (!close(true)) return;
+      handlePageSizeChange(wrapper, requested, { restoreFocus: true });
+    }
+  });
+  input.addEventListener("blur", () => close(false));
+  input.focus();
+  input.select();
+}
 
 // Rendering limits to keep the UI responsive on wide/large-text tables.
 // Set to Infinity to avoid truncating visible values by default.
@@ -235,7 +333,7 @@ function updateTableWidthFromCols(table) {
   if (!headers.length) {
     return;
   }
-  let total = 0;
+  let total = table.querySelector("col.checkbox-col") ? 32 : 0;
   headers.forEach((th) => {
     const colIndex = th.getAttribute("data-column");
     let width = 0;
@@ -320,7 +418,7 @@ function shouldVirtualizeTable(pageRowCount, columnCount, tableName, options) {
 function createDataTable(data, columns, tableName = "", options = {}) {
   const {
     page = 1,
-    pageSize = PAGINATION_CONFIG.defaultPageSize,
+    pageSize: requestedPageSize = PAGINATION_CONFIG.defaultPageSize,
     totalRows = undefined,
     foreignKeys = [], // Add foreign keys to options
     isQueryResult = false, // Whether this is a query result
@@ -355,15 +453,23 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     ? generateTableId(tableName)
     : `table-${tableName || "query"}-${Date.now()}`;
 
-  const currentPage = options.currentPage || options.page || 1;
-  const backendPaginated =
+  // Schema metadata has no paging controls and must always remain complete.
+  const isSchemaTable = tableName === "schema";
+  const resultMetadata = isQueryResult && window._resultCache instanceof Map
+    ? window._resultCache.get(tableName) : null;
+  const savedResultView = resultMetadata && typeof window.getTabViewState === "function"
+    ? window.getTabViewState(tableName) : null;
+  const maximum = isSchemaTable ? 0 : normalizeTablePageLimit(options.maxTablePageSize ?? PAGINATION_CONFIG.maxTablePageSize);
+  const pageSize = isSchemaTable ? Math.max(1, data.length) : effectiveTablePageSize(savedResultView?.pageSize ?? requestedPageSize, maximum);
+  const requestedPage = positivePageInteger(savedResultView?.page ?? options.currentPage ?? page) || 1;
+  let currentPage = isSchemaTable ? 1 : Math.min(requestedPage, Number.MAX_SAFE_INTEGER, Math.floor(Number.MAX_SAFE_INTEGER / pageSize) + 1);
+  const backendPaginated = !isSchemaTable && !isQueryResult && (
     options.backendPaginated === true ||
     options.totalRowsKnown === false ||
-    options.totalRows !== undefined;
-
-  // Check if this is a schema table (not editable)
-  // Note: Query results should have most table features enabled
-  const isSchemaTable = tableName === "schema";
+    (options.backendPaginated !== false && options.totalRows !== undefined));
+  if (!backendPaginated) currentPage = Math.min(currentPage, Math.max(1, Math.ceil(data.length / pageSize)));
+  const truncated = isQueryResult && (options.truncated ?? resultMetadata?.truncated) === true;
+  const queryMaxRows = positivePageInteger(options.maxRows ?? resultMetadata?.maxRows);
 
   // Schema tables are small + local; we don't need async counting UI for them.
   const totalRowsKnown =
@@ -419,13 +525,20 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     options
   );
 
+  const pageRowIdentities = backendPaginated
+    ? rowIdentities
+    : rowIdentities.slice(startIndex, endIndex);
+
   // Keep the current page rows in-memory for context menu actions (e.g., BLOB viewing/copy).
   stashTableData(tableId, {
     pageData,
     columns,
     startIndex,
     tableName,
-    rowIdentities,
+    rowIdentities: pageRowIdentities,
+    // Local result pagination must retain the full query snapshot.
+    localData: backendPaginated ? null : data,
+    options: { ...options, maxTablePageSize: maximum },
   });
 
   if (virtualize) {
@@ -442,7 +555,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         foreignKeyMap,
         options,
         tableName,
-        rowIdentities,
+        rowIdentities: pageRowIdentities,
       });
     } catch (_) {
       // ignore stashing errors (best-effort)
@@ -450,13 +563,13 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   }
 
   return `
-    <div class="enhanced-table-wrapper" data-table="${tableName}" data-table-id="${tableId}" data-total-rows="${effectiveTotalRows}" data-page-size="${pageSize}" data-current-page="${currentPage}" data-start-index="${startIndex}" data-page-rows="${
+    <div class="enhanced-table-wrapper" data-table="${escapeHtmlFast(tableName)}" data-table-id="${escapeHtmlFast(tableId)}" data-total-rows="${effectiveTotalRows}" data-page-size="${pageSize}" data-max-table-page-size="${maximum}" data-current-page="${currentPage}" data-start-index="${startIndex}" data-page-rows="${
     Array.isArray(pageData) ? pageData.length : 0
   }" data-backend-paginated="${
     backendPaginated ? "true" : "false"
   }" data-virtualized="${
     virtualize ? "true" : "false"
-  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}">
+  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}" data-editable="${isEditable}">
       <div class="table-controls">
         <div class="table-search">
           <input type="text" class="search-input" placeholder="Search table page..." />
@@ -492,29 +605,27 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           ${
             showSchemaStats
               ? `<div class="page-size-selector">
-            <label for="page-size-${tableId}">Show:</label>
-            <select id="page-size-${tableId}" class="page-size-select">
-              ${PAGINATION_CONFIG.pageSizeOptions
-                .map(
-                  (size) =>
-                    `<option value="${size}" ${
-                      size === pageSize ? "selected" : ""
-                    }>${size}</option>`
-                )
-                .join("")}
+            <label for="page-size-${escapeHtmlFast(tableId)}">Show:</label>
+            <select id="page-size-${escapeHtmlFast(tableId)}" class="page-size-select">
+              ${createPageSizeOptions(pageSize, maximum)}
             </select>
+            <span class="page-size-status" role="status" aria-live="polite"></span>
           </div>
-          <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>`
+          <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>
+          <button class="table-action-btn table-action-btn-selection hidden" title="Export selected rows" data-action="export-selected">📤 Export Selected</button>
+          ${isEditable ? '<button class="table-action-btn table-action-btn-selection table-action-btn-danger hidden" title="Delete selected rows" data-action="delete-selected">🗑️ Delete Selected</button>' : ""}`
               : ""
           }
         </div>
       </div>
+      ${truncated ? `<div class="query-limit-notice" role="status">Showing the first ${queryMaxRows ? queryMaxRows.toLocaleString() : data.length.toLocaleString()} query rows. More rows were available. Adjust Query Max Rows in settings or refine the query to see other rows.</div>` : ""}
       <div class="table-scroll-container">
-        <table class="data-table resizable-table" id="${tableId}" role="table" aria-label="Database table data" style="width: ${Math.max(
+        <table class="data-table resizable-table" id="${escapeHtmlFast(tableId)}" role="table" aria-label="Database table data" style="width: ${Math.max(
     0,
-    DEFAULT_COLUMN_WIDTH * columns.length
+    32 + DEFAULT_COLUMN_WIDTH * columns.length
   )}px;">
           <colgroup>
+            <col class="checkbox-col" />
             ${columns
               .map(
                 (col, index) =>
@@ -526,6 +637,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           </colgroup>
           <thead>
             <tr role="row">
+              <th class="checkbox-th" role="columnheader">
+                <input type="checkbox" class="select-all-checkbox" title="Select all filtered rows on this page" aria-label="Select all filtered rows on this page" />
+              </th>
               ${columns
                 .map((col, index) => {
                   let fkInfo = foreignKeyMap.get(col);
@@ -551,27 +665,27 @@ function createDataTable(data, columns, tableName = "", options = {}) {
                     role="columnheader" 
                     tabindex="0"
                     aria-sort="none"
-                    aria-label="Column ${col}, sortable${
+                    aria-label="Column ${escapeHtmlFast(col)}, sortable${
                     isForeignKey ? ", foreign key" : ""
                   }"
-                  data-column-name="${col}">
+                  data-column-name="${escapeHtmlFast(col)}">
                   <div class="column-header">
-                    <span class="column-name">${col}</span>
+                    <span class="column-name">${escapeHtmlFast(col)}</span>
                     ${
                       isForeignKey ? `<span class="fk-indicator">🔗</span>` : ""
                     }
                     <button class="pin-btn" 
-                            title="Pin column ${col}" 
+                            title="Pin column ${escapeHtmlFast(col)}"
                             data-action="pin" 
                             data-column="${index}"
-                            aria-label="Pin column ${col}"
+                            aria-label="Pin column ${escapeHtmlFast(col)}"
                             aria-pressed="false">📌</button>
                   </div>
                   <span class="sort-indicator" aria-hidden="true">⇅</span>
                   <div class="resize-handle column-resize-handle" 
                        data-column="${index}" 
                        role="separator" 
-                       aria-label="Resize column ${col}"
+                       aria-label="Resize column ${escapeHtmlFast(col)}"
                        aria-orientation="vertical"></div>
                 </th>
               `;
@@ -582,7 +696,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           <tbody role="rowgroup" class="table-body">
             ${
               virtualize
-                ? `<tr class="virtual-loading" role="row"><td class="virtual-loading-cell" role="cell" colspan="${columns.length}">Rendering…</td></tr>`
+                ? `<tr class="virtual-loading" role="row"><td class="virtual-loading-cell" role="cell" colspan="${columns.length + 1}">Rendering…</td></tr>`
                 : renderTableRows(
                     pageData,
                     startIndex,
@@ -668,6 +782,9 @@ function renderTableRowHtml(
 ) {
   return `
         <tr data-row-index="${globalIndex}" data-local-index="${localIndex}" class="resizable-row" role="row">
+          <td class="checkbox-cell" data-column="-1" role="cell">
+            <input type="checkbox" class="row-select-checkbox" data-global-index="${globalIndex}" aria-label="Select row ${globalIndex + 1}" />
+          </td>
           ${
             Array.isArray(row)
               ? row
@@ -760,7 +877,7 @@ function renderTableCellHtml(
       label
     )}</span></div>`;
   } else {
-    const raw = String(cell);
+    const raw = encodeCellText(cell);
     const original =
       raw.length > CELL_ORIGINAL_LIMIT
         ? raw.slice(0, CELL_ORIGINAL_LIMIT)
@@ -773,7 +890,7 @@ function renderTableCellHtml(
       raw.length > CELL_ORIGINAL_LIMIT ? ' data-original-truncated="true"' : "";
     cellContentHtml = `<div class="cell-content" data-original-value="${escapeHtmlFast(
       original
-    )}" data-original-is-null="false"${truncatedAttr}>${escapeHtmlFast(display)}</div>`;
+    )}" data-original-encoding="escaped" data-original-is-null="false"${truncatedAttr}>${escapeHtmlFast(display)}</div>`;
   }
 
   const cellEditable = isEditable && !isBlob;
@@ -792,21 +909,21 @@ function renderTableCellHtml(
                 ${cellEditable ? `data-editable="true"` : ""}
                 ${cellEditable ? `data-row-index="${globalIndex}"` : ""}
                 data-column-name="${
-                  columns ? columns[cellIndex] : `col_${cellIndex}`
+                  escapeHtmlFast(columns ? columns[cellIndex] : `col_${cellIndex}`)
                 }"
                 ${
                   isForeignKey && fkTable && fkColumn
-                    ? `data-fk-table="${fkTable}" data-fk-column="${fkColumn}"`
+                    ? `data-fk-table="${escapeHtmlFast(fkTable)}" data-fk-column="${escapeHtmlFast(fkColumn)}"`
                     : ""
                 }
                 aria-label="Row ${globalIndex + 1}, Column ${
     cellIndex + 1
-  }: ${ariaValue}${isForeignKey ? " (Foreign Key)" : ""}">
+  }: ${escapeHtmlFast(ariaValue)}${isForeignKey ? " (Foreign Key)" : ""}">
               ${cellContentHtml}
               ${
                 cellEditable
                   ? `<div class="cell-editing-controls" style="display: none;">
-                <input type="text" class="cell-input" />
+                <input type="text" class="cell-input" aria-label="Cell value (escaped text)" title="Use \\n, \\r, \\t or \\u0000 for control characters; \\\\ for a literal backslash" />
                 <button class="cell-save-btn" title="Save changes">✓</button>
                 <button class="cell-cancel-btn" title="Cancel changes">✗</button>
               </div>`
@@ -838,7 +955,7 @@ function createPaginationControls(currentPage, totalPages, tableId) {
   }
 
   let paginationHTML = `
-    <div class="pagination-controls" data-table-id="${tableId}">
+    <div class="pagination-controls" data-table-id="${escapeHtmlFast(tableId)}">
       <button class="pagination-btn" data-action="first" ${
         currentPage === 1 ? "disabled" : ""
       } title="First page">
@@ -892,8 +1009,8 @@ function createPaginationControls(currentPage, totalPages, tableId) {
       </button>
     </div>
     <div class="page-input-container">
-      <label for="page-input-${tableId}">Go to page:</label>
-      <input type="number" id="page-input-${tableId}" class="page-input" 
+      <label for="page-input-${escapeHtmlFast(tableId)}">Go to page:</label>
+      <input type="number" id="page-input-${escapeHtmlFast(tableId)}" class="page-input"
              min="1" max="${totalPages}" value="${currentPage}" />
       <button class="pagination-btn" data-action="go">Go</button>
     </div>
@@ -1204,7 +1321,7 @@ function virtualRender(vs, { force }) {
   }
 
   const tbody = vs.tbody;
-  const colCount = Array.isArray(vs.columns) ? vs.columns.length : 0;
+  const colCount = Array.isArray(vs.columns) ? vs.columns.length + 1 : 0;
   const totalRows = Array.isArray(vs.order) ? vs.order.length : 0;
   const pageRows = Array.isArray(vs.pageData) ? vs.pageData.length : 0;
   const hasSearch = !!(vs.searchTerm && String(vs.searchTerm).trim().length);
@@ -1308,6 +1425,11 @@ function virtualRender(vs, { force }) {
   syncPinnedColumnsForVirtual(vs);
   syncColumnWidthsForVirtual(vs);
   syncRowHeightsForVirtual(vs);
+
+  // Re-apply multi-row selection classes to visible rows.
+  if (typeof updateSelectedUI === "function") {
+    updateSelectedUI(vs.wrapper);
+  }
 }
 
 function findRowAtOffset(prefix, offset) {
@@ -1419,6 +1541,7 @@ function syncRowHeightsForVirtual(vs) {
  */
 function filterTable(tableWrapper, searchTerm) {
   const wrapper = normalizeEnhancedTableWrapper(tableWrapper) || tableWrapper;
+  clearSelection(wrapper);
   /** @type {any} */ const vs = wrapper && wrapper.__virtualTableState;
   if (vs && vs.enabled === true) {
     vs.searchTerm = searchTerm || "";
@@ -1574,13 +1697,14 @@ function sortTableByColumn(table, columnIndex) {
   const header = table.querySelector(`th[data-column="${columnIndex}"]`);
   const currentSort = header.dataset.sort;
   const tbody = table.querySelector("tbody");
-  const rows = Array.from(tbody.querySelectorAll("tr"));
+  const rows = Array.from(tbody.querySelectorAll("tr.resizable-row"));
 
   // Reset all other sort indicators
   table.querySelectorAll("th").forEach((th) => {
     if (th !== header) {
       th.dataset.sort = "none";
-      th.querySelector(".sort-indicator").textContent = "⇅";
+      const indicator = th.querySelector(".sort-indicator");
+      if (indicator) indicator.textContent = "⇅";
     }
   });
 
@@ -1655,8 +1779,7 @@ function toggleColumnPin(table, columnIndex) {
     return;
   }
 
-  const headers = table.querySelectorAll("th");
-  const header = headers[columnIndex];
+  const header = table.querySelector(`th[data-column="${columnIndex}"]`);
 
   if (!header) {
     if (window.debug) {
@@ -1785,6 +1908,7 @@ function showColumnFilter(table, columnIndex) {
  */
 function filterTableByColumn(table, columnIndex, filterValue) {
   const wrapper = table ? table.closest(".enhanced-table-wrapper") : null;
+  if (wrapper) clearSelection(wrapper);
   /** @type {any} */ const vs = wrapper && wrapper.__virtualTableState;
   if (vs && vs.enabled === true) {
     const normalized = typeof filterValue === "string" ? filterValue : "";
@@ -1878,69 +2002,26 @@ function filterTableByColumn(table, columnIndex, filterValue) {
 /**
  * Export table data as CSV
  * @param {Element} tableWrapper - Table wrapper element
+ * @param {object} [options] - Export options
+ * @param {boolean} [options.onlySelected] - Export only selected rows
  */
-function exportTableData(tableWrapper) {
+function exportTableData(tableWrapper, options = {}) {
   const wrapper = normalizeEnhancedTableWrapper(tableWrapper) || tableWrapper;
-  /** @type {any} */ const vs = wrapper && wrapper.__virtualTableState;
-  if (vs && vs.enabled === true) {
-    const headers = Array.from(
-      vs.table.querySelectorAll("th .column-name")
-    ).map((th) => th.textContent);
-    const rowData = (vs.order || []).map((sourceIndex) => {
-      const row = vs.pageData[sourceIndex];
-      return Array.isArray(row)
-        ? row.map((val) =>
-            val === null || val === undefined ? "" : String(val)
-          )
-        : [];
-    });
-
-    const csvContent = createCSVContent
-      ? createCSVContent(headers, rowData)
-      : "";
-    if (typeof downloadFile !== "undefined") {
-      const filename = sanitizeFilename
-        ? sanitizeFilename("table_data.csv")
-        : "table_data.csv";
-      downloadFile(csvContent, filename);
-    }
-    if (typeof showSuccess !== "undefined") {
-      showSuccess("Table data exported successfully!");
-    }
-    return;
-  }
-
-  const table = wrapper.querySelector(".data-table");
-  const visibleRows = table.querySelectorAll(
-    'tbody tr:not([style*="display: none"]):not(.filter-empty-row):not(.virtual-spacer):not(.virtual-loading):not(.virtual-empty)'
+  if (!wrapper) return;
+  const selection = getSelectionStore(wrapper);
+  if (options.onlySelected && selection.size === 0) return;
+  const stash = getTableSnapshot(wrapper);
+  if (!stash) return;
+  const indices = getVisibleRowGlobalIndices(wrapper).filter(
+    index => !options.onlySelected || selection.has(index)
   );
-
-  // Get headers
-  const headers = Array.from(table.querySelectorAll("th .column-name")).map(
-    (th) => th.textContent
-  );
-
-  // Get visible row data
-  const rowData = Array.from(visibleRows).map((row) => {
-    return Array.from(row.querySelectorAll("td")).map((td) => {
-      let value = getCellValue ? getCellValue(td) : td.textContent.trim();
-      return value === "NULL" ? "" : value;
-    });
-  });
-
-  // Create CSV content
-  const csvContent = createCSVContent ? createCSVContent(headers, rowData) : "";
-
-  // Download file
-  if (typeof downloadFile !== "undefined") {
-    const filename = sanitizeFilename
-      ? sanitizeFilename("table_data.csv")
-      : "table_data.csv";
-    downloadFile(csvContent, filename);
+  const rows = indices.map(index => stash.pageData[index - stash.startIndex]);
+  const csvContent = createCSVContent(stash.columns, rows);
+  if (typeof downloadFile === "function") {
+    downloadFile(csvContent, "table_data.csv");
   }
-
-  if (typeof showSuccess !== "undefined") {
-    showSuccess("Table data exported successfully!");
+  if (typeof showSuccess === "function") {
+    showSuccess(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}.`);
   }
 }
 
@@ -2053,44 +2134,32 @@ function handlePagination(tableWrapper, action, value) {
  * @param {Element} tableWrapper - Table wrapper element
  * @param {number} newPageSize - New page size
  */
-function handlePageSizeChange(tableWrapper, newPageSize) {
-  if (!tableWrapper) {
-    return;
-  }
-
+function handlePageSizeChange(tableWrapper, requestedSize, options = {}) {
+  if (!tableWrapper || positivePageInteger(requestedSize) === null) return false;
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
-  const currentPage = parseInt(wrapper.dataset.currentPage || "1");
-  const totalRows = parseInt(wrapper.dataset.totalRows || "0");
-
-  // Calculate what the new current page should be to show similar data
-  const currentStartRow =
-    (currentPage - 1) * parseInt(wrapper.dataset.pageSize || "100");
-  const newCurrentPage = Math.max(
-    1,
-    Math.ceil((currentStartRow + 1) / newPageSize)
-  );
-
-  // Update page size
-  wrapper.dataset.pageSize = newPageSize.toString();
-
-  const tabKey = wrapper.dataset.table || wrapper.getAttribute("data-table");
-  if (tabKey && typeof window.setTabViewState === "function") {
-    window.setTabViewState(
-      tabKey,
-      { page: newCurrentPage, pageSize: newPageSize, scrollTop: 0 },
-      { renderTabs: false, renderSidebar: false }
-    );
+  const maximum = normalizeTablePageLimit(Number(wrapper.dataset.maxTablePageSize));
+  const newPageSize = effectiveTablePageSize(requestedSize, maximum);
+  const currentPage = positivePageInteger(wrapper.dataset.currentPage) || 1;
+  const oldSize = positivePageInteger(wrapper.dataset.pageSize) || 100;
+  const currentStartRow = Math.min(Number.MAX_SAFE_INTEGER, (currentPage - 1) * oldSize);
+  // Apply the cap BEFORE calculating the destination page, preserving row position.
+  const newCurrentPage = Math.min(Number.MAX_SAFE_INTEGER, Math.floor(currentStartRow / newPageSize) + 1);
+  const notice = newPageSize < Number(requestedSize)
+    ? `Page size limited to ${newPageSize.toLocaleString()} rows by Max Table Page Size.` : "";
+  const select = wrapper.querySelector(".page-size-select");
+  if (select) select.innerHTML = createPageSizeOptions(newPageSize, maximum);
+  const status = wrapper.querySelector(".page-size-status");
+  if (status) status.textContent = notice;
+  if (options.restoreFocus || document.activeElement === select) {
+    pendingPageSizeFocus = { tableName: wrapper.dataset.table, source: select, notice };
   }
-
-  // Update global pagination state
-  /** @type {any} */
-  const win = window;
-  if (typeof win.updateState === "function") {
-    win.updateState({ currentPage: newCurrentPage, pageSize: newPageSize });
+  if (newPageSize === oldSize) {
+    restorePageSizeFocus(wrapper);
+    return true;
   }
-
-  // Update to new page
-  updateTablePage(tableWrapper, newCurrentPage);
+  wrapper.dataset.pageSize = String(newPageSize);
+  updateTablePage(wrapper, newCurrentPage);
+  return true;
 }
 
 /**
@@ -2102,15 +2171,19 @@ function updateTablePage(tableWrapper, pageNumber) {
   if (!tableWrapper) {
     return;
   }
+  clearSelection(tableWrapper);
+  const snapshot = getTableSnapshot(tableWrapper);
+  if (snapshot) snapshot.identitiesInvalid = true;
 
   const wrapper = /** @type {HTMLElement} */ (tableWrapper);
-  const tableId = wrapper.dataset.tableId;
   const totalRows = parseInt(wrapper.dataset.totalRows || "0");
-  const pageSize = parseInt(wrapper.dataset.pageSize || "100");
-  const totalPages = Math.ceil(totalRows / pageSize);
+  const pageSize = positivePageInteger(wrapper.dataset.pageSize) || 100;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 
   // Validate page number
-  const validPage = Math.max(1, Math.min(totalPages, pageNumber));
+  const lastSafePage = Math.min(Number.MAX_SAFE_INTEGER, Math.floor(Number.MAX_SAFE_INTEGER / pageSize) + 1);
+  const validPage = Math.min(positivePageInteger(pageNumber) || 1, lastSafePage,
+    wrapper.dataset.totalRowsKnown === "true" ? totalPages : lastSafePage);
 
   // Update current page
   wrapper.dataset.currentPage = validPage.toString();
@@ -2133,31 +2206,32 @@ function updateTablePage(tableWrapper, pageNumber) {
   /** @type {any} */
   const win = window;
   if (typeof win.updateState === "function") {
-    win.updateState({ currentPage: validPage, pageSize });
+    win.updateState({ currentPage: validPage, pageSize }, { renderTabs: false, renderSidebar: false });
   }
 
-  // We need to get the full data and re-render the table
-  // For now, we'll trigger a data reload from the extension
-  /** @type {any} */
-  const win2 = window;
+  if (Array.isArray(snapshot?.localData)) {
+    const holder = document.createElement("template");
+    holder.innerHTML = createDataTable(snapshot.localData, snapshot.columns, tabKey, {
+      ...snapshot.options, page: validPage, currentPage: validPage, pageSize,
+      totalRows: snapshot.localData.length, backendPaginated: false,
+    });
+    const replacement = holder.content.firstElementChild;
+    wrapper.replaceWith(replacement);
+    if (typeof initializeTableEvents === "function") initializeTableEvents(replacement);
+    if (typeof window.applyTabViewStateToWrapper === "function") window.applyTabViewStateToWrapper(replacement, tabKey);
+    restorePageSizeFocus(replacement);
+    return;
+  }
+
+  // The response replaces this snapshot and is authoritative for effective sizes.
   const currentState =
-    typeof win2.getCurrentState === "function" ? win2.getCurrentState() : {};
-  if (
-    currentState.selectedTable &&
-    typeof win2.vscode !== "undefined" &&
-    Array.isArray(currentState.openTables)
-  ) {
-    const tabObj = currentState.openTables.find(
-      (t) => t.key === currentState.selectedTable
-    );
-    if (!tabObj || !tabObj.isResultTab) {
-      win2.vscode.postMessage({
-        type: "getTableData",
-        tableName: currentState.selectedTable,
-        page: validPage,
-        pageSize: pageSize,
-      });
-    }
+    typeof win.getCurrentState === "function" ? win.getCurrentState() : {};
+  if (tabKey && win.vscode) {
+    wrapper.dataset.paginationPending = "true";
+    win.vscode.postMessage({
+      type: "getTableData", tableName: tabKey, page: validPage, pageSize,
+      key: currentState.encryptionKey || "",
+    });
   }
 }
 
@@ -2233,8 +2307,7 @@ function updatePaginationControls(tableWrapper, data, currentPage, pageSize) {
   // Update page size selector
   const pageSizeSelect = tableWrapper.querySelector(".page-size-select");
   if (pageSizeSelect) {
-    /** @type {HTMLSelectElement} */ (pageSizeSelect).value =
-      pageSize.toString();
+    pageSizeSelect.innerHTML = createPageSizeOptions(pageSize, Number(wrapper.dataset.maxTablePageSize));
   }
 
   // Update page input
@@ -2257,6 +2330,171 @@ function updatePaginationControls(tableWrapper, data, currentPage, pageSize) {
         updateTablePage(tableWrapper, val);
       }
     });
+  }
+}
+
+/** Selection belongs to a rendered snapshot; replaced tables release their state. */
+const tableSelections = new WeakMap();
+const pendingRowDeletions = new Map();
+let rowDeletionSequence = 0;
+
+function getTableSnapshot(wrapper) {
+  return getTableDataStash().get(wrapper?.getAttribute("data-table-id")) || null;
+}
+
+function getSelectionStore(wrapper) {
+  if (!tableSelections.has(wrapper)) tableSelections.set(wrapper, new Set());
+  return tableSelections.get(wrapper);
+}
+
+function toggleRowSelection(wrapper, globalIndex) {
+  setRowSelection(wrapper, globalIndex, !getSelectionStore(wrapper).has(globalIndex));
+}
+
+function setRowSelection(wrapper, globalIndex, selected) {
+  if (wrapper.dataset.deletePending || !Number.isInteger(globalIndex)) return;
+  const selection = getSelectionStore(wrapper);
+  if (selected) selection.add(globalIndex);
+  else selection.delete(globalIndex);
+  updateSelectedUI(wrapper);
+}
+
+function clearSelection(wrapper) {
+  if (!wrapper) return;
+  getSelectionStore(wrapper).clear();
+  updateSelectedUI(wrapper);
+}
+
+/** Logical filtered page, including rows outside the virtual viewport. */
+function getVisibleRowGlobalIndices(wrapper) {
+  const vs = wrapper.__virtualTableState;
+  if (vs?.enabled && Array.isArray(vs.order)) {
+    return vs.order.map(index => vs.startIndex + index);
+  }
+  return Array.from(wrapper.querySelectorAll("tr.resizable-row"))
+    .filter(row => row.style.display !== "none")
+    .map(row => Number(row.getAttribute("data-row-index")))
+    .filter(Number.isInteger);
+}
+
+function updateSelectedUI(wrapper) {
+  const selection = getSelectionStore(wrapper);
+  const pending = !!wrapper.dataset.deletePending;
+  wrapper.querySelectorAll("tr.resizable-row").forEach(row => {
+    const selected = selection.has(Number(row.getAttribute("data-row-index")));
+    row.classList.toggle("selected", selected);
+    const checkbox = row.querySelector(".row-select-checkbox");
+    if (checkbox) {
+      checkbox.checked = selected;
+      checkbox.disabled = pending;
+    }
+  });
+  const visible = getVisibleRowGlobalIndices(wrapper);
+  const selectedCount = visible.filter(index => selection.has(index)).length;
+  const selectAll = wrapper.querySelector(".select-all-checkbox");
+  if (selectAll) {
+    selectAll.checked = visible.length > 0 && selectedCount === visible.length;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < visible.length;
+    selectAll.disabled = pending || visible.length === 0;
+  }
+  const info = wrapper.querySelector(".selected-info");
+  if (info) {
+    info.textContent = selection.size ? `${selection.size} selected` : "";
+    info.setAttribute("aria-live", "polite");
+  }
+  wrapper.querySelectorAll(".table-action-btn-selection").forEach(button => {
+    button.classList.toggle("hidden", selection.size === 0);
+    button.disabled = pending;
+  });
+}
+
+/** Return every identity or fail closed; never silently delete a subset. */
+function getSelectedRowIdentities(wrapper, indices = Array.from(getSelectionStore(wrapper))) {
+  const stash = getTableSnapshot(wrapper);
+  if (!stash || stash.identitiesInvalid || !Array.isArray(stash.rowIdentities)) return [];
+  const identities = indices.map(index => stash.rowIdentities[index - stash.startIndex]);
+  if (identities.some(identity => !identity || !Array.isArray(identity.parts) || !identity.parts.length)) return [];
+  return identities;
+}
+
+function requestTableSnapshot(wrapper, changes = 0) {
+  if (!wrapper?.isConnected || !window.vscode?.postMessage) return;
+  const pageSize = Number(wrapper.dataset.pageSize) || 100;
+  let page = Number(wrapper.dataset.currentPage) || 1;
+  if (wrapper.dataset.totalRowsKnown === "true") {
+    const remaining = Math.max(0, Number(wrapper.dataset.totalRows) - changes);
+    page = Math.min(page, Math.max(1, Math.ceil(remaining / pageSize)));
+  } else if (changes >= Number(wrapper.dataset.pageRows) && page > 1) {
+    page -= 1;
+  }
+  const state = typeof getCurrentState === "function" ? getCurrentState() : {};
+  window.vscode.postMessage({
+    type: "getTableData", tableName: wrapper.dataset.table,
+    page, pageSize, key: state.encryptionKey || "",
+  });
+}
+
+/** Confirm a snapshot of stable identities, then submit it once. */
+function confirmRowDeletion(wrapper, indices) {
+  if (wrapper?.dataset.editable !== "true" || wrapper.dataset.deletePending || !indices.length) return;
+  if (wrapper.querySelector(".data-cell.editing, .data-cell.saving")) {
+    if (typeof showError === "function") showError("Finish editing before deleting rows.");
+    return;
+  }
+  const identities = getSelectedRowIdentities(wrapper, indices);
+  if (identities.length !== indices.length) {
+    if (typeof showError === "function") showError("Row identities changed or are unavailable. Refresh the table before deleting.");
+    return;
+  }
+  const snapshot = getTableSnapshot(wrapper);
+  const fingerprint = JSON.stringify(identities);
+  const submit = () => {
+    if (wrapper.dataset.deletePending) return;
+    if (!wrapper.isConnected || snapshot !== getTableSnapshot(wrapper) ||
+        fingerprint !== JSON.stringify(getSelectedRowIdentities(wrapper, indices)) ||
+        wrapper.querySelector(".data-cell.editing, .data-cell.saving")) {
+      if (typeof showError === "function") showError("The table changed. Select the rows again before deleting.");
+      return;
+    }
+    if (!window.vscode?.postMessage) {
+      if (typeof showError === "function") showError("Cannot communicate with extension");
+      return;
+    }
+    const requestId = `delete-rows-${Date.now()}-${++rowDeletionSequence}`;
+    const state = typeof getCurrentState === "function" ? getCurrentState() : {};
+    wrapper.dataset.deletePending = requestId;
+    pendingRowDeletions.set(requestId, { wrapper, tableName: wrapper.dataset.table });
+    updateSelectedUI(wrapper);
+    window.vscode.postMessage({
+      type: "deleteRows", tableName: wrapper.dataset.table,
+      rowIdentities: JSON.parse(fingerprint), requestId, key: state.encryptionKey || "",
+    });
+  };
+  if (typeof showEnhancedConfirmDialog === "function") {
+    showEnhancedConfirmDialog(`Delete ${indices.length} row${indices.length === 1 ? "" : "s"}?`, submit, wrapper.dataset.table, null);
+  }
+}
+
+function deleteSelectedRows(wrapper) {
+  confirmRowDeletion(wrapper, Array.from(getSelectionStore(wrapper)));
+}
+
+/** Match responses to the originating snapshot, even after a tab switch. */
+function handleRowsDeletionResult(message, success) {
+  const pending = pendingRowDeletions.get(message.requestId);
+  if (!pending || pending.tableName !== message.tableName) return;
+  pendingRowDeletions.delete(message.requestId);
+  const wrapper = pending.wrapper;
+  if (wrapper.dataset.deletePending === message.requestId) delete wrapper.dataset.deletePending;
+  if (success) {
+    clearSelection(wrapper);
+    const stash = getTableSnapshot(wrapper);
+    if (stash) stash.identitiesInvalid = true;
+    if (typeof showSuccess === "function") showSuccess(`Deleted ${message.changes} row${message.changes === 1 ? "" : "s"}.`);
+    requestTableSnapshot(wrapper, message.changes);
+  } else {
+    updateSelectedUI(wrapper);
+    if (typeof showError === "function") showError(message.message || "Could not delete rows.");
   }
 }
 
@@ -2284,6 +2522,16 @@ if (typeof window !== "undefined") {
     updateRowMultilineForRow;
   /** @type {any} */ (window).updateRowMultilineForTable =
     updateRowMultilineForTable;
+  /** @type {any} */ (window).getSelectionStore = getSelectionStore;
+  /** @type {any} */ (window).toggleRowSelection = toggleRowSelection;
+  /** @type {any} */ (window).setRowSelection = setRowSelection;
+  /** @type {any} */ (window).clearSelection = clearSelection;
+  /** @type {any} */ (window).updateSelectedUI = updateSelectedUI;
+  /** @type {any} */ (window).getSelectedRowIdentities = getSelectedRowIdentities;
+  /** @type {any} */ (window).deleteSelectedRows = deleteSelectedRows;
+  window.getVisibleRowGlobalIndices = getVisibleRowGlobalIndices;
+  window.confirmRowDeletion = confirmRowDeletion;
+  window.handleRowsDeletionResult = handleRowsDeletionResult;
   /** @type {any} */ (window).TABLE_ROW_HEIGHT_DEFAULT = DEFAULT_ROW_HEIGHT;
   /** @type {any} */ (window).TABLE_ROW_HEIGHT_MULTILINE = MULTILINE_ROW_HEIGHT;
   /** @type {any} */ (window).TABLE_CELL_LINE_HEIGHT = CELL_LINE_HEIGHT;

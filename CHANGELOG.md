@@ -1,5 +1,25 @@
 # Change Log
 
+## [0.5.0] - 2026-10-24
+
+### Added
+
+- Row checkboxes, selection counts, filtered-page select-all, and selected-row CSV export.
+- Centered, theme-aware checkboxes with a full-cell click target and keyboard support; deletion dialogs contain and restore keyboard focus.
+- Atomic deletion of selected rows using stable identities, with one transaction and file save for the entire selection.
+- Configurable query-result and table-page limits, custom page sizes, and an explicit notice when query results are truncated. Internal schema reads remain complete regardless of the query limit.
+- Automated webview regression tests in CI and a Node-only database test command for local development.
+
+### Fixed
+
+- Control characters and literal backslashes display as reversible escapes and survive cell editing. Invalid escape sequences are rejected without writing.
+- ER diagrams and schema metadata load for FTS5 virtual tables even when the bundled query engine lacks the FTS5 module. Query execution against FTS5 remains unsupported by that engine.
+- Selection controls preserve sorting, pinning, copying, pagination, and BLOB/composite row identities. Stale selections are invalidated before destructive operations.
+- CSV export preserves raw newlines, carriage returns, whitespace, and literal `NULL` strings.
+- Embedded NUL characters and padded numeric-looking text survive reads, edits, and reloads without truncation or unwanted conversion.
+- Schema metadata remains fully visible with small page caps; separate query executions retain their own tabs and valid pagination.
+- Lint no longer changes source files during validation. Extension packages exclude local databases, SQL fixtures, and test/development files.
+
 ## [0.4.10] - 2026-07-12
 
 ### Added

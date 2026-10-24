@@ -60,6 +60,44 @@ suite('Stable cell editing', () => {
         return identity;
     }
 
+    test('persists edited control characters and literal escapes without changing their bytes', async () => {
+        const original = 'A newline:\nthen some slashes\\and a carriage return\r.\t\b\f\0';
+        const database = new SQL.Database();
+        database.run('CREATE TABLE notes(body TEXT)');
+        database.run('INSERT INTO notes VALUES (?)', [original]);
+        fs.writeFileSync(databasePath, database.export());
+        database.close();
+        await service.openDatabase(databasePath);
+        const data = await service.getTableData('notes');
+        assert.ok(data.rowIdentities[0]);
+        assert.strictEqual(data.values[0][0], original);
+        assert.strictEqual((await service.executeQuery('SELECT body FROM notes')).values[0][0], original);
+        const edited = data.values[0][0] + ' changed';
+        await service.updateCellData('notes', data.rowIdentities[0], 'body', edited);
+        assert.deepStrictEqual(readRows('SELECT hex(body) AS bytes FROM notes'), [
+            { bytes: Buffer.from(edited, 'utf8').toString('hex').toUpperCase() }
+        ]);
+        assert.strictEqual((await service.getTableDataPaginated('notes', 1, 100)).values[0][0], edited);
+    });
+
+    test('preserves controls and spaces around numeric-looking text, including a NUL primary key', async () => {
+        const database = new SQL.Database();
+        database.run('CREATE TABLE notes(code TEXT PRIMARY KEY NOT NULL, body TEXT) WITHOUT ROWID');
+        database.run('INSERT INTO notes VALUES (?, ?)', ['key\0suffix', '\t123\r\n']);
+        fs.writeFileSync(databasePath, database.export());
+        database.close();
+        await service.openDatabase(databasePath);
+        const data = await service.getTableData('notes');
+        assert.strictEqual(data.rowIdentities[0]?.parts[0].value, 'key\0suffix');
+        for (const text of ['\t456\r\n', ' 789 ', '123\t', '\n0\n']) {
+            await service.updateCellData('notes', data.rowIdentities[0]!, 'body', text);
+            assert.strictEqual((await service.getTableData('notes')).values[0][1], text);
+            assert.deepStrictEqual(readRows('SELECT hex(body) AS bytes FROM notes'), [
+                { bytes: Buffer.from(text).toString('hex').toUpperCase() }
+            ]);
+        }
+    });
+
     test('reproduces the reported Id 1 to 5 and Id 5 to 40 OFFSET mismatch', async () => {
         createDatabase(`
             CREATE TABLE records (

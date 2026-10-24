@@ -513,8 +513,8 @@ function copyCellValue() {
     return;
   }
 
-  const cellValue = getCellDisplayValue(currentCell);
-  copyToClipboard(cellValue, "Cell value copied");
+  const copied = getCellCopyValue(currentCell, { mode: "tsv" });
+  copyToClipboard(copied.value, "Cell value copied");
 }
 
 /**
@@ -664,7 +664,7 @@ function copyRowData() {
     return;
   }
 
-  const cells = currentRow.querySelectorAll("td");
+  const cells = currentRow.querySelectorAll('td[data-column]:not([data-column="-1"])');
   let hadLargeBlob = false;
   const rowData = Array.from(cells).map((cell) => {
     const res = getCellCopyValue(/** @type {HTMLTableCellElement} */ (cell), {
@@ -704,7 +704,7 @@ function copyColumnData() {
     tableWrapper && tableWrapper.__virtualTableState;
 
   // Get column header
-  const header = table.querySelector(`thead th:nth-child(${columnIndex + 1})`);
+  const header = table.querySelector(`thead th[data-column="${columnIndex}"]`);
   const headerText = header
     ? getColumnHeaderText(header)
     : `Column ${columnIndex + 1}`;
@@ -728,9 +728,9 @@ function copyColumnData() {
       }
     });
   } else {
-    const rows = table.querySelectorAll("tbody tr");
+    const rows = Array.from(table.querySelectorAll("tbody tr.resizable-row")).filter(row => row.style.display !== "none");
     rows.forEach((row) => {
-      const cell = row.cells[columnIndex];
+      const cell = row.querySelector(`td[data-column="${columnIndex}"]`);
       if (cell) {
         const res = getCellCopyValue(cell, { mode: "tsv" });
         hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
@@ -760,13 +760,13 @@ function copyRowDataAsJSON() {
   }
 
   // Get column headers
-  const headers = table.querySelectorAll("thead th");
+  const headers = table.querySelectorAll("thead th[data-column]");
   const columnNames = Array.from(headers).map((header) =>
     getColumnHeaderText(header)
   );
 
   // Get row data
-  const cells = currentRow.querySelectorAll("td");
+  const cells = currentRow.querySelectorAll('td[data-column]:not([data-column="-1"])');
   let hadLargeBlob = false;
   const rowData = Array.from(cells).map((cell) => {
     const res = getCellCopyValue(/** @type {HTMLTableCellElement} */ (cell), {
@@ -774,7 +774,7 @@ function copyRowDataAsJSON() {
     });
     hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
     if (typeof res.value === "string") {
-      return res.value === "" ? null : res.value;
+      return res.value;
     }
     return res.value;
   });
@@ -813,7 +813,7 @@ function copyTableDataAsJSON() {
     tableWrapper && tableWrapper.__virtualTableState;
 
   // Get column headers
-  const headers = table.querySelectorAll("thead th");
+  const headers = table.querySelectorAll("thead th[data-column]");
   const columnNames = Array.from(headers).map((header) =>
     getColumnHeaderText(header)
   );
@@ -834,19 +834,16 @@ function copyTableDataAsJSON() {
           hadLargeBlob = hadLargeBlob || jsonVal.truncated === true;
           rowObject[columnName] = jsonVal;
         } else {
-          rowObject[columnName] =
-            v === null || v === undefined || String(v) === ""
-              ? null
-              : String(v);
+          rowObject[columnName] = v === undefined ? null : v;
         }
       });
       tableData.push(rowObject);
     });
   } else {
     // Get all rows (DOM-backed)
-    const rows = table.querySelectorAll("tbody tr");
+    const rows = Array.from(table.querySelectorAll("tbody tr.resizable-row")).filter(row => row.style.display !== "none");
     rows.forEach((row) => {
-      const cells = row.querySelectorAll("td");
+      const cells = row.querySelectorAll('td[data-column]:not([data-column="-1"])');
       const rowData = Array.from(cells).map((cell) => {
         const res = getCellCopyValue(
           /** @type {HTMLTableCellElement} */ (cell),
@@ -854,7 +851,7 @@ function copyTableDataAsJSON() {
         );
         hadLargeBlob = hadLargeBlob || res.hadLargeBlob;
         if (typeof res.value === "string") {
-          return res.value === "" ? null : res.value;
+          return res.value;
         }
         return res.value;
       });
@@ -952,7 +949,7 @@ function getCellUnderlyingValue(cell) {
 function getCellRawValue(cell) {
   const cellContent = cell.querySelector(".cell-content");
   if (cellContent) {
-    const original = cellContent.getAttribute("data-original-value") || "";
+    const original = getCellOriginalText(cellContent);
     const truncated =
       cellContent.getAttribute("data-original-truncated") === "true";
     const isNull =
@@ -992,7 +989,7 @@ function getCellRawValue(cell) {
   }
 
   if (cellContent) {
-    const original = cellContent.getAttribute("data-original-value") || "";
+    const original = getCellOriginalText(cellContent);
     const isNull =
       cellContent.querySelector("em") &&
       (cellContent.textContent || "").trim() === "NULL";
@@ -1261,8 +1258,13 @@ function getCellCopyValue(cell, { mode }) {
     return { value: out.text, hadLargeBlob: out.truncated === true };
   }
 
-  const text = getCellDisplayValue(cell);
-  return { value: text.trim() === "NULL" ? "" : text, hadLargeBlob: false };
+  const content = cell.querySelector(".cell-content");
+  const isNull = content?.getAttribute("data-original-is-null") === "true";
+  const raw = getCellRawValue(cell).value;
+  const value = mode === "json"
+    ? (isNull ? null : (typeof underlying === "number" ? underlying : raw))
+    : (isNull ? "" : raw);
+  return { value, hadLargeBlob: false };
 }
 
 function sanitizeFilenamePart(text) {
@@ -1963,8 +1965,11 @@ function getContextMenuActions(cell) {
     }
   }
 
-  // Add delete row action for editable tables
-  actions.push("delete-row");
+  // Match the table's explicit editing capability.
+  const wrapper = cell.closest(".enhanced-table-wrapper");
+  if (wrapper?.dataset.editable === "true" && !wrapper.dataset.deletePending) {
+    actions.push("delete-row");
+  }
 
   return actions;
 }
@@ -1993,196 +1998,21 @@ function updateContextMenuItems(actions) {
  * Delete row with confirmation dialog
  */
 function deleteRowWithConfirmation() {
-  if (!currentRow || !currentCell) {
-    if (window.debug) {
-      window.debug.debug("[ContextMenu] No current row or cell for deletion");
-    }
-    return;
-  }
-
-  const table = currentRow.closest(".data-table");
-  if (!table) {
-    if (window.debug) {
-      window.debug.debug("[ContextMenu] Could not find table for current row");
-    }
-    return;
-  }
-
-  // Store row reference to prevent it from being lost
-  const rowToDelete = currentRow;
-  const cellToReference = currentCell;
-
-  // Get table name from the table ID or data attribute
-  const tableId = table.id || "";
-  const tableName = extractTableNameFromId(tableId);
-
-  if (!tableName) {
-    showDeleteError("Could not determine table name for deletion");
-    return;
-  }
-
-  // Get row data for confirmation display
-  const headers = table.querySelectorAll("thead th");
-  const cells = rowToDelete.querySelectorAll("td");
-
-  // Create JSON representation of the row
-  const rowObject = {};
-  for (let i = 0; i < headers.length && i < cells.length; i++) {
-    const header = /** @type {HTMLTableHeaderCellElement} */ (headers[i]);
-    const cell = /** @type {HTMLTableCellElement} */ (cells[i]);
-    const columnName = getColumnHeaderText(header);
-    const cellValue = getCellDisplayValue(cell);
-    rowObject[columnName] = cellValue === "" ? null : cellValue;
-  }
-
-  // Use enhanced confirmation dialog with structured display
-  showEnhancedConfirmDialog(
-    "Are you sure you want to delete this row?",
-    () => {
-      if (window.debug) {
-        window.debug.debug(
-          "[ContextMenu] Delete confirmed, executing row deletion..."
-        );
-      }
-      // Use the stored row reference instead of currentRow
-      executeRowDeletion(tableName, rowToDelete);
-    },
-    tableName,
-    rowObject
-  );
+  if (!currentRow) return;
+  executeRowDeletion(null, currentRow);
 }
 
-/**
- * Execute the actual row deletion
- * @param {string} tableName - Name of the table
- * @param {HTMLTableRowElement} row - Row element to delete
- */
-function executeRowDeletion(tableName, row) {
-  if (window.debug) {
-    window.debug.debug(
-      `[ContextMenu] executeRowDeletion called with: ${tableName}, ${row}`
-    );
-  }
-
-  if (!row) {
-    if (window.debug) {
-      window.debug.debug("[ContextMenu] No row provided for deletion");
-    }
-    return;
-  }
-
-  // Store the row reference for when the response comes back
-  pendingDeleteRow = row;
-
-  // Get row identifier for deletion
-  const rowId = getRowIdentifier(row);
-
-  if (!rowId) {
-    showDeleteError("Could not identify row for deletion");
-    return;
-  }
-
-  // Debug logging
-  if (window.debug) {
-    window.debug.debug(
-      `[ContextMenu] Row identifier generated: ${JSON.stringify(rowId)}`
-    );
-  }
-
-  // Show loading state
-  showDeleteLoading();
-
-  // Get current encryption key from state
-  let currentState = {};
-  let encryptionKey = "";
-
-  try {
-    if (typeof (/** @type {any} */ (window).getCurrentState) === "function") {
-      currentState = window
-        /** @type {any} */ .getCurrentState();
-      encryptionKey = currentState.encryptionKey || "";
-    }
-  } catch (error) {
-    if (window.debug) {
-      window.debug.debug(`[ContextMenu] Could not get current state: ${error}`);
-    }
-  }
-
-  // Send deletion request to extension
-  if (
-    typeof window !== "undefined" &&
-    typeof (/** @type {any} */ (window).vscode) !== "undefined"
-  ) {
-    const message = {
-      type: "deleteRow",
-      tableName: tableName,
-      rowId: rowId,
-      key: encryptionKey,
-    };
-    if (window.debug) {
-      window.debug.debug(
-        `[ContextMenu] Sending delete message to extension: ${JSON.stringify(
-          message
-        )}`
-      );
-    }
-    /** @type {any} */ (window).vscode.postMessage(message);
-  } else {
-    if (window.debug) {
-      window.debug.debug(
-        "[ContextMenu] Cannot communicate with extension - vscode API not available"
-      );
-    }
-    showDeleteError("Cannot communicate with extension");
-  }
+/** Single-row and batch deletion share the same stable identity protocol. */
+function executeRowDeletion(_tableName, row) {
+  const wrapper = row?.closest(".enhanced-table-wrapper");
+  const index = Number(row?.getAttribute("data-row-index"));
+  if (wrapper && Number.isInteger(index)) confirmRowDeletion(wrapper, [index]);
 }
 
-/**
- * Get row identifier for deletion (usually the primary key)
- * @param {HTMLTableRowElement} row - Row element
- * @returns {Object|null} Row identifier object
- */
 function getRowIdentifier(row) {
-  if (!row) {
-    return null;
-  }
-
-  const table = row.closest(".data-table");
-  if (!table) {
-    return null;
-  }
-
-  // Get column headers to find primary key or row ID
-  const headers = table.querySelectorAll("thead th");
-  const cells = row.querySelectorAll("td");
-
-  // Look for common primary key column names
-  const primaryKeyColumns = ["id", "rowid", "_id", "pk"];
-
-  for (let i = 0; i < headers.length && i < cells.length; i++) {
-    const header = /** @type {HTMLTableHeaderCellElement} */ (headers[i]);
-    const cell = /** @type {HTMLTableCellElement} */ (cells[i]);
-    const columnName = getColumnHeaderText(header).toLowerCase();
-    if (primaryKeyColumns.includes(columnName)) {
-      const cellValue = getCellDisplayValue(cell);
-      return {
-        column: columnName,
-        value: cellValue,
-      };
-    }
-  }
-
-  // If no primary key found, use all column values for identification
-  const rowIdentifier = {};
-  for (let i = 0; i < headers.length && i < cells.length; i++) {
-    const header = /** @type {HTMLTableHeaderCellElement} */ (headers[i]);
-    const cell = /** @type {HTMLTableCellElement} */ (cells[i]);
-    const columnName = getColumnHeaderText(header);
-    const cellValue = getCellDisplayValue(cell);
-    rowIdentifier[columnName] = cellValue === "" ? null : cellValue;
-  }
-
-  return rowIdentifier;
+  const wrapper = row?.closest(".enhanced-table-wrapper");
+  if (!wrapper) return null;
+  return getSelectedRowIdentities(wrapper, [Number(row.dataset.rowIndex)])[0] || null;
 }
 
 /**
@@ -2324,7 +2154,7 @@ function updateTableStatistics(table) {
   }
 
   // Update row count in table statistics
-  const rows = table.querySelectorAll("tbody tr");
+  const rows = Array.from(table.querySelectorAll("tbody tr.resizable-row")).filter(row => row.style.display !== "none");
   const rowCount = rows.length;
 
   const recordsInfo = tableWrapper.querySelector(".records-info .stat-value");
@@ -2423,8 +2253,9 @@ function showCustomConfirmDialog(message, onConfirm) {
  * @param {Object} [rowData] - Optional row data object
  */
 function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
-  // Create dialog elements
-  const overlay = document.createElement("div");
+  const trigger = document.activeElement;
+  // Native modal dialogs make the background inert in the VS Code webview.
+  const overlay = document.createElement("dialog");
   overlay.className = "confirm-dialog-overlay";
 
   const dialog = document.createElement("div");
@@ -2433,22 +2264,27 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
   // Title
   const titleEl = document.createElement("h3");
   titleEl.className = "confirm-dialog-title";
+  titleEl.id = `delete-dialog-title-${Date.now()}`;
   titleEl.textContent = "Confirm Row Deletion";
+  overlay.setAttribute("aria-labelledby", titleEl.id);
+  dialog.appendChild(titleEl);
 
   // Table info
   if (tableName) {
     const tableInfoEl = document.createElement("div");
     tableInfoEl.className = "confirm-dialog-table-info";
     tableInfoEl.textContent = `Table: ${tableName}`;
-    dialog.appendChild(titleEl);
     dialog.appendChild(tableInfoEl);
   }
 
   // Warning message
   const warningEl = document.createElement("div");
   warningEl.className = "confirm-dialog-warning";
+  warningEl.id = `${titleEl.id}-warning`;
   warningEl.textContent =
-    "⚠️ This action cannot be undone. The row will be permanently deleted from the database.";
+    "This action cannot be undone. The selected rows will be permanently deleted from the database.";
+  overlay.setAttribute("aria-describedby", warningEl.id);
+  dialog.appendChild(warningEl);
 
   // Row data display
   if (rowData) {
@@ -2459,7 +2295,6 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
     const formattedJson = formatJsonWithSyntaxHighlighting(jsonString);
     rowDataEl.innerHTML = formattedJson;
 
-    dialog.appendChild(warningEl);
     dialog.appendChild(rowDataEl);
   } else {
     // Fallback to simple message
@@ -2474,12 +2309,14 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
   buttonsEl.className = "confirm-dialog-buttons";
 
   const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
   cancelBtn.className = "confirm-dialog-btn confirm-dialog-btn-cancel";
   cancelBtn.textContent = "Cancel";
 
   const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
   confirmBtn.className = "confirm-dialog-btn confirm-dialog-btn-confirm";
-  confirmBtn.textContent = "Delete Row";
+  confirmBtn.textContent = "Delete";
 
   buttonsEl.appendChild(cancelBtn);
   buttonsEl.appendChild(confirmBtn);
@@ -2487,13 +2324,20 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
   overlay.appendChild(dialog);
 
   // Add event listeners
+  let closed = false;
+  const background = [];
   const closeDialog = () => {
+    if (closed) return;
+    closed = true;
     overlay.remove();
+    background.forEach(([element, wasInert]) => { element.inert = wasInert; });
+    if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
   };
 
   cancelBtn.addEventListener("click", closeDialog);
 
   confirmBtn.addEventListener("click", () => {
+    if (closed) return;
     closeDialog();
     onConfirm();
   });
@@ -2504,18 +2348,43 @@ function showEnhancedConfirmDialog(message, onConfirm, tableName, rowData) {
     }
   });
 
-  // Handle escape key
-  const handleEscape = (e) => {
+  overlay.addEventListener("cancel", event => {
+    event.preventDefault();
+    closeDialog();
+  });
+  overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       closeDialog();
-      document.removeEventListener("keydown", handleEscape);
+    } else if (e.key === "Tab") {
+      // Keep focus on the two actions, including in older webview fallbacks.
+      const target = document.activeElement;
+      if (e.shiftKey && target === cancelBtn) {
+        e.preventDefault();
+        confirmBtn.focus();
+      } else if (!e.shiftKey && target === confirmBtn) {
+        e.preventDefault();
+        cancelBtn.focus();
+      }
     }
-  };
-  document.addEventListener("keydown", handleEscape);
+  });
 
-  // Add to page and focus
   document.body.appendChild(overlay);
-  confirmBtn.focus();
+  if (typeof overlay.showModal === "function") {
+    overlay.showModal();
+  } else {
+    overlay.setAttribute("open", "");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    Array.from(document.body.children).forEach(element => {
+      if (element !== overlay && element instanceof HTMLElement) {
+        background.push([element, element.inert]);
+        element.inert = true;
+      }
+    });
+  }
+  cancelBtn.focus();
 }
 
 /**
@@ -2528,11 +2397,15 @@ function getForeignKeyInfoForCell(cell) {
     return null;
   }
 
-  // Get the cell value
-  const cellValue = getCellDisplayValue(cell);
-  if (!cellValue || cellValue === "NULL" || cellValue === "") {
+  // SQL null has no target; empty strings and literal "NULL" are valid keys.
+  const content = cell.querySelector(".cell-content");
+  if (content?.getAttribute("data-original-is-null") === "true") {
     return null;
   }
+  const underlying = getCellUnderlyingValue(cell);
+  const cellValue = typeof underlying === "number" || normalizeBlobValue(underlying)
+    ? underlying
+    : getCellRawValue(cell).value;
 
   // Get the column name from the cell's data attributes
   const columnName = cell.dataset.columnName;
@@ -2581,17 +2454,23 @@ function navigateToForeignKeyReference() {
     let queryValue = foreignKeyInfo.value;
     let formattedValue;
 
-    // Check if the value is numeric (integer or float)
-    if (!isNaN(queryValue) && !isNaN(parseFloat(queryValue))) {
-      // Numeric values don't need quotes
-      formattedValue = queryValue;
+    const bytes = normalizeBlobValue(queryValue);
+    if (bytes) {
+      formattedValue = `X'${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}'`;
+    } else if (typeof queryValue === "number") {
+      formattedValue = String(queryValue);
+    } else if (queryValue.includes("\0")) {
+      const encoded = new TextEncoder().encode(queryValue);
+      formattedValue = `CAST(X'${Array.from(encoded, byte => byte.toString(16).padStart(2, "0")).join("")}' AS TEXT)`;
     } else {
       // String values need to be properly escaped and quoted
       // Escape single quotes by doubling them (SQL standard)
       formattedValue = `'${queryValue.replace(/'/g, "''")}'`;
     }
 
-    const query = `SELECT * FROM "${foreignKeyInfo.referencedTable}" WHERE "${foreignKeyInfo.referencedColumn}" = ${formattedValue} LIMIT 100;`;
+    const referencedTable = foreignKeyInfo.referencedTable.replace(/"/g, '""');
+    const referencedColumn = foreignKeyInfo.referencedColumn.replace(/"/g, '""');
+    const query = `SELECT * FROM "${referencedTable}" WHERE "${referencedColumn}" = ${formattedValue} LIMIT 100;`;
 
     // Execute the query to create a new query results tab
     window.vscode.postMessage({
@@ -2665,7 +2544,7 @@ function highlightForeignKeyTarget(tableWrapper) {
   }
 
   // Find the column index for the referenced column
-  const headers = table.querySelectorAll("thead th");
+  const headers = table.querySelectorAll("thead th[data-column]");
   let targetColumnIndex = -1;
 
   for (let i = 0; i < headers.length; i++) {
@@ -2673,7 +2552,7 @@ function highlightForeignKeyTarget(tableWrapper) {
       ? getColumnHeaderText(headers[i])
       : headers[i].textContent.trim();
     if (headerText === foreignKeyInfo.referencedColumn) {
-      targetColumnIndex = i;
+      targetColumnIndex = parseInt(headers[i].getAttribute("data-column") || "-1", 10);
       break;
     }
   }
@@ -2715,11 +2594,11 @@ function highlightForeignKeyTarget(tableWrapper) {
   }
 
   // Find the row with the matching value
-  const rows = table.querySelectorAll("tbody tr");
+  const rows = Array.from(table.querySelectorAll("tbody tr.resizable-row")).filter(row => row.style.display !== "none");
   let targetRow = null;
 
   for (const row of rows) {
-    const cell = row.cells[targetColumnIndex];
+    const cell = row.querySelector(`td[data-column="${targetColumnIndex}"]`);
     if (cell) {
       const cellValue = getCellDisplayValue
         ? getCellDisplayValue(cell)
