@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { markInternalUpdate } from './databaseWatcher';
 import { hasWalFiles, checkpointWalWithRetry, getWalStatus, getSqlite3CliInfo, WalCheckpointMode } from './walUtils';
 import { normalizePageSize, normalizeTablePage, readRowLimitSettings, RowLimitReader } from './rowLimits';
+import { isSerializedIntegerIdentityValue, SerializedIntegerIdentityValue } from './integerIdentity';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -56,7 +57,7 @@ export interface SerializedBlobIdentityValue {
     base64: string;
 }
 
-export type RowIdentityValue = SQLiteValue | SerializedBlobIdentityValue;
+export type RowIdentityValue = SQLiteValue | SerializedBlobIdentityValue | SerializedIntegerIdentityValue;
 
 export interface RowIdentityPart {
     column: string;
@@ -244,7 +245,7 @@ export class DatabaseService {
     private serializeIdentityValue(value: unknown): RowIdentityValue {
         if (typeof value === 'bigint') {
             const numericValue = Number(value);
-            return Number.isSafeInteger(numericValue) ? numericValue : value.toString();
+            return Number.isSafeInteger(numericValue) ? numericValue : { type: 'integer', decimal: value.toString() };
         }
         if (value instanceof Uint8Array) {
             return { type: 'blob', base64: Buffer.from(value).toString('base64') };
@@ -258,8 +259,14 @@ export class DatabaseService {
         throw new Error('Row identity contains an unsupported SQLite value.');
     }
 
-    private deserializeIdentityValue(value: RowIdentityValue): SQLiteValue {
+    private deserializeIdentityValue(value: RowIdentityValue): SQLiteValue | bigint {
         if (typeof value === 'object' && value !== null && !(value instanceof Uint8Array)) {
+            if (value.type === 'integer') {
+                if (!isSerializedIntegerIdentityValue(value)) {
+                    throw new Error('Row identity contains an invalid serialized INTEGER value.');
+                }
+                return BigInt(value.decimal);
+            }
             if (value.type !== 'blob' || typeof value.base64 !== 'string') {
                 throw new Error('Row identity contains an invalid serialized BLOB value.');
             }
@@ -270,6 +277,19 @@ export class DatabaseService {
             return new Uint8Array(decoded);
         }
         return value;
+    }
+
+    private identityWhereClause(columns: string[]): string {
+        // sql.js binds BigInt as TEXT. CAST only tagged INTEGER keys, keeping
+        // same-looking text and BLOB keys in their original storage classes.
+        // A fixed query shape supports mixed identities in one prepared batch.
+        return columns.map(column => `${this.quoteIdentifier(column)} IS CASE WHEN ? THEN CAST(? AS INTEGER) ELSE ? END`).join(' AND ');
+    }
+
+    private identityParameters(values: Array<SQLiteValue | bigint>): SQLiteValue[] {
+        return values.flatMap(value => typeof value === 'bigint'
+            ? [1, value.toString(), null]
+            : [0, null, value]);
     }
 
     private enqueueEdit<T>(operation: () => Promise<T>): Promise<T> {
@@ -895,11 +915,9 @@ export class DatabaseService {
         }
 
         const processedValue = this.processEditedValue(newValue);
-        const whereClause = definition.columns
-            .map(column => `${this.quoteIdentifier(column)} IS ?`)
-            .join(' AND ');
+        const whereClause = this.identityWhereClause(definition.columns);
         const updateQuery = `UPDATE ${this.quoteIdentifier(tableName)} SET ${this.quoteIdentifier(columnName)} = ? WHERE ${whereClause}`;
-        const parameters = [processedValue, ...identity.parts.map(part => this.deserializeIdentityValue(part.value))];
+        const parameters = [processedValue, ...this.identityParameters(identity.parts.map(part => this.deserializeIdentityValue(part.value)))];
         let stmt: any = null;
         let transactionOpen = false;
         let committed = false;
@@ -1022,9 +1040,9 @@ export class DatabaseService {
                     throw new Error('The selection contains a duplicate row identity. Refresh the table and try again.');
                 }
                 seen.add(key);
-                return values;
+                return this.identityParameters(values);
             });
-            const where = definition.columns.map(column => `${this.quoteIdentifier(column)} IS ?`).join(' AND ');
+            const where = this.identityWhereClause(definition.columns);
             const query = `DELETE FROM ${this.quoteIdentifier(tableName)} WHERE ${where}`;
             const snapshot = this.db.export();
             let fileSnapshot: Buffer | undefined;

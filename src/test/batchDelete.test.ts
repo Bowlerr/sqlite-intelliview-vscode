@@ -98,6 +98,55 @@ suite('Atomic selection deletion', () => {
         assert.deepStrictEqual(remaining.values, [['9007199254740992'], ['9007199254740994']]);
     });
 
+    test('deletes the selected large INTEGER key and preserves the same-looking TEXT key', async () => {
+        await open(`CREATE TABLE records(id PRIMARY KEY NOT NULL, body TEXT) WITHOUT ROWID;
+            INSERT INTO records VALUES (9007199254740993, 'integer'), ('9007199254740993', 'text');`);
+        const data = await service.getTableData('records');
+        const selected = data.rowIdentities[data.values.findIndex(row => row[1] === 'integer')];
+        assert.ok(selected);
+        const transported = JSON.parse(JSON.stringify(selected));
+        assert.strictEqual(isWebviewToExtensionMessage({ type: 'deleteRows', tableName: 'records', requestId: 'typed', rowIdentities: [transported] }), true);
+        assert.strictEqual(await service.deleteRows('records', [transported]), 1);
+        assert.deepStrictEqual((await service.executeQuery('SELECT typeof(id), CAST(id AS TEXT), body FROM records')).values,
+            [['text', '9007199254740993', 'text']]);
+        assert.deepStrictEqual(diskRows(), [['9007199254740993', 'text']]);
+    });
+
+    test('distinguishes mixed INTEGER and TEXT selections at signed 64-bit bounds', async () => {
+        await open(`CREATE TABLE records(id PRIMARY KEY NOT NULL, body TEXT) WITHOUT ROWID;
+            INSERT INTO records VALUES
+                (-9223372036854775808, 'min-integer'), ('-9223372036854775808', 'min-text'),
+                (9223372036854775807, 'max-integer'), ('9223372036854775807', 'max-text'),
+                (9007199254740993, 'integer'), ('9007199254740993', 'text'),
+                (1.25, 'real'), (1e20, 'large-real'), (42, 'safe-integer'), ('42', 'safe-text');`);
+        const data = await service.getTableData('records');
+        const selectedBodies = new Set(['min-integer', 'max-integer', 'integer', 'text', 'real', 'large-real', 'safe-integer']);
+        const selected = data.rowIdentities.filter((_, index) => selectedBodies.has(data.values[index][1])) as RowIdentity[];
+        const transported = JSON.parse(JSON.stringify(selected));
+        assert.strictEqual(isWebviewToExtensionMessage({ type: 'deleteRows', tableName: 'records', requestId: 'mixed', rowIdentities: transported }), true);
+        assert.strictEqual(await service.deleteRows('records', transported), selectedBodies.size);
+        assert.deepStrictEqual((await service.executeQuery('SELECT typeof(id), CAST(id AS TEXT), body FROM records ORDER BY id')).values, [
+            ['text', '-9223372036854775808', 'min-text'], ['text', '42', 'safe-text'], ['text', '9223372036854775807', 'max-text']
+        ]);
+        assert.strictEqual(diskRows().length, 3);
+    });
+
+    test('rejects malformed and out-of-range INTEGER identities before changing any row', async () => {
+        await open('CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES (1),(2);');
+        const rows = await identities();
+        const before = fs.readFileSync(databasePath);
+        for (const decimal of ['', '+1', '01', '-0', '1.0', '1e2', ' 1', '1 ', '9223372036854775808', '-9223372036854775809', '1;DELETE FROM records', '9'.repeat(100)]) {
+            const invalid: RowIdentity = { kind: 'primaryKey', parts: [{ column: 'id', value: { type: 'integer', decimal } }] };
+            const message = { type: 'deleteRows', tableName: 'records', requestId: 'invalid', rowIdentities: [rows[0], invalid] };
+            assert.strictEqual(isWebviewToExtensionMessage(message), false, decimal);
+            assert.strictEqual(isWebviewToExtensionMessage({ type: 'updateCellData', tableName: 'records', requestId: 'invalid', rowIdentity: invalid, columnName: 'id', newValue: 3 }), false, decimal);
+            await assert.rejects(service.deleteRows('records', [rows[0], invalid]), /invalid serialized INTEGER/);
+            await assert.rejects(service.updateCellData('records', invalid, 'id', 3), /invalid serialized INTEGER/);
+        }
+        assert.deepStrictEqual((await service.getTableData('records')).values, [[1], [2]]);
+        assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+    });
+
     test('restores in-memory and on-disk state after a failed persistence operation', async () => {
         await open('CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES (1),(2),(3);');
         const before = fs.readFileSync(databasePath);

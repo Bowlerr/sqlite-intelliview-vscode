@@ -89,21 +89,13 @@
   border-left: 3px solid var(--vscode-focusBorder);
 }
 .data-table tbody tr.selected {
-  background: color-mix(
-    in srgb,
-    var(--vscode-list-activeSelectionBackground) 60%,
-    var(--sqlite-table-row-background)
-  ) !important;
+  background: var(--vscode-list-activeSelectionBackground) !important;
   border-left: 3px solid var(--vscode-list-activeSelectionBackground);
   outline: 1px solid var(--vscode-list-activeSelectionBackground);
   outline-offset: -1px;
 }
 .data-table tbody tr.selected:nth-child(even) {
-  background: color-mix(
-    in srgb,
-    var(--vscode-list-activeSelectionBackground) 60%,
-    var(--sqlite-table-row-alt-background)
-  ) !important;
+  background: var(--vscode-list-activeSelectionBackground) !important;
 }
 .data-table tbody tr.selected:hover {
   background: var(--vscode-list-activeSelectionBackground) !important;
@@ -1306,6 +1298,23 @@ body.resizing {
 }
 .data-table .data-cell:hover {
   background: var(--vscode-list-hoverBackground);
+}
+
+/* Selection colors are a theme pair, including NULL, FK, and pinned cells.
+   Editing controls keep their own input/background pair. */
+.data-table tbody tr.selected td:not(.editing) {
+  background: var(--vscode-list-activeSelectionBackground) !important;
+  color: var(--vscode-list-activeSelectionForeground) !important;
+}
+.data-table tbody tr.selected td:not(.editing) .cell-content,
+.data-table tbody tr.selected td:not(.editing) .cell-content em,
+.data-table tbody tr.selected td:not(.editing) .blob-label,
+.data-table tbody tr.selected td:not(.editing) .blob-icon,
+.data-table tbody tr.selected td:not(.editing) .fk-indicator {
+  color: var(--vscode-list-activeSelectionForeground) !important;
+}
+.data-table tbody tr.selected td:not(.editing) .blob-icon {
+  background: transparent;
 }
 
 /* Table editable/readonly indicators */

@@ -1614,6 +1614,7 @@ function filterTable(tableWrapper, searchTerm) {
       pluralize ? pluralize(totalRows, "row") : "rows"
     }`;
   }
+  updateSelectedUI(wrapper);
 }
 
 /**
@@ -1994,6 +1995,7 @@ function filterTableByColumn(table, columnIndex, filterValue) {
   const filterMsg = filterValue
     ? `Column "${columnIndex + 1}" filtered by "${filterValue}"`
     : "Column filter cleared";
+  if (wrapper) updateSelectedUI(wrapper);
   if (typeof showSuccess !== "undefined") {
     showSuccess(filterMsg);
   }

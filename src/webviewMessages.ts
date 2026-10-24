@@ -1,4 +1,5 @@
 import type { RowIdentity } from './databaseService';
+import { isSerializedIntegerIdentityValue } from './integerIdentity';
 
 export type WalCheckpointModeSetting = 'full' | 'passive' | 'off';
 
@@ -186,6 +187,7 @@ function isSQLiteValue(value: unknown): boolean {
         typeof value === 'string' ||
         (typeof value === 'number' && Number.isFinite(value)) ||
         value instanceof Uint8Array ||
+        isSerializedIntegerIdentityValue(value) ||
         (
             isRecord(value) &&
             value.type === 'blob' &&

@@ -359,3 +359,88 @@ test('the whole checkbox cell toggles once, including select-all, while pending 
   cell.click();
   assert.equal(win.getSelectionStore(wrapper).size, 1, 'read-only rows remain selectable for export');
 });
+
+for (const filterKind of ['search', 'column']) {
+  test(`select-all recovers after a ${filterKind} filter hides every row`, t => {
+    const { win, wrapper, api } = fixture(t);
+    const selectAll = wrapper.querySelector('.select-all-checkbox');
+    const filter = value => filterKind === 'search'
+      ? api.filterTable(wrapper, value)
+      : api.filterTableByColumn(wrapper.querySelector('table'), 1, value);
+    filter('no such person');
+    assert.equal(selectAll.disabled, true);
+    filter('');
+    assert.equal(selectAll.disabled, false);
+    selectAll.click();
+    assert.equal(win.getSelectionStore(wrapper).size, 2);
+    assert.equal(selectAll.checked, true);
+    filter('Alice');
+    assert.equal(selectAll.disabled, false);
+    assert.equal(selectAll.checked, false);
+    selectAll.click();
+    assert.equal(win.getSelectionStore(wrapper).size, 1);
+  });
+}
+
+function clipboardEvent(win, target, type, values) {
+  const event = new win.Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'clipboardData', { value: {
+    setData: (format, value) => values.set(format, value),
+    getData: format => values.get(format) || '',
+  } });
+  target.dispatchEvent(event);
+  return event;
+}
+
+test('copying escaped editor text exposes raw plain text and pastes without double encoding', t => {
+  const raw = 'line\ncarriage\r\ttab\0 literal\\n slash\\end';
+  const { win, wrapper, messages } = fixture(t, [[1, raw], [2, '']]);
+  const cells = wrapper.querySelectorAll('td[data-column="1"]');
+  win.startCellEditing(cells[0]);
+  const source = cells[0].querySelector('.cell-input');
+  source.select();
+  const clipboard = new Map();
+  assert.equal(clipboardEvent(win, source, 'copy', clipboard).defaultPrevented, true);
+  assert.equal(clipboard.get('text/plain'), raw, 'other apps receive actual controls and backslashes');
+  win.cancelCellEdit(cells[0]);
+  win.startCellEditing(cells[1]);
+  const target = cells[1].querySelector('.cell-input');
+  clipboardEvent(win, target, 'paste', clipboard);
+  assert.equal(target.value, win.encodeCellText(raw));
+  win.saveCellEdit(cells[1]);
+  assert.equal(messages[0].newValue, raw);
+});
+
+test('cut and paste preserve exact escaped fragments and update dirty state only for mutations', t => {
+  const { win, wrapper, messages } = fixture(t, [[1, 'start\0end']]);
+  const cell = wrapper.querySelector('td[data-column="1"]');
+  win.startCellEditing(cell);
+  const input = cell.querySelector('.cell-input');
+  const original = input.value;
+  // An incomplete escape must be copied as an editor fragment, not encoded again.
+  input.setSelectionRange(5, 8);
+  const clipboard = new Map();
+  clipboardEvent(win, input, 'copy', clipboard);
+  assert.equal(cell.dataset.editDirty, 'false');
+  clipboardEvent(win, input, 'cut', clipboard);
+  assert.equal(input.value, original.slice(0, 5) + original.slice(8));
+  assert.equal(cell.dataset.editDirty, 'true');
+  clipboardEvent(win, input, 'paste', clipboard);
+  assert.equal(input.value, original);
+  win.saveCellEdit(cell);
+  assert.equal(messages.length, 0, 'cut/paste round trip is a no-op save');
+});
+
+test('external text and changed clipboard plain text remain raw paste inputs', t => {
+  const { win, wrapper, messages } = fixture(t, [[1, 'line\n']]);
+  const cell = wrapper.querySelector('td[data-column="1"]');
+  win.startCellEditing(cell);
+  const input = cell.querySelector('.cell-input');
+  input.select();
+  const clipboard = new Map();
+  clipboardEvent(win, input, 'copy', clipboard);
+  clipboard.set('text/plain', 'literal\\n and raw\n');
+  clipboardEvent(win, input, 'paste', clipboard);
+  win.saveCellEdit(cell);
+  assert.equal(messages[0].newValue, 'literal\\n and raw\n');
+});

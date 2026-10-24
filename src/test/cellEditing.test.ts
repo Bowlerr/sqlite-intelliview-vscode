@@ -348,12 +348,12 @@ suite('Stable cell editing', () => {
 
         const integerRows = await service.getTableData('integer_keys');
         assert.strictEqual(integerRows.values[0][0], '9223372036854775806');
-        assert.strictEqual(integerRows.rowIdentities[0]?.parts[0].value, '9223372036854775806');
+        assert.deepStrictEqual(integerRows.rowIdentities[0]?.parts[0].value, { type: 'integer', decimal: '9223372036854775806' });
         await service.updateCellData('integer_keys', integerRows.rowIdentities[0]!, 'value', 'updated-integer-key');
 
         const rowidRows = await service.getTableData('rowid_keys');
         assert.strictEqual(rowidRows.values[0][0], 'rowid-key');
-        assert.strictEqual(rowidRows.rowIdentities[0]?.parts[0].value, '9223372036854775805');
+        assert.deepStrictEqual(rowidRows.rowIdentities[0]?.parts[0].value, { type: 'integer', decimal: '9223372036854775805' });
         await service.updateCellData('rowid_keys', rowidRows.rowIdentities[0]!, 'value', 'updated-rowid-key');
 
         service.closeDatabase();
@@ -365,6 +365,23 @@ suite('Stable cell editing', () => {
             readRows('SELECT CAST(rowid AS TEXT) AS rowid, value FROM rowid_keys'),
             [{ rowid: '9223372036854775805', value: 'updated-rowid-key' }]
         );
+    });
+
+    test('updates the selected large INTEGER key without changing its same-looking TEXT neighbour', async () => {
+        createDatabase(`CREATE TABLE records(id PRIMARY KEY NOT NULL, body TEXT) WITHOUT ROWID;
+            INSERT INTO records VALUES (9007199254740993, 'integer'), ('9007199254740993', 'text');`);
+        await service.openDatabase(databasePath);
+        const data = await service.getTableData('records');
+        const integerIdentity = JSON.parse(JSON.stringify(identityFor(data, 'body', 'integer')));
+        await service.updateCellData('records', integerIdentity, 'body', 'updated-integer');
+        assert.deepStrictEqual(readRows('SELECT typeof(id) AS type, CAST(id AS TEXT) AS id, body FROM records ORDER BY id'), [
+            { type: 'integer', id: '9007199254740993', body: 'updated-integer' },
+            { type: 'text', id: '9007199254740993', body: 'text' }
+        ]);
+        await service.updateCellData('records', identityFor(data, 'body', 'text'), 'body', 'updated-text');
+        assert.deepStrictEqual(readRows('SELECT typeof(id) AS type, body FROM records ORDER BY id'), [
+            { type: 'integer', body: 'updated-integer' }, { type: 'text', body: 'updated-text' }
+        ]);
     });
 
     test('round-trips BLOB primary-key identities through webview messages', async () => {

@@ -2874,12 +2874,44 @@ function initializeTableEvents(tableWrapper) {
       target.closest(".data-cell")?.setAttribute("data-edit-dirty", "true");
     });
 
-    tableWrapper.addEventListener("paste", (event) => {
+    // Plain text is the decoded value for other applications. The private format
+    // retains exact editor fragments, including selections inside escape sequences.
+    const editorClipboardType = "application/x-sqlite-intelliview-cell-text";
+    const copyEditorSelection = (event) => {
       const target = event.target;
       if (!(target instanceof HTMLInputElement) || !target.matches(".cell-input") || !event.clipboardData) return;
+      const start = target.selectionStart ?? 0;
+      const end = target.selectionEnd ?? start;
+      if (start === end) return;
+      const escaped = target.value.slice(start, end);
+      let plain;
+      try { plain = decodeCellText(escaped); } catch (_) { plain = escaped; }
+      event.clipboardData.setData("text/plain", plain);
+      event.clipboardData.setData(editorClipboardType, JSON.stringify({ version: 1, escaped, plain }));
+      event.preventDefault();
+      if (event.type === "cut" && !target.readOnly && !target.disabled) {
+        target.setRangeText("", start, end, "end");
+        target.closest(".data-cell")?.setAttribute("data-edit-dirty", "true");
+      }
+    };
+    tableWrapper.addEventListener("copy", copyEditorSelection);
+    tableWrapper.addEventListener("cut", copyEditorSelection);
+
+    tableWrapper.addEventListener("paste", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.matches(".cell-input") || !event.clipboardData || target.readOnly || target.disabled) return;
       event.preventDefault();
       const raw = event.clipboardData.getData("text/plain");
-      target.setRangeText(encodeCellText(raw), target.selectionStart ?? 0, target.selectionEnd ?? 0, "end");
+      let encoded = encodeCellText(raw);
+      try {
+        const editorData = JSON.parse(event.clipboardData.getData(editorClipboardType));
+        if (editorData?.version === 1 && typeof editorData.escaped === "string" && editorData.plain === raw) {
+          encoded = editorData.escaped;
+        }
+      } catch (_) {
+        // Other applications supply ordinary raw clipboard text.
+      }
+      target.setRangeText(encoded, target.selectionStart ?? 0, target.selectionEnd ?? 0, "end");
       target.closest(".data-cell")?.setAttribute("data-edit-dirty", "true");
     });
 
