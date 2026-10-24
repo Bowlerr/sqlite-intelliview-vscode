@@ -24,6 +24,7 @@ function fixture(t, rows = [[2, 'Bob'], [1, 'Alice']], options = {}) {
     setCurrentRow: row => { currentRow = row; currentCell = row.querySelector('.data-cell'); },
     setCurrentCell: cell => { currentCell = cell; currentRow = cell.closest('tr'); },
     getForeignKeyInfoForCell, navigateToForeignKeyReference,
+    executeRowDeletion, getRowIdentifier,
     handleTableDataDelta, sortTableByColumn, toggleColumnPin,
     exportTableData, filterTable, filterTableByColumn, getTableSnapshot,
     renderVirtual: wrapper => virtualRender(wrapper.__virtualTableState, {force: true})
@@ -139,13 +140,25 @@ test('batch deletion sends complete typed identities once and refreshes the orig
   assert.equal(wrapper.querySelectorAll('.editing').length, 0);
   win.handleRowsDeletionResult({ requestId: 'unrelated', tableName: 'people', changes: 2 }, true);
   assert.equal(messages.length, 1);
-  win.handleExtensionMessage({ data: { ...messages[0], type: 'deleteRowsSuccess', changes: 2 } });
+  win.handleExtensionMessage({ data: { ...messages[0], type: 'deleteRowsSuccess', changes: 2, totalRows: 4 } });
   assert.equal(messages.length, 2);
   assert.equal(messages[1].type, 'getTableData');
   assert.equal(messages[1].page, 2, 'empty final page clamps to its predecessor');
   assert.equal(win.getSelectionStore(wrapper).size, 0);
   win.handleRowsDeletionResult({ ...messages[0], changes: 2 }, true);
   assert.equal(messages.length, 2, 'duplicate response is ignored');
+});
+
+test('deletion refresh uses authoritative remaining rows, including trigger deletes', t => {
+  for (const totalRows of [1, 0, undefined]) {
+    const { win, wrapper, messages } = fixture(t, [[5, 'five'], [6, 'six']], { page: 3, pageSize: 2, totalRows: 6 });
+    win.toggleRowSelection(wrapper, 4);
+    win.deleteSelectedRows(wrapper);confirm(win);
+    win.handleRowsDeletionResult({ ...messages[0], changes: 1, totalRows }, true);
+    assert.equal(messages[1].page, totalRows === undefined ? 3 : 1,
+      'without a fresh count, keep the current page until its count arrives');
+    assert.equal(wrapper.dataset.paginationPending, 'true');
+  }
 });
 
 test('single-row context deletion uses stable identity rather than displayed column names', t => {
@@ -155,6 +168,27 @@ test('single-row context deletion uses stable identity rather than displayed col
   confirm(win);
   assert.equal(messages[0].type, 'deleteRows');
   assert.deepEqual(messages[0].rowIdentities, [identity(2)]);
+});
+
+test('virtual spacer and placeholder cells cannot open a row menu or delete row zero', t => {
+  const { win, wrapper, api, messages } = fixture(t, Array.from({ length: 400 }, (_, index) => [index, 'row']), { virtualize: true });
+  win.initializeContextMenu();
+  const spacer = wrapper.querySelector('.virtual-spacer td');
+  assert.ok(spacer);
+  spacer.dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  const menu = win.document.querySelector('.context-menu');
+  assert.equal(menu.style.display, 'none');
+  menu.querySelector('[data-action="delete-row"]').click();
+  assert.equal(win.document.querySelector('.confirm-dialog-overlay'), null);
+  api.executeRowDeletion(null, spacer.closest('tr'));
+  assert.equal(api.getRowIdentifier(spacer.closest('tr')), null);
+  for (const index of ['', ' ', '-1', '1.5']) {
+    const row = wrapper.querySelector('tr.resizable-row');
+    row.setAttribute('data-row-index', index);
+    api.executeRowDeletion(null, row);
+  }
+  assert.equal(win.document.querySelector('.confirm-dialog-overlay'), null);
+  assert.equal(messages.length, 0);
 });
 
 test('missing identity fails the entire selection without deleting a subset', t => {

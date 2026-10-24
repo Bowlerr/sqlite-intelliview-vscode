@@ -120,6 +120,84 @@ suite('Atomic selection deletion', () => {
         }
     });
 
+    test('rolls back trigger replacements and moves of selected identities, even with identical contents', async () => {
+        for (const recursive of [0, 1]) {
+            for (const action of [
+                "DELETE FROM records WHERE id=2; INSERT INTO records VALUES(2,'replacement');",
+                "DELETE FROM records WHERE id=2; INSERT INTO records VALUES(2,'second');",
+                'UPDATE records SET id=20 WHERE id=2;',
+                "INSERT OR REPLACE INTO records VALUES(2,'replacement');",
+                'DELETE FROM records WHERE id=2; UPDATE records SET id=2 WHERE id=3;',
+                'UPDATE OR REPLACE records SET id=2 WHERE id=3;'
+            ]) {
+                service.closeDatabase();
+                await open(`CREATE TABLE records(id INTEGER PRIMARY KEY, body TEXT);
+                    INSERT INTO records VALUES(1,'first'),(2,'second'),(3,'untouched');
+                    CREATE TRIGGER mutate_selected AFTER DELETE ON records WHEN OLD.id=1 BEGIN ${action} END;`);
+                await service.executeQuery(`PRAGMA recursive_triggers=${recursive}`);
+                const before = fs.readFileSync(databasePath);
+                const rows = await identities();
+                await assert.rejects(service.deleteRows('records', [rows[0], rows[1]]), /rolled back/, action);
+                assert.deepStrictEqual((await service.getTableData('records')).values, [[1, 'first'], [2, 'second'], [3, 'untouched']]);
+                assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+                assert.deepStrictEqual((await service.executeQuery('SELECT name FROM temp.sqlite_schema')).values, [], 'rollback removes all temporary guards');
+            }
+        }
+    });
+
+    test('rejects automatic reuse of selected INTEGER primary keys and hidden rowids', async () => {
+        for (const recursive of [0, 1]) {
+            for (const explicitKey of [false, true]) {
+                service.closeDatabase();
+                const key = explicitKey ? 'id' : 'rowid';
+                await open(`CREATE TABLE records(${explicitKey ? 'id INTEGER PRIMARY KEY,' : ''} body TEXT);
+                    INSERT INTO records(${key},body) VALUES(0,'first'),(1,'untouched'),(2,'second');
+                    CREATE TRIGGER reuse_selected AFTER DELETE ON records WHEN OLD.${key}=0 BEGIN
+                        DELETE FROM records WHERE ${key}=2; INSERT INTO records(body) VALUES('second'); END;`);
+                await service.executeQuery(`PRAGMA recursive_triggers=${recursive}`);
+                const before = fs.readFileSync(databasePath);
+                const rows = await identities();
+                await assert.rejects(service.deleteRows('records', [rows[0], rows[2]]), /rolled back/);
+                assert.deepStrictEqual((await service.executeQuery(`SELECT ${key},body FROM records ORDER BY ${key}`)).values,
+                    [[0, 'first'], [1, 'untouched'], [2, 'second']]);
+                assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+            }
+        }
+    });
+
+    test('guards composite BLOB, NOCASE and large INTEGER keys without confusing a TEXT twin', async () => {
+        await open(`CREATE TABLE records(code BLOB, locale TEXT COLLATE NOCASE, id, body TEXT, PRIMARY KEY(code,locale,id)) WITHOUT ROWID;
+            INSERT INTO records VALUES(X'00','en',0,'first'),(X'FF','en',9007199254740993,'second'),(X'FF','en','9007199254740993','text');
+            CREATE TRIGGER replace_selected AFTER DELETE ON records WHEN OLD.id=0 BEGIN
+                DELETE FROM records WHERE typeof(id)='integer' AND id=9007199254740993;
+                INSERT INTO records VALUES(X'FF','EN',9007199254740993,'second'); END;`);
+        const before = fs.readFileSync(databasePath);
+        const rows = await identities();
+        await assert.rejects(service.deleteRows('records', [rows[0], rows[1]]), /rolled back/);
+        assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+        await service.executeQuery('DROP TRIGGER replace_selected');
+        await service.executeQuery(`CREATE TRIGGER replace_text AFTER DELETE ON records WHEN OLD.id=0 BEGIN
+            INSERT OR REPLACE INTO records VALUES(X'FF','EN','9007199254740993','unselected replacement'); END`);
+        assert.strictEqual(await service.deleteRows('records', [rows[0], rows[1]]), 2);
+        assert.deepStrictEqual((await service.executeQuery('SELECT typeof(id),body FROM records')).values, [['text', 'unselected replacement']]);
+        assert.deepStrictEqual((await service.executeQuery('SELECT name FROM temp.sqlite_schema')).values, [], 'success removes all temporary guards');
+    });
+
+    test('allows stable-key cascade updates and unrelated automatic inserts', async () => {
+        await open(`CREATE TABLE records(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES records(id) ON DELETE SET NULL);
+            INSERT INTO records VALUES(-1,NULL),(0,NULL),(2,-1);
+            CREATE TRIGGER add_unselected AFTER DELETE ON records WHEN OLD.id=-1 BEGIN INSERT INTO records(parent_id) VALUES(NULL); END;`);
+        await service.executeQuery('PRAGMA foreign_keys=ON');
+        const rows = await identities();
+        assert.strictEqual(await service.deleteRows('records', [rows[0], rows[2]]), 2);
+        assert.deepStrictEqual(diskRows(), [[0, null], [3, null]]);
+        assert.deepStrictEqual((await service.executeQuery('SELECT name FROM temp.sqlite_schema')).values, []);
+        const database = new SQL.Database(fs.readFileSync(databasePath));
+        try {
+            assert.deepStrictEqual(database.exec("SELECT name FROM sqlite_schema WHERE name LIKE '__intelliview_delete_%'"), [], 'guards never enter the persisted schema');
+        } finally { database.close(); }
+    });
+
     test('preserves enabled foreign-key cascades and recursive triggers through snapshots and saves', async () => {
         await open(`CREATE TABLE records(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE);
             INSERT INTO records VALUES (1,NULL),(2,1),(3,2),(4,NULL);

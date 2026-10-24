@@ -139,6 +139,15 @@ suite('Schema introspection with unavailable virtual table modules', () => {
             this.skip();
             return;
         }
+        try {
+            execFileSync(sqlite3Cli.command, [':memory:', 'CREATE VIRTUAL TABLE fts_capability_probe USING fts5(value);'], { stdio: 'pipe' });
+        } catch (error) {
+            if (/no such module:\s*fts5/i.test(String(error))) {
+                this.skip();
+                return;
+            }
+            throw error;
+        }
         execFileSync(sqlite3Cli.command, [databasePath, `
             CREATE TABLE records (id INTEGER PRIMARY KEY, body TEXT);
             CREATE VIRTUAL TABLE docs USING fts5(title, body);

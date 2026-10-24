@@ -1007,9 +1007,21 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
             const changes = await dbService.deleteRows(tableName, rowIdentities);
-            this.invalidateCachesForTable(databasePath, tableName);
+            // Triggers and foreign-key cascades can change any table. Retire
+            // pending reads too, so their old totals cannot refill the cache.
+            this.invalidateCachesForDatabase(databasePath);
+            const previousSync = this.lastSync.get(databasePath);
+            if (previousSync) {
+                this.lastSync.set(databasePath, { ...previousSync, lastPageData: undefined });
+            }
+            const totalRows = await dbService.getRowCount(tableName).catch(error => {
+                // Deletion has already committed. A failed refresh must not
+                // turn its acknowledgement into an apparent deletion failure.
+                this.debugWarn('DeleteRows', `Failed to count remaining rows in ${tableName}:`, error);
+                return undefined;
+            });
             this.postWebviewMessage(webviewPanel.webview, {
-                type: 'deleteRowsSuccess', tableName, requestId, changes
+                type: 'deleteRowsSuccess', tableName, requestId, changes, totalRows
             });
         } catch (error) {
             this.postWebviewMessage(webviewPanel.webview, {

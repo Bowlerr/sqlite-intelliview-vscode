@@ -1325,7 +1325,7 @@ function handleTableData(message) {
     }
 
     const pagination = acceptTablePagination(message);
-    displayTableData(message.data, message.columns, message.tableName, {
+    const wrapper = displayTableData(message.data, message.columns, message.tableName, {
       ...pagination,
       totalRows: message.totalRows,
       totalRowsKnown:
@@ -1339,6 +1339,7 @@ function handleTableData(message) {
       allowEditing: message.editable === true,
       editError: message.editError,
     });
+    if (message.totalRowsKnown !== false) clampTablePageToCount(wrapper, message.totalRows);
   } else {
     if (typeof showError !== "undefined") {
       showError(`Failed to load data for table: ${message.tableName}`);
@@ -1386,6 +1387,7 @@ function handleTableRowCount(message) {
 
   wrapper.setAttribute("data-total-rows", String(totalRows));
   wrapper.setAttribute("data-total-rows-known", "true");
+  if (clampTablePageToCount(wrapper, totalRows)) return;
 
   const pageSize = parseInt(
     wrapper.getAttribute("data-page-size") || "100",
@@ -1410,7 +1412,7 @@ function handleTableRowCount(message) {
   const endIndex = startIndex + (pageRows || renderedRows);
   const visibleRows = wrapper.querySelector(".visible-rows");
   if (visibleRows) {
-    visibleRows.textContent = `Showing ${
+    visibleRows.textContent = totalRows === 0 ? "Showing 0 of 0 rows" : `Showing ${
       startIndex + 1
     }-${endIndex} of ${totalRows.toLocaleString()} rows`;
   }
@@ -1431,6 +1433,17 @@ function handleTableRowCount(message) {
       paginationContainer.innerHTML = "";
     }
   }
+}
+
+/** A matching authoritative count can only move an out-of-range page backward. */
+function clampTablePageToCount(wrapper, totalRows) {
+  if (!wrapper || !Number.isSafeInteger(totalRows) || totalRows < 0 ||
+      wrapper.dataset.paginationPending === "true") return false;
+  const pageSize = positivePageInteger(wrapper.dataset.pageSize) || 100;
+  const lastPage = Math.max(1, Math.ceil(totalRows / pageSize));
+  if (Number(wrapper.dataset.currentPage) <= lastPage) return false;
+  updateTablePage(wrapper, lastPage);
+  return true;
 }
 
 function handleTableColumnInfo(message) {
@@ -2376,10 +2389,9 @@ function displayTableData(data, columns, tableName, options = {}) {
     return;
   }
 
-  if (!data || data.length === 0) {
-    elements.dataContent.innerHTML = `<div class="info">No data found in table: ${tableName}</div>`;
-    return;
-  }
+  // Empty pages still need a wrapper for the later authoritative count and
+  // pagination controls. A count can then clamp and reload an obsolete page.
+  if (!Array.isArray(data)) return;
 
   const table = createDataTable
     ? createDataTable(data, columns, tableName, options)
@@ -2408,6 +2420,7 @@ function displayTableData(data, columns, tableName, options = {}) {
       highlightForeignKeyTarget(tableWrapper);
     }, 250);
   }
+  return tableWrapper;
 }
 
 /**

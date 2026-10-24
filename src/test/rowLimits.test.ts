@@ -236,4 +236,49 @@ suite('Configurable row limits', () => {
         assert.ok(!messages.some(message => message.type === 'tableRowCount' && message.totalRows === 999));
         assert.strictEqual(provider.rowCountCache.get(`${databasePath}:records`), 12);
     });
+
+    test('batch deletion invalidates counts for cascaded tables and returns the actual remaining count', async () => {
+        await createRows(20);
+        await service.executeQuery('CREATE TABLE children(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE)');
+        await service.executeQuery('INSERT INTO children VALUES (1,1),(2,20)');
+        await service.executeQuery('CREATE TRIGGER delete_neighbours AFTER DELETE ON records WHEN OLD.id=1 BEGIN DELETE FROM records WHERE id BETWEEN 2 AND 18; END');
+        await service.executeQuery('PRAGMA foreign_keys=ON');
+        const { provider, panel, messages } = providerHarness();
+        await provider.handleTableDataRequest(panel, databasePath, 'children', undefined, 1, 10);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.strictEqual(provider.rowCountCache.get(`${databasePath}:children`), 2);
+        const identity = (await service.getTableData('records')).rowIdentities[0];
+        await provider.handleDeleteRowsRequest(panel, databasePath, 'records', 'delete-cascade', [identity]);
+        const deleted = messages.find(message => message.type === 'deleteRowsSuccess');
+        assert.strictEqual(deleted.changes, 1);
+        assert.strictEqual(deleted.totalRows, 2, 'trigger deletions are reflected in the authoritative total');
+        assert.strictEqual(provider.rowCountCache.has(`${databasePath}:children`), false);
+        messages.length = 0;
+        await provider.handleTableDataRequest(panel, databasePath, 'children', undefined, 1, 10);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.deepStrictEqual(messages.find(message => message.type === 'tableData').data, [[2, 20]]);
+        assert.strictEqual(messages.find(message => message.type === 'tableRowCount').totalRows, 1);
+    });
+
+    test('a committed deletion rejects late pre-delete counts and remains successful when recounting fails', async () => {
+        await createRows(12);
+        const { provider, panel, messages } = providerHarness();
+        const originalCount = service.getRowCount.bind(service);
+        let finishOldCount!: (count: number) => void;
+        service.getRowCount = () => new Promise(resolve => { finishOldCount = resolve; });
+        await provider.handleTableDataRequest(panel, databasePath, 'records', undefined, 1, 10);
+        const identity = messages.find(message => message.type === 'tableData').rowIdentities[0];
+        messages.length = 0;
+        service.getRowCount = async () => { throw new Error('count unavailable'); };
+        await provider.handleDeleteRowsRequest(panel, databasePath, 'records', 'delete-count-failure', [identity]);
+        finishOldCount(12);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.ok(!messages.some(message => message.type === 'tableRowCount' || message.type === 'deleteRowsError'));
+        const deleted = messages.find(message => message.type === 'deleteRowsSuccess');
+        assert.strictEqual(deleted.changes, 1);
+        assert.strictEqual(deleted.totalRows, undefined);
+        assert.strictEqual(provider.rowCountCache.has(`${databasePath}:records`), false);
+        service.getRowCount = originalCount;
+        assert.strictEqual(await service.getRowCount('records'), 11);
+    });
 });

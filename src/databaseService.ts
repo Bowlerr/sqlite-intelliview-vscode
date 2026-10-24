@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
+import { randomUUID } from 'crypto';
 import { markInternalUpdate } from './databaseWatcher';
 import { hasWalFiles, checkpointWalWithRetry, getWalStatus, getSqlite3CliInfo, WalCheckpointMode } from './walUtils';
 import { normalizePageSize, normalizeTablePage, readRowLimitSettings, RowLimitReader } from './rowLimits';
@@ -1079,6 +1080,43 @@ export class DatabaseService {
         }
     }
 
+    private guardDeletionIdentities(tableName: string, columns: string[], parameters: unknown[][]): () => void {
+        const name = `__intelliview_delete_${randomUUID().replace(/-/g, '')}`;
+        const guard = this.quoteIdentifier(name);
+        const insertTrigger = this.quoteIdentifier(`${name}_insert`);
+        const updateTrigger = this.quoteIdentifier(`${name}_update`);
+        const keys = columns.map((_, index) => this.quoteIdentifier(`key_${index}`));
+        this.db.run(`CREATE TEMP TABLE ${guard} (${keys.join(', ')})`);
+        // Copy keys inside SQLite so INTEGER/TEXT/BLOB storage classes are
+        // retained exactly, including integers outside JavaScript's safe range.
+        const copy = this.db.prepare(`INSERT INTO temp.${guard} SELECT ${columns.map(column => this.quoteIdentifier(column)).join(', ')}
+            FROM main.${this.quoteIdentifier(tableName)} WHERE ${this.identityWhereClause(columns)}`);
+        try {
+            for (const values of parameters) { copy.run(values); }
+        } finally { copy.free(); }
+
+        const matches = (source: string) => columns.map((column, index) =>
+            `${source}.${this.quoteIdentifier(column)} IS protected.${keys[index]}`
+        ).join(' AND ');
+        const changed = columns.map(column => {
+            const key = this.quoteIdentifier(column);
+            return `(NEW.${key} COLLATE BINARY IS NOT OLD.${key} COLLATE BINARY OR typeof(NEW.${key}) <> typeof(OLD.${key}))`;
+        }).join(' OR ');
+        const abort = "SELECT RAISE(ABORT, 'A selected row identity was changed or replaced by a trigger. The entire selection was rolled back.');";
+        // AFTER INSERT sees automatically assigned rowids, unlike BEFORE INSERT.
+        // Keep original column affinity/collation on the left of each comparison.
+        this.db.run(`CREATE TEMP TRIGGER ${insertTrigger} AFTER INSERT ON main.${this.quoteIdentifier(tableName)}
+            WHEN EXISTS (SELECT 1 FROM temp.${guard} AS protected WHERE ${matches('NEW')}) BEGIN ${abort} END`);
+        this.db.run(`CREATE TEMP TRIGGER ${updateTrigger} BEFORE UPDATE ON main.${this.quoteIdentifier(tableName)}
+            WHEN (${changed}) AND EXISTS (SELECT 1 FROM temp.${guard} AS protected WHERE (${matches('OLD')}) OR (${matches('NEW')}))
+            BEGIN ${abort} END`);
+        return () => {
+            this.db.run(`DROP TRIGGER temp.${insertTrigger}`);
+            this.db.run(`DROP TRIGGER temp.${updateTrigger}`);
+            this.db.run(`DROP TABLE temp.${guard}`);
+        };
+    }
+
     /** Delete a complete selection in one transaction/write; return selected identities removed, excluding extra trigger deletions. */
     async deleteRows(tableName: string, identities: RowIdentity[]): Promise<number> {
         return this.enqueueEdit(async () => {
@@ -1140,6 +1178,7 @@ export class DatabaseService {
                     }
                     storedIdentities.add(storedIdentity);
                 }
+                const removeGuards = this.guardDeletionIdentities(tableName, definition.columns, parameters);
                 statement = this.db.prepare(query);
                 for (const values of parameters) {
                     statement.run(values);
@@ -1161,6 +1200,7 @@ export class DatabaseService {
                 }
                 lookupStatement.free();
                 lookupStatement = undefined;
+                removeGuards();
                 fileSnapshot = this.captureFileState();
                 this.db.run('COMMIT');
                 transactionOpen = false;

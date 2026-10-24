@@ -267,3 +267,47 @@ for (const phase of ['editing', 'saving']) {
     }
   });
 }
+
+test('an empty page keeps its wrapper until an authoritative count clamps and refetches it', t => {
+  const { win, wrapper, messages, api } = fixture(t, { page: 4, pageSize: 2 });
+  const empty = { success: true, tableName: 'items', data: [], columns: ['id'], page: 4, pageSize: 2, totalRows: null, totalRowsKnown: false };
+  api.handleTableData(empty);
+  assert.ok(wrapper(), 'the count callback must have a matching rendered wrapper');
+  assert.ok(wrapper().querySelector('.table-pagination'));
+  assert.ok(wrapper().querySelector('[data-action="first"]'), 'a failed count must still allow returning to the first page');
+  const count = { tableName: 'items', totalRows: 3, page: 4, pageSize: 2 };
+  api.handleTableRowCount(count);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].page, 2);
+  assert.equal(wrapper().dataset.paginationPending, 'true');
+  api.handleTableRowCount(count);
+  assert.equal(messages.length, 1, 'a repeated count cannot refetch the stale page');
+  api.handleTableData({ ...empty, data: [[3]], page: 2, totalRows: 3, totalRowsKnown: true });
+  api.handleTableRowCount(count);
+  assert.equal(messages.length, 1, 'the old page count cannot affect the replacement');
+  assert.equal(wrapper().dataset.currentPage, '2');
+  assert.match(wrapper().querySelector('.visible-rows').textContent, /Showing 3-3 of 3 rows/);
+});
+
+test('known empty pages clamp immediately and a fully emptied table settles on page one', t => {
+  const { wrapper, messages, api } = fixture(t, { page: 4, pageSize: 2 });
+  const empty = { success: true, tableName: 'items', data: [], columns: ['id'], page: 4, pageSize: 2, totalRows: 3, totalRowsKnown: true };
+  api.handleTableData(empty);
+  assert.equal(messages[0]?.page, 2);
+  api.handleTableData({ ...empty, page: 2, totalRows: 0 });
+  assert.equal(messages[1]?.page, 1);
+  api.handleTableData({ ...empty, page: 1, totalRows: 0 });
+  api.handleTableRowCount({ tableName: 'items', totalRows: 0, page: 1, pageSize: 2 });
+  assert.equal(messages.length, 2, 'page one with zero rows cannot loop');
+  assert.equal(wrapper().dataset.currentPage, '1');
+  assert.match(wrapper().querySelector('.visible-rows').textContent, /Showing 0 of 0 rows/);
+  assert.equal(wrapper().querySelector('.select-all-checkbox').disabled, true);
+});
+
+test('an empty page can return to the first page when its count never arrives', t => {
+  const { wrapper, messages, api } = fixture(t, { page: 4, pageSize: 2 });
+  api.handleTableData({ success: true, tableName: 'items', data: [], columns: ['id'], page: 4, pageSize: 2, totalRows: null, totalRowsKnown: false });
+  wrapper().querySelector('[data-action="first"]').click();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].page, 1);
+});

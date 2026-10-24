@@ -150,7 +150,8 @@ function handleContextMenu(e) {
  * @param {HTMLTableCellElement} cell - Target table cell
  */
 function showContextMenuForCell(e, cell) {
-  if (!cell) {
+  if (!cell?.matches("td.data-cell") || getContextDataRowIndex(cell.closest("tr")) === null) {
+    hideContextMenu();
     return;
   }
 
@@ -200,7 +201,9 @@ function showContextMenuAt(x, y) {
     '[data-action="delete-row"]'
   );
   if (deleteMenuItem) {
-    if (isQueryResultTable) {
+    const wrapper = currentCell?.closest(".enhanced-table-wrapper");
+    if (isQueryResultTable || wrapper?.dataset.editable !== "true" || wrapper.dataset.deletePending ||
+        getContextDataRowIndex(currentRow) === null) {
       deleteMenuItem.style.display = "none";
     } else {
       deleteMenuItem.style.display = "block";
@@ -1947,6 +1950,7 @@ function handleContextMenuKeyboard(e) {
  * @returns {Array} Available actions
  */
 function getContextMenuActions(cell) {
+  if (!cell?.matches("td.data-cell") || getContextDataRowIndex(cell.closest("tr")) === null) return [];
   const actions = ["copy-cell", "copy-row", "copy-row-json"];
 
   // Add copy column action if we have multiple rows
@@ -2005,14 +2009,24 @@ function deleteRowWithConfirmation() {
 /** Single-row and batch deletion share the same stable identity protocol. */
 function executeRowDeletion(_tableName, row) {
   const wrapper = row?.closest(".enhanced-table-wrapper");
-  const index = Number(row?.getAttribute("data-row-index"));
-  if (wrapper && Number.isInteger(index)) confirmRowDeletion(wrapper, [index]);
+  const index = getContextDataRowIndex(row);
+  if (wrapper && index !== null) confirmRowDeletion(wrapper, [index]);
+}
+
+/** Virtual spacers/placeholders are layout rows and never identify records. */
+function getContextDataRowIndex(row) {
+  if (!row?.matches("tr.resizable-row")) return null;
+  const value = row.getAttribute("data-row-index");
+  if (value === null || !/^\d+$/.test(value)) return null;
+  const index = Number(value);
+  return Number.isSafeInteger(index) ? index : null;
 }
 
 function getRowIdentifier(row) {
   const wrapper = row?.closest(".enhanced-table-wrapper");
-  if (!wrapper) return null;
-  return getSelectedRowIdentities(wrapper, [Number(row.dataset.rowIndex)])[0] || null;
+  const index = getContextDataRowIndex(row);
+  if (!wrapper || index === null) return null;
+  return getSelectedRowIdentities(wrapper, [index])[0] || null;
 }
 
 /**

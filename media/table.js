@@ -513,7 +513,9 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   const recordsLabel = totalRowsKnown
     ? effectiveTotalRows.toLocaleString()
     : "…";
-  const visibleRowsLabel = totalRowsKnown
+  const visibleRowsLabel = pageData.length === 0
+    ? totalRowsKnown ? `Showing 0 of ${effectiveTotalRows.toLocaleString()} rows` : "No rows on this page (counting…)"
+    : totalRowsKnown
     ? `Showing ${
         startIndex + 1
       }-${endIndex} of ${effectiveTotalRows.toLocaleString()} rows`
@@ -712,6 +714,8 @@ function createDataTable(data, columns, tableName = "", options = {}) {
             ${
               virtualize
                 ? `<tr class="virtual-loading" role="row"><td class="virtual-loading-cell" role="cell" colspan="${columns.length + 1}">Rendering…</td></tr>`
+                : pageData.length === 0
+                ? `<tr class="table-empty" role="row"><td colspan="${columns.length + 1}"><div class="table-empty-message">No rows on this page</div></td></tr>`
                 : renderTableRows(
                     pageData,
                     startIndex,
@@ -736,7 +740,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           ${
             totalRowsKnown
               ? createPaginationControls(currentPage, totalPages, tableId)
-              : ""
+              : pageData.length === 0 ? createPaginationControls(currentPage, null, tableId) : ""
           }
         </div>
       </div>`
@@ -951,11 +955,18 @@ function renderTableCellHtml(
 /**
  * Create pagination controls HTML
  * @param {number} currentPage - Current page number
- * @param {number} totalPages - Total number of pages
+ * @param {number|null} totalPages - Total pages, or null while an empty page awaits its count
  * @param {string} tableId - Table identifier
  * @returns {string} HTML string for pagination controls
  */
 function createPaginationControls(currentPage, totalPages, tableId) {
+  if (totalPages === null) {
+    return currentPage > 1 ? `<div class="pagination-controls" data-table-id="${escapeHtmlFast(tableId)}">
+      <button class="pagination-btn" data-action="first" title="First page">⏮️</button>
+      <button class="pagination-btn" data-action="prev" title="Previous page">⏪</button>
+      <span>Page ${currentPage}</span>
+    </div>` : "";
+  }
   if (totalPages <= 1) {
     return "";
   }
@@ -2490,16 +2501,16 @@ function getSelectedRowIdentities(wrapper, indices = Array.from(getSelectionStor
   return identities;
 }
 
-function requestTableSnapshot(wrapper, changes = 0) {
+function requestTableSnapshot(wrapper, totalRows) {
   if (!wrapper?.isConnected || !window.vscode?.postMessage) return;
   const pageSize = Number(wrapper.dataset.pageSize) || 100;
   let page = Number(wrapper.dataset.currentPage) || 1;
-  if (wrapper.dataset.totalRowsKnown === "true") {
-    const remaining = Math.max(0, Number(wrapper.dataset.totalRows) - changes);
-    page = Math.min(page, Math.max(1, Math.ceil(remaining / pageSize)));
-  } else if (changes >= Number(wrapper.dataset.pageRows) && page > 1) {
-    page -= 1;
+  // A DELETE may fire triggers that remove additional rows. Only a fresh
+  // database count can determine which page still exists after the mutation.
+  if (Number.isSafeInteger(totalRows) && totalRows >= 0) {
+    page = Math.min(page, Math.max(1, Math.ceil(totalRows / pageSize)));
   }
+  wrapper.dataset.paginationPending = "true";
   const state = typeof getCurrentState === "function" ? getCurrentState() : {};
   window.vscode.postMessage({
     type: "getTableData", tableName: wrapper.dataset.table,
@@ -2564,7 +2575,7 @@ function handleRowsDeletionResult(message, success) {
     const stash = getTableSnapshot(wrapper);
     if (stash) stash.identitiesInvalid = true;
     if (typeof showSuccess === "function") showSuccess(`Deleted ${message.changes} row${message.changes === 1 ? "" : "s"}.`);
-    requestTableSnapshot(wrapper, message.changes);
+    requestTableSnapshot(wrapper, message.totalRows);
   } else {
     updateSelectedUI(wrapper);
     if (typeof showError === "function") showError(message.message || "Could not delete rows.");
