@@ -43,6 +43,8 @@ export interface ForeignKeyInfo {
 export interface QueryResult {
     columns: string[];
     values: any[][];
+    /** Sparse row-local column indices for INTEGERs displayed as exact decimal strings. */
+    largeIntegerColumns?: Record<number, number[]>;
 }
 
 export interface UserQueryResult extends QueryResult {
@@ -86,6 +88,7 @@ export interface CellUpdateResult {
     changes: number;
     identity: RowIdentity;
     value: SQLiteValue;
+    isLargeInteger: boolean;
 }
 
 interface TableIdentityDefinition {
@@ -150,6 +153,20 @@ export class DatabaseService {
         return row.map((value, index) => typeof value === 'string'
             ? Buffer.from(statement.getBlob(index)).toString('utf8')
             : value);
+    }
+
+    private serializeResultRow(row: Array<SQLiteValue | bigint>, rowIndex: number, largeIntegerColumns: Record<number, number[]>): SQLiteValue[] {
+        return row.map((value, columnIndex) => {
+            if (typeof value !== 'bigint') {
+                return value;
+            }
+            const number = Number(value);
+            if (Number.isSafeInteger(number)) {
+                return number;
+            }
+            (largeIntegerColumns[rowIndex] ||= []).push(columnIndex);
+            return value.toString();
+        });
     }
 
     /** Read FTS5 metadata without loading its module or changing the database. */
@@ -628,8 +645,8 @@ export class DatabaseService {
 
     /** Internal reads must not inherit the query editor's configurable cap. */
     async executeQuery(query: string): Promise<QueryResult> {
-        const { columns, values } = await this.readQuery(query, 0);
-        return { columns, values };
+        const { columns, values, largeIntegerColumns } = await this.readQuery(query, 0);
+        return { columns, values, ...(largeIntegerColumns ? { largeIntegerColumns } : {}) };
     }
 
     async executeUserQuery(query: string): Promise<UserQueryResult> {
@@ -667,6 +684,7 @@ export class DatabaseService {
                 truncated: false,
                 maxRows
             };
+            const largeIntegerColumns: Record<number, number[]> = {};
 
             while (stmt.step()) {
                 // Read one additional row to distinguish truncation from an
@@ -675,7 +693,11 @@ export class DatabaseService {
                     result.truncated = true;
                     break;
                 }
-                result.values.push(this.readStatementRow(stmt));
+                result.values.push(this.serializeResultRow(this.readStatementRow(stmt, true), result.values.length, largeIntegerColumns));
+            }
+
+            if (Object.keys(largeIntegerColumns).length) {
+                result.largeIntegerColumns = largeIntegerColumns;
             }
 
             return result;
@@ -809,17 +831,12 @@ export class DatabaseService {
 
         let columns = stmt.getColumnNames();
         const rawRows: any[][] = [];
+        const largeIntegerColumns: Record<number, number[]> = {};
         const identityRows: Array<Array<SQLiteValue | bigint>> = [];
         while (stmt.step()) {
             const identityRow = this.readStatementRow(stmt, true);
             identityRows.push(identityRow);
-            rawRows.push(identityRow.map(value => {
-                if (typeof value !== 'bigint') {
-                    return value;
-                }
-                const numericValue = Number(value);
-                return Number.isSafeInteger(numericValue) ? numericValue : value.toString();
-            }));
+            rawRows.push(this.serializeResultRow(hiddenIdentity ? identityRow.slice(1) : identityRow, rawRows.length, largeIntegerColumns));
         }
         stmt.free();
 
@@ -827,7 +844,7 @@ export class DatabaseService {
             columns = columns.slice(1);
         }
 
-        const values = hiddenIdentity ? rawRows.map(row => row.slice(1)) : rawRows;
+        const values = rawRows;
         const rowIdentities: Array<RowIdentity | null> = identityRows.map(row => {
             if (!definition) {
                 return null;
@@ -854,6 +871,7 @@ export class DatabaseService {
         return {
             columns,
             values,
+            ...(Object.keys(largeIntegerColumns).length ? { largeIntegerColumns } : {}),
             rowIdentities,
             editable: definition !== null,
             editError: editability.reason
@@ -942,11 +960,6 @@ export class DatabaseService {
                 throw new Error(`Critical update failure: expected one changed row but SQLite reported ${changes}. The update was rolled back.`);
             }
 
-            fileStateBeforeUpdate = this.captureFileState();
-            this.db.run('COMMIT');
-            transactionOpen = false;
-            committed = true;
-
             const nextIdentity: RowIdentity = {
                 kind: identity.kind,
                 parts: identity.parts.map(part => ({
@@ -954,6 +967,27 @@ export class DatabaseService {
                     value: part.column === columnName ? this.serializeIdentityValue(processedValue) : part.value
                 }))
             };
+
+            // SQLite affinity can change the input's storage class. Read the
+            // stored value and keys before committing so the UI does not retain
+            // stale INTEGER metadata after a text edit (or vice versa).
+            const readbackColumns = [columnName, ...definition.columns].map(column => this.quoteIdentifier(column)).join(', ');
+            stmt = this.db.prepare(`SELECT ${readbackColumns} FROM ${this.quoteIdentifier(tableName)} WHERE ${whereClause}`);
+            stmt.bind(this.identityParameters(nextIdentity.parts.map(part => this.deserializeIdentityValue(part.value))));
+            if (!stmt.step()) {
+                throw new Error('The updated row identity changed unexpectedly. The update was rolled back; refresh the table and try again.');
+            }
+            const storedRow = this.readStatementRow(stmt, true);
+            stmt.free();
+            stmt = null;
+            nextIdentity.parts = definition.columns.map((column, index) => ({ column, value: this.serializeIdentityValue(storedRow[index + 1]) }));
+            const storedValue = this.serializeResultRow([storedRow[0]], 0, {})[0];
+            const isLargeInteger = typeof storedRow[0] === 'bigint' && !Number.isSafeInteger(Number(storedRow[0]));
+
+            fileStateBeforeUpdate = this.captureFileState();
+            this.db.run('COMMIT');
+            transactionOpen = false;
+            committed = true;
 
             const databaseStateAfterUpdate = this.db.export();
             await this.saveChangesToFile(databaseStateAfterUpdate);
@@ -965,7 +999,8 @@ export class DatabaseService {
             return {
                 changes,
                 identity: nextIdentity,
-                value: processedValue
+                value: storedValue,
+                isLargeInteger
             };
         } catch (error) {
             if (stmt) {

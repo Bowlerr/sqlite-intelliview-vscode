@@ -1183,6 +1183,7 @@ function handleQueryResult(message) {
     // Pass the query to displayQueryResults if available
     displayQueryResults(message.data, message.columns, message.query, {
       truncated: message.truncated === true, maxRows: message.maxRows,
+      largeIntegerColumns: message.largeIntegerColumns,
     });
     const rowCount = message.data.length;
     const rowText = rowCount === 1 ? "row" : "rows";
@@ -1334,6 +1335,7 @@ function handleTableData(message) {
       backendPaginated: true,
       foreignKeys: message.foreignKeys,
       rowIdentities: message.rowIdentities,
+      largeIntegerColumns: message.largeIntegerColumns,
       allowEditing: message.editable === true,
       editError: message.editError,
     });
@@ -1653,7 +1655,8 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
           }
           const tbody = table.querySelector("tbody");
           if (tbody) {
-            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const rows = Array.from(tbody.querySelectorAll("tr.resizable-row"));
+            const snapshot = getTableSnapshot(tableWrapper);
             const cmp =
               typeof window.compareValues === "function"
                 ? window.compareValues
@@ -1664,19 +1667,9 @@ function applyTabViewStateToWrapper(tableWrapper, tabKey) {
             rows.sort((a, b) => {
               const aCell = a.querySelector(`td[data-column="${colIndex}"]`);
               const bCell = b.querySelector(`td[data-column="${colIndex}"]`);
-              const aValue =
-                typeof window.getCellValue === "function"
-                  ? window.getCellValue(aCell)
-                  : aCell && aCell.textContent
-                    ? aCell.textContent.trim()
-                    : "";
-              const bValue =
-                typeof window.getCellValue === "function"
-                  ? window.getCellValue(bCell)
-                  : bCell && bCell.textContent
-                    ? bCell.textContent.trim()
-                    : "";
-              return cmp(aValue ?? "", bValue ?? "", dir);
+              const aValue = getCellSnapshotText(aCell, snapshot);
+              const bValue = getCellSnapshotText(bCell, snapshot);
+              return cmp(aValue ?? "", bValue ?? "", dir) || Number(a.dataset.rowIndex) - Number(b.dataset.rowIndex);
             });
             rows.forEach((row) => tbody.appendChild(row));
           }
@@ -2189,6 +2182,7 @@ function displayQueryResults(data, columns, query = null, metadata = {}) {
       foreignKeys: detectedForeignKeys, // Store detected foreign keys for tab restoration
       truncated: metadata.truncated === true,
       maxRows: metadata.maxRows,
+      largeIntegerColumns: metadata.largeIntegerColumns,
     };
 
     if (!window._resultCache) {
@@ -2249,6 +2243,7 @@ function displayQueryResults(data, columns, query = null, metadata = {}) {
               allowEditing: false, // Query results are typically read-only for data integrity
               truncated: metadata.truncated === true,
               maxRows: metadata.maxRows,
+              largeIntegerColumns: metadata.largeIntegerColumns,
             })
           : `<div class="no-results"><h3>No Results</h3><p>Query executed successfully but returned no data.</p></div>`;
       const dataContent = document.getElementById("data-content");
@@ -3224,6 +3219,21 @@ function handleCellUpdateSuccess(message) {
     Number.isInteger(columnIndex)
   ) {
     stashedTable.pageData[localIndex][columnIndex] = newValue;
+    if (typeof message.newValueIsLargeInteger === "boolean") {
+      const setStorageType = (map, rowIndex) => {
+        const columns = new Set(map[rowIndex] || []);
+        if (message.newValueIsLargeInteger) columns.add(columnIndex);
+        else columns.delete(columnIndex);
+        if (columns.size) map[rowIndex] = Array.from(columns);
+        else delete map[rowIndex];
+      };
+      stashedTable.largeIntegerColumns ||= {};
+      setStorageType(stashedTable.largeIntegerColumns, localIndex);
+      stashedTable.options ||= {};
+      stashedTable.options.largeIntegerColumns ||= {};
+      setStorageType(stashedTable.options.largeIntegerColumns,
+        stashedTable.localData ? stashedTable.startIndex + localIndex : localIndex);
+    }
   }
   const virtualState = /** @type {any} */ (wrapper)?.__virtualTableState;
   if (

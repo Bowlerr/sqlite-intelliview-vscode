@@ -17,6 +17,9 @@
 - Selection controls preserve sorting, pinning, copying, pagination, and BLOB/composite row identities. Stale selections are invalidated before destructive operations.
 - CSV export preserves raw newlines, carriage returns, whitespace, and literal `NULL` strings.
 - Embedded NUL characters and padded numeric-looking text survive reads, edits, and reloads without truncation or unwanted conversion.
+- Large SQLite INTEGER values remain exact and distinct from identical-looking TEXT during edits, deletion, queries, and foreign-key navigation.
+- Pagination preserves active edits and pending saves; filtering and sorting use stored values consistently across regular and virtual tables.
+- Virtual scrolling updates selection only for rendered rows, avoiding full-page scans on each viewport change.
 - Schema metadata remains fully visible with small page caps; separate query executions retain their own tabs and valid pagination.
 - Lint no longer changes source files during validation. Extension packages exclude local databases, SQL fixtures, and test/development files.
 

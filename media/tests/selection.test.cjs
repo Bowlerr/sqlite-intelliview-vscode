@@ -482,3 +482,114 @@ test('cached local pagination preserves an active editor until it is cancelled',
   assert.equal(replacement.querySelector('td[data-column="1"] .cell-content').textContent, 'second');
   assert.equal(messages.length, 0);
 });
+
+for (const virtualize of [false, true]) {
+  for (const restored of [false, true]) {
+    test(`${restored ? 'restored' : 'clicked'} sort uses raw keys (virtual=${virtualize})`, t => {
+      const { win, wrapper, api } = fixture(t, [[0, '10'], [1, '\t20']], { virtualize });
+      if (restored) {
+        win.getTabViewState = () => ({ sort: { columnName: 'name', dir: 'asc' } });
+        win.applyTabViewStateToWrapper(wrapper, 'people');
+      } else {
+        api.sortTableByColumn(wrapper.querySelector('table'), 1);
+      }
+      assert.deepEqual(Array.from(win.getVisibleRowGlobalIndices(wrapper)), [0, 1]);
+      if (restored) {
+        win.getTabViewState = () => ({ sort: { columnName: 'name', dir: 'desc' } });
+        win.applyTabViewStateToWrapper(wrapper, 'people');
+      } else {
+        api.sortTableByColumn(wrapper.querySelector('table'), 1);
+      }
+      assert.deepEqual(Array.from(win.getVisibleRowGlobalIndices(wrapper)), [1, 0]);
+    });
+  }
+}
+
+test('regular and virtual sorting share raw keys for numbers, controls, NULL and blobs', t => {
+  const rows = [null, 'NULL', 10, '\t20', 'C:\\temp', 'line\nbreak', 'line\\nbreak', [65, 255]]
+    .map((value, index) => [index, value]);
+  const regular = fixture(t, rows);
+  const virtual = fixture(t, rows, { virtualize: true });
+  for (let click = 0; click < 3; click++) {
+    for (const table of [regular, virtual]) table.api.sortTableByColumn(table.wrapper.querySelector('table'), 1);
+    assert.deepEqual(Array.from(regular.win.getVisibleRowGlobalIndices(regular.wrapper)),
+      Array.from(virtual.win.getVisibleRowGlobalIndices(virtual.wrapper)));
+  }
+});
+
+test('mixed numeric and text sorts stay consistent through repeated clicks and restores', t => {
+  const rows = [10, '\t20', null, 'NULL', '\\n'].map((value, index) => [index, value]);
+  for (const virtualize of [false, true]) for (const restored of [false, true]) {
+    const table = fixture(t, rows, { virtualize });
+    for (const dir of ['asc', 'desc', 'asc', 'desc']) {
+      if (restored) {
+        table.win.getTabViewState = () => ({ sort: { columnName: 'name', dir } });
+        table.win.applyTabViewStateToWrapper(table.wrapper, 'people');
+      } else table.api.sortTableByColumn(table.wrapper.querySelector('table'), 1);
+      assert.deepEqual(Array.from(table.win.getVisibleRowGlobalIndices(table.wrapper)),
+        dir === 'asc' ? [0, 1, 2, 4, 3] : [3, 4, 2, 1, 0], `${virtualize}/${restored}/${dir}`);
+    }
+  }
+});
+
+test('numeric/text comparison is antisymmetric and transitive, including non-finite values', t => {
+  const { win } = fixture(t);
+  const keys = ['10', '\t20', '\\n', '', 'NULL', '-3', '1e3', 'Infinity', '-Infinity', 'NaN', '65,255'];
+  for (const direction of ['asc', 'desc']) for (const a of keys) for (const b of keys) {
+    const ab = win.compareValues(a, b, direction);
+    const ba = win.compareValues(b, a, direction);
+    assert.ok(!Number.isNaN(ab), `non-finite comparison ${a}/${b}`);
+    assert.ok(Math.sign(ab) === -Math.sign(ba), `antisymmetry ${a}/${b}`);
+    for (const c of keys) {
+      if (ab <= 0 && win.compareValues(b, c, direction) <= 0) {
+        assert.ok(win.compareValues(a, c, direction) <= 0, `transitivity ${a}/${b}/${c}/${direction}`);
+      }
+    }
+  }
+});
+
+test('equal sort keys retain source order after sorting a different column', t => {
+  for (const virtualize of [false, true]) {
+    const { win, wrapper, api } = fixture(t, [[1, '10'], [0, '10.0'], [2, ' 10']], { virtualize });
+    api.sortTableByColumn(wrapper.querySelector('table'), 0);
+    for (const dir of ['asc', 'desc']) {
+      win.getTabViewState = () => ({ sort: { columnName: 'name', dir } });
+      win.applyTabViewStateToWrapper(wrapper, 'people');
+      assert.deepEqual(Array.from(win.getVisibleRowGlobalIndices(wrapper)), [0, 1, 2]);
+    }
+  }
+});
+
+test('virtual viewport selection work is bounded by rendered rows, with empty and full selections', t => {
+  const rows = Array.from({ length: 10000 }, (_, index) => [index, index % 2 ? 'odd' : 'even']);
+  const { win, wrapper, api } = fixture(t, rows, { virtualize: true });
+  const selection = win.getSelectionStore(wrapper);
+  const has = selection.has.bind(selection);
+  let lookups = 0;
+  selection.has = value => { lookups++; return has(value); };
+  const scroll = offset => {
+    wrapper.__virtualTableState.scrollContainer.scrollTop = offset;
+    lookups = 0;
+    api.renderVirtual(wrapper);
+    const rendered = wrapper.querySelectorAll('tr.resizable-row').length;
+    assert.ok(rendered < 100, 'the fixture renders a small viewport');
+    assert.ok(lookups <= rendered, `${lookups} selection lookups for ${rendered} rendered rows`);
+  };
+  scroll(100000);
+  const selectAll = wrapper.querySelector('.select-all-checkbox');
+  selectAll.click();
+  assert.equal(selection.size, 10000);
+  scroll(200000);
+  assert.equal(selectAll.checked, true);
+  assert.equal(selectAll.indeterminate, false);
+  assert.ok(Array.from(wrapper.querySelectorAll('.row-select-checkbox')).every(box => box.checked));
+  api.filterTable(wrapper, 'not found');
+  assert.equal(selectAll.checked, false);
+  assert.equal(selectAll.disabled, true);
+  api.filterTable(wrapper, 'even');
+  assert.equal(selectAll.disabled, false);
+  selectAll.click();
+  assert.equal(selection.size, 5000);
+  scroll(300000);
+  assert.equal(selectAll.checked, true);
+});

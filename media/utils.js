@@ -93,16 +93,18 @@ function compareValues(a, b, direction = "asc") {
     return direction === "asc" ? -1 : 1;
   }
 
-  // Try numeric comparison first
+  // Use one numeric/text ordering for every pair. Falling back to lexical
+  // comparison only when one side is numeric creates comparison cycles.
   const numA = parseFloat(a);
   const numB = parseFloat(b);
-
-  if (!isNaN(numA) && !isNaN(numB)) {
-    return direction === "asc" ? numA - numB : numB - numA;
-  }
-
-  // String comparison
-  const result = a.localeCompare(b);
+  const numericA = !Number.isNaN(numA);
+  const numericB = !Number.isNaN(numB);
+  const result = numericA !== numericB
+    ? numericA ? -1 : 1
+    : numericA
+      // Relational comparison also handles equal infinities without NaN.
+      ? numA < numB ? -1 : numA > numB ? 1 : 0
+      : a.localeCompare(b);
   return direction === "asc" ? result : -result;
 }
 

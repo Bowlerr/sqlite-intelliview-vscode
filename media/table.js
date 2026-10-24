@@ -529,6 +529,19 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   const pageRowIdentities = backendPaginated
     ? rowIdentities
     : rowIdentities.slice(startIndex, endIndex);
+  // SQLite INTEGER values outside the safe JS range are displayed as strings.
+  // Keep their storage type separate from identical-looking TEXT values.
+  const sourceLargeIntegerColumns = options.largeIntegerColumns ?? resultMetadata?.largeIntegerColumns ?? {};
+  const pageLargeIntegerColumns = backendPaginated ? sourceLargeIntegerColumns : {};
+  if (!backendPaginated) {
+    for (const [rowIndex, columnIndices] of Object.entries(sourceLargeIntegerColumns)) {
+      const localIndex = Number(rowIndex) - startIndex;
+      if (localIndex >= 0 && localIndex < pageData.length) {
+        pageLargeIntegerColumns[localIndex] = columnIndices;
+      }
+    }
+  }
+  const tableOptions = { ...options, maxTablePageSize: maximum, largeIntegerColumns: sourceLargeIntegerColumns };
 
   // Keep the current page rows in-memory for context menu actions (e.g., BLOB viewing/copy).
   stashTableData(tableId, {
@@ -537,9 +550,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     startIndex,
     tableName,
     rowIdentities: pageRowIdentities,
+    largeIntegerColumns: pageLargeIntegerColumns,
     // Local result pagination must retain the full query snapshot.
     localData: backendPaginated ? null : data,
-    options: { ...options, maxTablePageSize: maximum },
+    options: tableOptions,
   });
 
   if (virtualize) {
@@ -554,7 +568,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
         isSchemaTable,
         isEditable,
         foreignKeyMap,
-        options,
+        options: tableOptions,
         tableName,
         rowIdentities: pageRowIdentities,
       });
@@ -1253,7 +1267,7 @@ function recomputeVirtualMetrics(vs) {
         const bRow = vs.pageData[bIdx];
         const aVal = Array.isArray(aRow) ? aRow[colIdx] : "";
         const bVal = Array.isArray(bRow) ? bRow[colIdx] : "";
-        return cmp(aVal ?? "", bVal ?? "", dir);
+        return cmp(String(aVal ?? ""), String(bVal ?? ""), dir) || aIdx - bIdx;
       });
     }
   }
@@ -1295,6 +1309,8 @@ function recomputeVirtualMetrics(vs) {
       visibleLabelEl.textContent = vs.originalVisibleLabelText;
     }
   }
+  // Logical membership changed; viewport-only scrolling never recalculates this.
+  updateSelectionSummary(vs.wrapper);
 }
 
 function rowMatchesSearchTerm(row, termLower) {
@@ -1316,8 +1332,8 @@ function rowMatchesSearchTerm(row, termLower) {
   return false;
 }
 
-/** Filter the stored value, not its escaped display or adjacent editing controls. */
-function getCellFilterText(cell, snapshot) {
+/** Compare the stored value, not its escaped display or adjacent editing controls. */
+function getCellSnapshotText(cell, snapshot) {
   if (!cell) return "";
   const row = cell.closest("tr[data-row-index]");
   const localIndex = Number(row?.getAttribute("data-row-index")) - (snapshot?.startIndex || 0);
@@ -1442,10 +1458,8 @@ function virtualRender(vs, { force }) {
   syncColumnWidthsForVirtual(vs);
   syncRowHeightsForVirtual(vs);
 
-  // Re-apply multi-row selection classes to visible rows.
-  if (typeof updateSelectedUI === "function") {
-    updateSelectedUI(vs.wrapper);
-  }
+  // Scrolling only touches rendered rows, regardless of the loaded page size.
+  syncVisibleRowSelection(vs.wrapper);
 }
 
 function findRowAtOffset(prefix, offset) {
@@ -1589,7 +1603,7 @@ function filterTable(tableWrapper, searchTerm) {
     let rowMatches = false;
 
     cells.forEach((cell) => {
-      const cellText = getCellFilterText(cell, snapshot);
+      const cellText = getCellSnapshotText(cell, snapshot);
       if (cellText.toLowerCase().includes(term)) {
         rowMatches = true;
       }
@@ -1737,21 +1751,19 @@ function sortTableByColumn(table, columnIndex) {
   }
 
   // Sort rows
+  const snapshot = getTableSnapshot(wrapper);
   rows.sort((a, b) => {
     const aCell = a.querySelector(`td[data-column="${columnIndex}"]`);
     const bCell = b.querySelector(`td[data-column="${columnIndex}"]`);
-    const aValue = getCellValue
-      ? getCellValue(aCell)
-      : aCell.textContent.trim();
-    const bValue = getCellValue
-      ? getCellValue(bCell)
-      : bCell.textContent.trim();
+    const aValue = getCellSnapshotText(aCell, snapshot);
+    const bValue = getCellSnapshotText(bCell, snapshot);
 
-    return compareValues
+    const comparison = compareValues
       ? compareValues(aValue, bValue, newSort)
       : newSort === "asc"
       ? aValue.localeCompare(bValue)
       : bValue.localeCompare(aValue);
+    return comparison || Number(a.dataset.rowIndex) - Number(b.dataset.rowIndex);
   });
 
   // Update header
@@ -1960,7 +1972,7 @@ function filterTableByColumn(table, columnIndex, filterValue) {
       return;
     }
     const cell = row.querySelector(`td[data-column="${columnIndex}"]`);
-    const cellValue = getCellFilterText(cell, snapshot);
+    const cellValue = getCellSnapshotText(cell, snapshot);
     const shouldShow =
       filterValue === "" ||
       cellValue.toLowerCase().includes(filterValue.toLowerCase());
@@ -2412,7 +2424,7 @@ function getVisibleRowGlobalIndices(wrapper) {
     .filter(Number.isInteger);
 }
 
-function updateSelectedUI(wrapper) {
+function syncVisibleRowSelection(wrapper) {
   const selection = getSelectionStore(wrapper);
   const pending = !!wrapper.dataset.deletePending;
   wrapper.querySelectorAll("tr.resizable-row").forEach(row => {
@@ -2424,13 +2436,34 @@ function updateSelectedUI(wrapper) {
       checkbox.disabled = pending;
     }
   });
-  const visible = getVisibleRowGlobalIndices(wrapper);
-  const selectedCount = visible.filter(index => selection.has(index)).length;
+}
+
+/** Refresh counts/actions when selection or logical row membership changes. */
+function updateSelectionSummary(wrapper) {
+  const selection = getSelectionStore(wrapper);
+  const pending = !!wrapper.dataset.deletePending;
+  const vs = wrapper.__virtualTableState;
+  let visibleCount;
+  let selectedCount = 0;
+  if (vs?.enabled && Array.isArray(vs.order)) {
+    visibleCount = vs.order.length;
+    if (selection.size) {
+      for (const sourceIndex of vs.order) {
+        if (selection.has(vs.startIndex + sourceIndex)) selectedCount++;
+      }
+    }
+  } else {
+    const visible = getVisibleRowGlobalIndices(wrapper);
+    visibleCount = visible.length;
+    if (selection.size) {
+      for (const index of visible) if (selection.has(index)) selectedCount++;
+    }
+  }
   const selectAll = wrapper.querySelector(".select-all-checkbox");
   if (selectAll) {
-    selectAll.checked = visible.length > 0 && selectedCount === visible.length;
-    selectAll.indeterminate = selectedCount > 0 && selectedCount < visible.length;
-    selectAll.disabled = pending || visible.length === 0;
+    selectAll.checked = visibleCount > 0 && selectedCount === visibleCount;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < visibleCount;
+    selectAll.disabled = pending || visibleCount === 0;
   }
   const info = wrapper.querySelector(".selected-info");
   if (info) {
@@ -2441,6 +2474,11 @@ function updateSelectedUI(wrapper) {
     button.classList.toggle("hidden", selection.size === 0);
     button.disabled = pending;
   });
+}
+
+function updateSelectedUI(wrapper) {
+  syncVisibleRowSelection(wrapper);
+  updateSelectionSummary(wrapper);
 }
 
 /** Return every identity or fail closed; never silently delete a subset. */

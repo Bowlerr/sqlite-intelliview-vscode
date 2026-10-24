@@ -627,6 +627,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 success: true,
                 data: result.values,
                 columns: result.columns,
+                largeIntegerColumns: result.largeIntegerColumns,
                 query: query,
                 truncated: result.truncated,
                 maxRows: result.maxRows
@@ -734,6 +735,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 data: result.values,
                 columns: result.columns,
                 rowIdentities: result.rowIdentities,
+                largeIntegerColumns: result.largeIntegerColumns,
                 editable: result.editable,
                 editError: result.editError,
                 foreignKeys: foreignKeys,
@@ -795,6 +797,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 requestId,
                 columnName: columnName,
                 newValue: updateResult.value,
+                newValueIsLargeInteger: updateResult.isLargeInteger,
                 rowIdentity: updateResult.identity,
                 changes: updateResult.changes
             });
@@ -1196,6 +1199,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 data: newResult.values,
                 columns: newResult.columns,
                 rowIdentities: newResult.rowIdentities,
+                largeIntegerColumns: newResult.largeIntegerColumns,
                 editable: newResult.editable,
                 editError: newResult.editError,
                 foreignKeys,

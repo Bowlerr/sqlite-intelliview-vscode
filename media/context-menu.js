@@ -2406,6 +2406,19 @@ function getForeignKeyInfoForCell(cell) {
   const cellValue = typeof underlying === "number" || normalizeBlobValue(underlying)
     ? underlying
     : getCellRawValue(cell).value;
+  const wrapper = cell.closest(".enhanced-table-wrapper");
+  const snapshot = wrapper && getTableSnapshot(wrapper);
+  const localIndex = Number(cell.closest("tr")?.dataset.localIndex);
+  const columnIndex = Number(cell.dataset.column);
+  const integerColumns = snapshot?.largeIntegerColumns?.[localIndex];
+  const valueIsLargeInteger = Array.isArray(integerColumns) && integerColumns.includes(columnIndex);
+  if (valueIsLargeInteger) {
+    // Only backend-marked, canonical int64 text may become an unquoted SQL
+    // integer. Identical-looking genuine TEXT keys must remain quoted.
+    if (typeof cellValue !== "string" || !/^(?:0|-?[1-9][0-9]{0,18})$/.test(cellValue)) return null;
+    const integer = BigInt(cellValue);
+    if (integer < -9223372036854775808n || integer > 9223372036854775807n) return null;
+  }
 
   // Get the column name from the cell's data attributes
   const columnName = cell.dataset.columnName;
@@ -2424,6 +2437,7 @@ function getForeignKeyInfoForCell(cell) {
   return {
     columnName: columnName,
     value: cellValue,
+    valueIsLargeInteger,
     referencedTable: referencedTable,
     referencedColumn: referencedColumn,
   };
@@ -2457,7 +2471,7 @@ function navigateToForeignKeyReference() {
     const bytes = normalizeBlobValue(queryValue);
     if (bytes) {
       formattedValue = `X'${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}'`;
-    } else if (typeof queryValue === "number") {
+    } else if (foreignKeyInfo.valueIsLargeInteger || typeof queryValue === "number") {
       formattedValue = String(queryValue);
     } else if (queryValue.includes("\0")) {
       const encoded = new TextEncoder().encode(queryValue);
