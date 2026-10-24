@@ -166,6 +166,7 @@ suite('Configurable row limits', () => {
         assert.strictEqual(initial.pageSize, 5);
         assert.strictEqual(initial.page, 2);
         assert.strictEqual(initial.maxTablePageSize, 5);
+        assert.strictEqual(initial.deletable, true);
         assert.strictEqual(count.pageSize, 5);
         assert.strictEqual(count.totalRows, 12);
         assert.ok(messages.indexOf(initial) < messages.indexOf(count));
@@ -280,5 +281,74 @@ suite('Configurable row limits', () => {
         assert.strictEqual(provider.rowCountCache.has(`${databasePath}:records`), false);
         service.getRowCount = originalCount;
         assert.strictEqual(await service.getRowCount('records'), 11);
+    });
+
+    for (const timing of ['queued', 'saving'] as const) {
+        test(`deletion refreshes a destination table opened while the write is ${timing}`, async () => {
+            await createRows(2);
+            await service.executeQuery('CREATE TABLE children(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE)');
+            await service.executeQuery('INSERT INTO children VALUES (1,1),(2,2)');
+            await service.executeQuery('PRAGMA foreign_keys=ON');
+            const { provider, panel, messages } = providerHarness();
+            await provider.handleTableDataRequest(panel, databasePath, 'children', undefined, 1, 10);
+            await new Promise<void>(resolve => setImmediate(resolve));
+            await provider.handleTableDataRequest(panel, databasePath, 'records', undefined, 1, 10);
+            const rows = (await service.getTableData('records')).rowIdentities;
+            const originalSave = (service as any).saveChangesToFile.bind(service);
+            let enterSave!: () => void;
+            let releaseSave!: () => void;
+            const enteredSave = new Promise<void>(resolve => { enterSave = resolve; });
+            const saveGate = new Promise<void>(resolve => { releaseSave = resolve; });
+            let saves = 0;
+            (service as any).saveChangesToFile = async (bytes: Uint8Array) => {
+                if (++saves === 1) { enterSave(); await saveGate; }
+                await originalSave(bytes);
+            };
+            const editing = timing === 'queued'
+                ? service.updateCellData('records', rows[1]!, 'body', 'updated') : undefined;
+            if (editing) {
+                await enteredSave;
+            }
+            const deleting = provider.handleDeleteRowsRequest(panel, databasePath, 'records', `delete-${timing}`, [rows[0]]);
+            if (!editing) {
+                await enteredSave;
+            }
+            messages.length = 0;
+            await provider.handleTableDataRequest(panel, databasePath, 'children', undefined, 1, 10);
+            await new Promise<void>(resolve => setImmediate(resolve));
+            const during = messages.find(message => message.type === 'tableData');
+            assert.strictEqual(during.data.length, timing === 'queued' ? 2 : 1);
+            assert.strictEqual(during.totalRows, 2);
+            messages.length = 0;
+            releaseSave();
+            await editing;
+            await deleting;
+            await new Promise<void>(resolve => setImmediate(resolve));
+            assert.strictEqual(messages.filter(message => message.type === 'deleteRowsSuccess').length, 1);
+            const refreshed = messages.find(message => message.type === 'tableData' && message.tableName === 'children');
+            assert.deepStrictEqual(refreshed.data, [[2, 2]]);
+            assert.strictEqual(refreshed.preserveEditing, true, 'destination edits must not be overwritten by an automatic refresh');
+            assert.strictEqual(messages.find(message => message.type === 'tableRowCount' && message.tableName === 'children').totalRows, 1);
+        });
+    }
+
+    test('provider preserves separate virtual-table editing and deletion capabilities on loads and refreshes', async () => {
+        await createRows(2);
+        await service.executeQuery('CREATE VIRTUAL TABLE documents USING fts3(title)');
+        await service.executeQuery("INSERT INTO documents(title) VALUES ('before')");
+        const data = await service.getTableData('documents');
+        await service.updateCellData('documents', data.rowIdentities[0]!, 'title', 'edited');
+        const { provider, panel, messages } = providerHarness();
+        await provider.handleTableDataRequest(panel, databasePath, 'documents', undefined, 1, 10);
+        await provider.handleExternalDatabaseChange(databasePath);
+        const snapshots = messages.filter(message => message.type === 'tableData');
+        assert.strictEqual(snapshots.length, 2);
+        for (const snapshot of snapshots) {
+            assert.strictEqual(snapshot.editable, true);
+            assert.strictEqual(snapshot.deletable, false);
+            assert.match(snapshot.deleteError, /virtual table/i);
+            assert.deepStrictEqual(snapshot.data, [['edited']]);
+            assert.ok(snapshot.rowIdentities[0]);
+        }
     });
 });

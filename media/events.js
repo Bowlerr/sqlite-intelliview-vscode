@@ -1291,6 +1291,19 @@ function handleTableSchema(message) {
  */
 function handleTableData(message) {
   if (message.success) {
+    const state = typeof window.getCurrentState === "function" ? window.getCurrentState() : {};
+    const active = state.activeTable || state.selectedTable || null;
+    if (active && message.tableName && message.tableName !== active) return;
+    const currentWrapper = Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+      .find(candidate => candidate.dataset.table === message.tableName);
+    if (currentWrapper && (message.preserveEditing || currentWrapper.dataset.refreshAfterEdit) &&
+        tableHasUnsettledEdits(currentWrapper)) {
+      // The payload may already be stale by the time an edit finishes. Remember
+      // only that a fresh read is needed, never a deferred copy of the rows.
+      currentWrapper.dataset.refreshAfterEdit = "true";
+      return;
+    }
+
     // Store full column info (with fk metadata) for robust FK patching
     if (
       message.columnInfo &&
@@ -1314,16 +1327,6 @@ function handleTableData(message) {
       });
     }
 
-    // Only render if this table is currently active; otherwise ignore the UI update.
-    const state =
-      typeof window.getCurrentState === "function"
-        ? window.getCurrentState()
-        : {};
-    const active = state.activeTable || state.selectedTable || null;
-    if (active && message.tableName && message.tableName !== active) {
-      return;
-    }
-
     const pagination = acceptTablePagination(message);
     const wrapper = displayTableData(message.data, message.columns, message.tableName, {
       ...pagination,
@@ -1338,6 +1341,8 @@ function handleTableData(message) {
       largeIntegerColumns: message.largeIntegerColumns,
       allowEditing: message.editable === true,
       editError: message.editError,
+      allowDeletion: message.deletable,
+      deleteError: message.deleteError,
     });
     if (message.totalRowsKnown !== false) clampTablePageToCount(wrapper, message.totalRows);
   } else {
@@ -1376,7 +1381,7 @@ function handleTableRowCount(message) {
   }
 
   // A background count belongs to the rendered page, never to a newer pending request.
-  if (wrapper.dataset.paginationPending === "true" ||
+  if (wrapper.dataset.paginationPending === "true" || wrapper.dataset.refreshAfterEdit ||
     (message.page !== undefined && message.page !== Number(wrapper.dataset.currentPage)) ||
     (message.pageSize !== undefined && message.pageSize !== Number(wrapper.dataset.pageSize))) return;
   const accepted = acceptTablePagination({ ...message,
@@ -3164,6 +3169,29 @@ function takePendingCellEdit(requestId) {
   return pending || null;
 }
 
+function tableHasUnsettledEdits(wrapper) {
+  const pending = window.__pendingCellEdits;
+  return !!wrapper.querySelector(".data-cell.editing, .data-cell.saving") ||
+    (pending instanceof Map && Array.from(pending.values())
+      .some(edit => edit.tableId === wrapper.dataset.tableId));
+}
+
+/** Settled edits need a new read; successful saves already reload in the provider. */
+function refreshTableAfterEdit(wrapper) {
+  if (!wrapper?.dataset.refreshAfterEdit) return;
+  setTimeout(() => {
+    if (!wrapper.isConnected || !wrapper.dataset.refreshAfterEdit ||
+        wrapper.dataset.paginationPending === "true" || tableHasUnsettledEdits(wrapper)) return;
+    const state = typeof getCurrentState === "function" ? getCurrentState() : {};
+    const active = state.activeTable || state.selectedTable;
+    if (active && active !== wrapper.dataset.table) return;
+    const snapshot = getTableSnapshot(wrapper);
+    if (snapshot) snapshot.identitiesInvalid = true;
+    clearSelection(wrapper);
+    requestTableSnapshot(wrapper);
+  }, 0);
+}
+
 /**
  * Cancel cell edit
  * @param {Element} cell - The cell element being edited
@@ -3185,6 +3213,7 @@ function cancelCellEdit(cell) {
   if (input) {
     /** @type {HTMLInputElement} */ (input).value = "";
   }
+  refreshTableAfterEdit(cell.closest(".enhanced-table-wrapper"));
 }
 
 /**
@@ -3311,6 +3340,10 @@ function handleCellUpdateError(message) {
       cell.classList.remove("error");
     }, 3000);
   }
+  const wrapper = cell?.closest(".enhanced-table-wrapper") ||
+    Array.from(document.querySelectorAll(".enhanced-table-wrapper"))
+      .find(candidate => candidate.dataset.tableId === pending?.tableId);
+  refreshTableAfterEdit(wrapper);
 
   if (typeof showError !== "undefined") {
     showError(`Failed to update cell: ${message.message}`);

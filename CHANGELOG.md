@@ -9,6 +9,7 @@
 - Atomic deletion of selected rows using stable identities, with one transaction and file save for the entire selection. Selected rows removed by triggers or cascades count toward the batch; stale, replaced, or renamed selected identities reject the entire operation.
 - Configurable query-result and table-page limits, custom page sizes, and an explicit notice when query results are truncated. Internal schema reads remain complete regardless of the query limit.
 - Automated webview regression tests in CI and a Node-only database test command for local development.
+- A database-and-eye extension logo, a matching README banner, and clearer installation, feature, and demo sections.
 
 ### Fixed
 
@@ -20,6 +21,7 @@
 - Large SQLite INTEGER values remain exact and distinct from identical-looking TEXT during edits, deletion, queries, and foreign-key navigation.
 - Pagination preserves active edits and pending saves; filtering and sorting use stored values consistently across regular and virtual tables.
 - Deletion refreshes counts across affected tables and clamps pagination using the actual remaining rows, including additional trigger or cascade deletions. Virtual scrolling spacers cannot target a data row for deletion.
+- Switching tables during a queued or saving deletion refreshes the destination after the write, while preserving any active edit. Virtual tables retain selection, export, and supported cell editing while unsupported row deletion is disabled.
 - Virtual scrolling updates selection only for rendered rows, avoiding full-page scans on each viewport change.
 - Saving or restoring a database preserves its foreign-key, recursive-trigger, read-only, and check-constraint settings.
 - Schema metadata remains fully visible with small page caps; separate query executions retain their own tabs and valid pagination.

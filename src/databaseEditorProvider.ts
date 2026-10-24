@@ -640,7 +640,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
         }
     }
 
-    private async handleTableDataRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string, page?: number, pageSize?: number, setSync: boolean = true, syncToken?: TableSyncState) {
+    private async handleTableDataRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, key?: string, page?: number, pageSize?: number, setSync: boolean = true, syncToken?: TableSyncState, preserveEditing: boolean = false) {
         if (syncToken && this.lastSync.get(databasePath) !== syncToken) {
             return;
         }
@@ -738,13 +738,16 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 largeIntegerColumns: result.largeIntegerColumns,
                 editable: result.editable,
                 editError: result.editError,
+                deletable: result.deletable,
+                deleteError: result.deleteError,
                 foreignKeys: foreignKeys,
                 columnInfo: columnInfo,
                 page: page,
                 pageSize: pageSize,
                 maxTablePageSize: result.maxTablePageSize,
                 totalRows: totalRowCount,
-                totalRowsKnown
+                totalRowsKnown,
+                preserveEditing
             });
             // Publish the count after the matching data, even if counting
             // finished first, so it cannot update the previous table wrapper.
@@ -1004,6 +1007,7 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
     }
 
     private async handleDeleteRowsRequest(webviewPanel: vscode.WebviewPanel, databasePath: string, tableName: string, requestId: string, rowIdentities: RowIdentity[], key?: string) {
+        const originatingSync = this.lastSync.get(databasePath);
         try {
             const dbService = await this.getOrCreateConnection(databasePath, key);
             const changes = await dbService.deleteRows(tableName, rowIdentities);
@@ -1011,8 +1015,10 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             // pending reads too, so their old totals cannot refill the cache.
             this.invalidateCachesForDatabase(databasePath);
             const previousSync = this.lastSync.get(databasePath);
+            let refreshSync: TableSyncState | undefined;
             if (previousSync) {
-                this.lastSync.set(databasePath, { ...previousSync, lastPageData: undefined });
+                refreshSync = { ...previousSync, lastPageData: undefined };
+                this.lastSync.set(databasePath, refreshSync);
             }
             const totalRows = await dbService.getRowCount(tableName).catch(error => {
                 // Deletion has already committed. A failed refresh must not
@@ -1023,6 +1029,14 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
             this.postWebviewMessage(webviewPanel.webview, {
                 type: 'deleteRowsSuccess', tableName, requestId, changes, totalRows
             });
+            if (refreshSync && previousSync !== originatingSync) {
+                // The originating wrapper may have been detached while the
+                // write waited or saved. Refresh the destination view as well;
+                // its editor can defer this automatic snapshot until settled.
+                await this.handleTableDataRequest(webviewPanel, databasePath,
+                    refreshSync.table, refreshSync.key, refreshSync.page,
+                    refreshSync.pageSize, true, refreshSync, true);
+            }
         } catch (error) {
             this.postWebviewMessage(webviewPanel.webview, {
                 type: 'deleteRowsError', tableName, requestId,
@@ -1214,6 +1228,8 @@ export class DatabaseEditorProvider implements vscode.CustomReadonlyEditorProvid
                 largeIntegerColumns: newResult.largeIntegerColumns,
                 editable: newResult.editable,
                 editError: newResult.editError,
+                deletable: newResult.deletable,
+                deleteError: newResult.deleteError,
                 foreignKeys,
                 columnInfo,
                 page: newResult.page,

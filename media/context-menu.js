@@ -202,7 +202,7 @@ function showContextMenuAt(x, y) {
   );
   if (deleteMenuItem) {
     const wrapper = currentCell?.closest(".enhanced-table-wrapper");
-    if (isQueryResultTable || wrapper?.dataset.editable !== "true" || wrapper.dataset.deletePending ||
+    if (isQueryResultTable || !tableAllowsRowDeletion(wrapper) || wrapper.dataset.deletePending ||
         getContextDataRowIndex(currentRow) === null) {
       deleteMenuItem.style.display = "none";
     } else {
@@ -1971,7 +1971,7 @@ function getContextMenuActions(cell) {
 
   // Match the table's explicit editing capability.
   const wrapper = cell.closest(".enhanced-table-wrapper");
-  if (wrapper?.dataset.editable === "true" && !wrapper.dataset.deletePending) {
+  if (tableAllowsRowDeletion(wrapper) && !wrapper.dataset.deletePending) {
     actions.push("delete-row");
   }
 

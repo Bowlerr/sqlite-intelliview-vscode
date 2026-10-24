@@ -311,3 +311,89 @@ test('an empty page can return to the first page when its count never arrives', 
   assert.equal(messages.length, 1);
   assert.equal(messages[0].page, 1);
 });
+
+const pause = () => new Promise(resolve => setTimeout(resolve, 20));
+const automaticData = (overrides = {}) => ({ success: true, tableName: 'items', data: [[1, 'server'], [2, 'other']], columns: ['id', 'name'], page: 1, pageSize: 100, totalRows: 2, totalRowsKnown: true, editable: true, preserveEditing: true, rowIdentities: [1, 2].map(value => ({ kind: 'primaryKey', parts: [{ column: 'id', value }] })), ...overrides });
+
+test('automatic refresh preserves a dirty editor and its count, then cancel fetches one fresh snapshot', async t => {
+  const { win, wrapper, messages, api } = fixture(t, { editable: true });
+  const original = wrapper(), cell = original.querySelector('td[data-column="1"]');
+  win.startCellEditing(cell);cell.querySelector('.cell-input').value = 'unsaved';
+  api.handleTableData(automaticData({ page: 3, pageSize: 1 }));
+  assert.equal(wrapper(), original);
+  assert.equal(cell.querySelector('.cell-input').value, 'unsaved');
+  assert.equal(win.getCurrentState().currentPage, 1);
+  assert.equal(win.getCurrentState().pageSize, 100);
+  api.handleTableRowCount({ tableName: 'items', page: 1, pageSize: 100, totalRows: 1 });
+  assert.equal(original.dataset.totalRows, '10000');
+  win.cancelCellEdit(cell);win.cancelCellEdit(cell);await pause();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, 'getTableData');
+  api.handleTableData(automaticData({ preserveEditing: false, data: [[1, 'fresh']] }));
+  assert.notEqual(wrapper(), original);
+  assert.equal(wrapper().querySelector('td[data-column="1"] .cell-content').textContent, 'fresh');
+});
+
+test('no-op save releases a deferred automatic refresh, but moving to another editor keeps it deferred', async t => {
+  const { win, wrapper, messages, api } = fixture(t, { editable: true });
+  const cells = wrapper().querySelectorAll('td[data-column="1"]');
+  win.startCellEditing(cells[0]);api.handleTableData(automaticData());
+  win.startCellEditing(cells[1]);await pause();
+  assert.equal(messages.length, 0);
+  assert.equal(cells[1].classList.contains('editing'), true);
+  win.saveCellEdit(cells[1]);await pause();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, 'getTableData');
+});
+
+test('a queued save defers the automatic refresh and uses the existing success reload without duplicating it', async t => {
+  const { win, wrapper, messages, api } = fixture(t, { editable: true });
+  const original = wrapper(), cell = original.querySelector('td[data-column="1"]');
+  win.startCellEditing(cell);cell.querySelector('.cell-input').value = 'saved';win.saveCellEdit(cell);
+  api.handleTableData(automaticData());
+  assert.equal(wrapper(), original);
+  win.handleCellUpdateSuccess({ ...messages[0], newValue: 'saved' });await pause();
+  assert.equal(messages.length, 1, 'the provider already reloads after cell success');
+  api.handleTableData(automaticData({ preserveEditing: false, data: [[1, 'saved']] }));
+  assert.notEqual(wrapper(), original);
+  assert.equal(wrapper().querySelector('td[data-column="1"] .cell-content').textContent, 'saved');
+});
+
+test('failed save preserves deferred refresh through retry and protects a newly opened editor from the save reload', async t => {
+  const { win, wrapper, messages, api } = fixture(t, { editable: true });
+  const original = wrapper(), cells = original.querySelectorAll('td[data-column="1"]');
+  win.startCellEditing(cells[0]);cells[0].querySelector('.cell-input').value = 'saved';win.saveCellEdit(cells[0]);
+  api.handleTableData(automaticData());
+  win.handleCellUpdateError({ ...messages[0], message: 'retry' });await pause();
+  assert.equal(cells[0].classList.contains('editing'), true);assert.equal(messages.length, 1);
+  win.saveCellEdit(cells[0]);assert.equal(messages.length, 2);
+  win.handleCellUpdateSuccess({ ...messages[1], newValue: 'saved' });
+  win.startCellEditing(cells[1]);cells[1].querySelector('.cell-input').value = 'next edit';
+  api.handleTableData(automaticData({ preserveEditing: false, data: [[1, 'saved'], [2, 'new server']] }));
+  assert.equal(wrapper(), original);assert.equal(cells[1].querySelector('.cell-input').value, 'next edit');
+  win.cancelCellEdit(cells[1]);await pause();
+  assert.equal(messages.length, 3);assert.equal(messages[2].type, 'getTableData');
+});
+
+test('a detached saving cell still defers automatic data until its pending request settles', async t => {
+  const { win, wrapper, messages, api } = fixture(t, { editable: true });
+  const original = wrapper(), cell = original.querySelector('td[data-column="1"]');
+  win.startCellEditing(cell);cell.querySelector('.cell-input').value = 'saved';win.saveCellEdit(cell);
+  cell.remove();
+  api.handleTableData(automaticData());
+  assert.equal(wrapper(), original, 'pending-save metadata must protect a cell outside the rendered viewport');
+  win.handleCellUpdateError({ ...messages[0], message: 'failed' });await pause();
+  assert.equal(messages.length, 2, 'with no connected editor left to retry, fetch a fresh snapshot');
+  assert.equal(messages[1].type, 'getTableData');
+});
+
+test('table deletion capability is separate from editability and only omitted capability defaults to editable', t => {
+  const { wrapper, api } = fixture(t, { editable: true });
+  for (const [deletable, expected] of [[false, false], [null, false], [true, true], [undefined, true]]) {
+    api.handleTableData(automaticData({ deletable, deleteError: 'Cannot delete virtual table rows.', preserveEditing: false }));
+    assert.equal(wrapper().dataset.editable, 'true');
+    assert.equal(wrapper().dataset.deletable, String(expected));
+    assert.equal(!!wrapper().querySelector('[data-action="delete-selected"]'), expected);
+    assert.ok(wrapper().querySelector('.data-cell[data-editable="true"]'));
+  }
+});

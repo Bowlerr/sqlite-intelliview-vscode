@@ -297,6 +297,33 @@ test('read-only query results support selected export without rendering destruct
   assert.equal(messages.length, 0);
 });
 
+for (const virtualize of [false, true]) {
+  test(`editing-only tables retain selection/export/cell editing but reject every deletion path (virtual=${virtualize})`, t => {
+    const reason = 'Row deletion is unavailable for this "virtual" table.';
+    const { win, wrapper, api, messages, exports } = fixture(t, [[1, 'one'], [2, 'two']], {
+      virtualize, allowEditing: true, allowDeletion: false, deleteError: reason,
+    });
+    assert.equal(wrapper.dataset.editable, 'true');
+    assert.equal(wrapper.dataset.deletable, 'false');
+    assert.equal(wrapper.querySelector('[data-action="delete-selected"]'), null);
+    assert.equal(wrapper.querySelector('.table-readonly-indicator').title, reason);
+    wrapper.querySelector('.select-all-checkbox').click();
+    assert.equal(win.getSelectionStore(wrapper).size, 2);
+    api.exportTableData(wrapper, { onlySelected: true });assert.equal(exports.length, 1);
+    win.deleteSelectedRows(wrapper);win.confirmRowDeletion(wrapper, [0]);
+    assert.equal(win.document.querySelector('.confirm-dialog-overlay'), null);
+    win.initializeContextMenu();
+    const cell = wrapper.querySelector('td[data-column="1"]');
+    cell.dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const deleteItem = win.document.querySelector('.context-menu [data-action="delete-row"]');
+    assert.equal(deleteItem.style.display, 'none');
+    deleteItem.click();
+    assert.equal(win.document.querySelector('.confirm-dialog-overlay'), null);
+    assert.equal(messages.length, 0);
+    win.startCellEditing(cell);assert.equal(cell.classList.contains('editing'), true);
+  });
+}
+
 test('copy cell and foreign-key navigation use raw values including whitespace and literal NULL', t => {
   const values = ['line\nbreak\r\\n', ' 001 ', 'NULL', '', 'key\0tail', null];
   const { win, wrapper, api, copies, messages } = fixture(t, values.map((value, i) => [i, value]));

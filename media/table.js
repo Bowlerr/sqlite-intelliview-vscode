@@ -425,8 +425,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     isQueryResult = false, // Whether this is a query result
     query = null, // Original SQL query for result tabs
     allowEditing = null, // Override editing permission
+    allowDeletion = undefined, // Separate from cell editing for virtual tables
     rowIdentities = [], // Stable database identities aligned with source rows
     editError = "", // Explanation shown when safe editing is unavailable
+    deleteError = "", // Explanation shown when cell editing is available but deletion is not
   } = options;
 
   // Create foreign key lookup map
@@ -490,6 +492,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
   // Determine if editing should be allowed
   const isEditable =
     allowEditing !== null ? allowEditing : !isSchemaTable && !isQueryResult; // Query results default to read-only for data integrity
+  const isDeletable = isEditable && (allowDeletion === undefined || allowDeletion === true);
 
   // When data is backend-paginated, `data` already contains the current page.
   // When not, we paginate locally.
@@ -586,7 +589,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
     backendPaginated ? "true" : "false"
   }" data-virtualized="${
     virtualize ? "true" : "false"
-  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}" data-editable="${isEditable}">
+  }" data-total-rows-known="${totalRowsKnown ? "true" : "false"}" data-editable="${isEditable}" data-deletable="${isDeletable}">
       <div class="table-controls">
         <div class="table-search">
           <input type="text" class="search-input" placeholder="Search table page..." />
@@ -617,6 +620,10 @@ function createDataTable(data, columns, tableName = "", options = {}) {
               ? `<span class="table-readonly-indicator" title="${escapeHtmlFast(
                   editError || "Table is read-only"
                 )}">🔒 Read-only</span>`
+              : !isDeletable
+              ? `<span class="table-readonly-indicator" title="${escapeHtmlFast(
+                  deleteError || "Row deletion is unavailable for this table."
+                )}">✏️ Cell edits only</span>`
               : ``
           }
           ${
@@ -630,7 +637,7 @@ function createDataTable(data, columns, tableName = "", options = {}) {
           </div>
           <button class="table-action-btn" title="Export visible data" data-action="export">💾 Export</button>
           <button class="table-action-btn table-action-btn-selection hidden" title="Export selected rows" data-action="export-selected">📤 Export Selected</button>
-          ${isEditable ? '<button class="table-action-btn table-action-btn-selection table-action-btn-danger hidden" title="Delete selected rows" data-action="delete-selected">🗑️ Delete Selected</button>' : ""}`
+          ${isDeletable ? '<button class="table-action-btn table-action-btn-selection table-action-btn-danger hidden" title="Delete selected rows" data-action="delete-selected">🗑️ Delete Selected</button>' : ""}`
               : ""
           }
         </div>
@@ -2520,7 +2527,7 @@ function requestTableSnapshot(wrapper, totalRows) {
 
 /** Confirm a snapshot of stable identities, then submit it once. */
 function confirmRowDeletion(wrapper, indices) {
-  if (wrapper?.dataset.editable !== "true" || wrapper.dataset.deletePending || !indices.length) return;
+  if (!tableAllowsRowDeletion(wrapper) || wrapper.dataset.deletePending || !indices.length) return;
   if (wrapper.querySelector(".data-cell.editing, .data-cell.saving")) {
     if (typeof showError === "function") showError("Finish editing before deleting rows.");
     return;
@@ -2533,7 +2540,7 @@ function confirmRowDeletion(wrapper, indices) {
   const snapshot = getTableSnapshot(wrapper);
   const fingerprint = JSON.stringify(identities);
   const submit = () => {
-    if (wrapper.dataset.deletePending) return;
+    if (wrapper.dataset.deletePending || !tableAllowsRowDeletion(wrapper)) return;
     if (!wrapper.isConnected || snapshot !== getTableSnapshot(wrapper) ||
         fingerprint !== JSON.stringify(getSelectedRowIdentities(wrapper, indices)) ||
         wrapper.querySelector(".data-cell.editing, .data-cell.saving")) {
@@ -2557,6 +2564,11 @@ function confirmRowDeletion(wrapper, indices) {
   if (typeof showEnhancedConfirmDialog === "function") {
     showEnhancedConfirmDialog(`Delete ${indices.length} row${indices.length === 1 ? "" : "s"}?`, submit, wrapper.dataset.table, null);
   }
+}
+
+function tableAllowsRowDeletion(wrapper) {
+  const capability = wrapper?.dataset.deletable;
+  return wrapper?.dataset.editable === "true" && (capability === undefined || capability === "true");
 }
 
 function deleteSelectedRows(wrapper) {

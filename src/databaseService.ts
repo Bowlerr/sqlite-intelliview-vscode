@@ -76,6 +76,8 @@ export interface EditableTableData extends QueryResult {
     rowIdentities: Array<RowIdentity | null>;
     editable: boolean;
     editError?: string;
+    deletable: boolean;
+    deleteError?: string;
 }
 
 export interface PaginatedTableData extends EditableTableData {
@@ -100,6 +102,7 @@ interface TableIdentityDefinition {
 interface TableEditability {
     definition: TableIdentityDefinition | null;
     reason?: string;
+    deleteError?: string;
 }
 
 /** 
@@ -764,6 +767,11 @@ export class DatabaseService {
         infoStmt.free();
 
         const createSql = typeof table.sql === 'string' ? table.sql : '';
+        // SQLite stores the normalized CREATE VIRTUAL TABLE prefix, including
+        // when comments separated those keywords in the original statement.
+        const deleteError = /^\s*CREATE\s+VIRTUAL\s+TABLE\b/i.test(createSql)
+            ? 'Row deletion is not supported for virtual tables. You can still edit cells.'
+            : undefined;
         const withoutRowid = /\bWITHOUT\s+ROWID\b/i.test(createSql);
         const primaryKeyColumns = columns
             .filter(column => column.pkOrder > 0)
@@ -784,7 +792,8 @@ export class DatabaseService {
                 definition: {
                     kind: 'primaryKey',
                     columns: primaryKeyColumns.map(column => column.name)
-                }
+                },
+                deleteError
             };
         }
 
@@ -808,7 +817,8 @@ export class DatabaseService {
             definition: {
                 kind: 'rowid',
                 columns: [rowidAlias]
-            }
+            },
+            deleteError
         };
     }
 
@@ -875,7 +885,9 @@ export class DatabaseService {
             ...(Object.keys(largeIntegerColumns).length ? { largeIntegerColumns } : {}),
             rowIdentities,
             editable: definition !== null,
-            editError: editability.reason
+            editError: editability.reason,
+            deletable: definition !== null && !editability.deleteError,
+            deleteError: editability.deleteError || editability.reason
         };
     }
 
@@ -1130,6 +1142,9 @@ export class DatabaseService {
             const definition = editability.definition;
             if (!definition) {
                 throw new Error(editability.reason || 'This table has no safe row identity.');
+            }
+            if (editability.deleteError) {
+                throw new Error(editability.deleteError);
             }
             const seen = new Set<string>();
             const parameters = identities.map(identity => {

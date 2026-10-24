@@ -42,6 +42,7 @@ suite('Atomic selection deletion', () => {
 
     test('persists a selected subset once and keeps neighbours', async () => {
         await open("CREATE TABLE records(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO records VALUES (1,'a'),(2,'b'),(3,'c');");
+        assert.strictEqual((await service.getTableData('records')).deletable, true);
         const rows = await identities();
         const save = (service as any).saveChangesToFile.bind(service);
         let writes = 0;
@@ -49,6 +50,33 @@ suite('Atomic selection deletion', () => {
         assert.strictEqual(await service.deleteRows('records', [rows[0], rows[2]]), 2);
         assert.strictEqual(writes, 1);
         assert.deepStrictEqual(diskRows(), [[2, 'b']]);
+    });
+
+    test('keeps FTS3 cell editing available while rejecting virtual-table deletion before snapshots', async () => {
+        await open(`CREATE/* comment */VIRTUAL/* comment */TABLE "docs quoted" USING fts3(body);
+            INSERT INTO "docs quoted"(rowid,body) VALUES(1,'first'),(2,'second');`);
+        const data = await service.getTableData('docs quoted');
+        assert.strictEqual(data.editable, true);
+        assert.strictEqual(data.deletable, false);
+        assert.match(data.deleteError || '', /virtual tables/i);
+        assert.ok(data.rowIdentities[0]);
+        await service.updateCellData('docs quoted', data.rowIdentities[0], 'body', 'updated searchable');
+        assert.deepStrictEqual((await service.executeQuery(`SELECT rowid,body FROM "docs quoted" WHERE "docs quoted" MATCH 'updated'`)).values,
+            [[1, 'updated searchable']]);
+        assert.deepStrictEqual(diskRows('docs quoted'), [['updated searchable'], ['second']]);
+
+        const before = fs.readFileSync(databasePath);
+        let snapshots = 0;
+        let writes = 0;
+        const exportState = (service as any).exportDatabaseState.bind(service);
+        (service as any).exportDatabaseState = () => { snapshots++; return exportState(); };
+        (service as any).saveChangesToFile = async () => { writes++; };
+        await assert.rejects(service.deleteRows('docs quoted', [data.rowIdentities[0]]), /Row deletion is not supported for virtual tables/);
+        assert.strictEqual(snapshots, 0);
+        assert.strictEqual(writes, 0);
+        assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+        assert.deepStrictEqual((await service.getTableData('docs quoted')).values, [['updated searchable'], ['second']]);
+        assert.deepStrictEqual((await service.executeQuery('SELECT name FROM temp.sqlite_schema')).values, []);
     });
 
     test('rolls back every selected delete and trigger side effect when a later row fails', async () => {
