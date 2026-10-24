@@ -1,11 +1,11 @@
 <h1 align="center">SQLite IntelliView</h1>
 
 <p align="center">
-  <img src="images/banner.png" width="1536" alt="SQLite IntelliView — See, edit, and explore SQLite, right in your editor." />
+  <img src="images/banner.png" width="1536" alt="SQLite IntelliView — See, Edit, Explore SQLite — right in your editor." />
 </p>
 
 <p align="center">
-  <strong>See, edit, and explore SQLite — right in your editor.</strong><br />
+  <strong>See · Edit · Explore SQLite — right in your editor.</strong><br />
   Browse tables, run queries, and follow relationships.<br />
   Local, offline, and free. Available through VS Code Marketplace and Open VSX.
 </p>
