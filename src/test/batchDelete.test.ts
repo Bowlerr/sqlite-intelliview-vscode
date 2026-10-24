@@ -64,6 +64,122 @@ suite('Atomic selection deletion', () => {
         assert.deepStrictEqual(fs.readFileSync(databasePath), before);
     });
 
+    test('accepts selected rows already deleted by a trigger and counts only the selection', async () => {
+        await open(`CREATE TABLE records(id INTEGER PRIMARY KEY, parent_id INTEGER);
+            INSERT INTO records VALUES (1,NULL),(2,1),(3,1),(4,NULL);
+            CREATE TRIGGER delete_children AFTER DELETE ON records BEGIN DELETE FROM records WHERE parent_id=OLD.id; END;`);
+        const rows = await identities();
+        const save = (service as any).saveChangesToFile.bind(service);
+        let writes = 0;
+        (service as any).saveChangesToFile = async (bytes: Uint8Array) => { writes++; await save(bytes); };
+        assert.strictEqual(await service.deleteRows('records', [rows[0], rows[1]]), 2, 'extra unselected trigger deletions do not increase the reported selection count');
+        assert.strictEqual(writes, 1);
+        assert.deepStrictEqual((await service.getTableData('records')).values, [[4, null]]);
+        assert.deepStrictEqual(diskRows(), [[4, null]]);
+    });
+
+    test('rejects an initially stale identity even when an earlier trigger would create it', async () => {
+        await open(`CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES (1),(3);
+            CREATE TRIGGER replace_deleted AFTER DELETE ON records WHEN OLD.id=1 BEGIN INSERT INTO records VALUES (2); END;`);
+        const before = fs.readFileSync(databasePath);
+        const rows = await identities();
+        const stale: RowIdentity = { kind: 'primaryKey', parts: [{ column: 'id', value: 2 }] };
+        await assert.rejects(service.deleteRows('records', [rows[0], stale]), /rolled back/);
+        assert.deepStrictEqual((await service.getTableData('records')).values, [[1], [3]]);
+        assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+    });
+
+    test('rolls back when a trigger ignores a selected delete or recreates an earlier selected row', async () => {
+        for (const trigger of [
+            "CREATE TRIGGER protect BEFORE DELETE ON records WHEN OLD.id=2 BEGIN SELECT RAISE(IGNORE); END;",
+            "CREATE TRIGGER recreate AFTER DELETE ON records WHEN OLD.id=2 BEGIN INSERT INTO records VALUES (1); END;"
+        ]) {
+            service.closeDatabase();
+            await open(`CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES (1),(2),(3);
+                CREATE TABLE audit(id INTEGER);
+                CREATE TRIGGER log_delete AFTER DELETE ON records BEGIN INSERT INTO audit VALUES (OLD.id); END;
+                ${trigger}`);
+            const before = fs.readFileSync(databasePath);
+            const rows = await identities();
+            await assert.rejects(service.deleteRows('records', [rows[0], rows[1]]), /rolled back/);
+            assert.deepStrictEqual((await service.getTableData('records')).values, [[1], [2], [3]]);
+            assert.deepStrictEqual((await service.executeQuery('SELECT * FROM audit')).values, []);
+            assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+        }
+    });
+
+    test('rejects different serialized identities that alias the same stored row', async () => {
+        await open(`CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES (1),(2);
+            CREATE TABLE labels(id TEXT PRIMARY KEY COLLATE NOCASE NOT NULL); INSERT INTO labels VALUES ('A'),('B');`);
+        for (const [table, first, alias] of [['records', 1, '1'], ['labels', 'A', 'a']] as const) {
+            const before = fs.readFileSync(databasePath);
+            const selected: RowIdentity[] = [first, alias].map(value => ({ kind: 'primaryKey', parts: [{ column: 'id', value }] }));
+            await assert.rejects(service.deleteRows(table, selected), /duplicate|rolled back/);
+            assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+            assert.strictEqual((await service.getTableData(table)).values.length, 2);
+        }
+    });
+
+    test('preserves enabled foreign-key cascades and recursive triggers through snapshots and saves', async () => {
+        await open(`CREATE TABLE records(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE);
+            INSERT INTO records VALUES (1,NULL),(2,1),(3,2),(4,NULL);
+            CREATE TABLE tree(id INTEGER PRIMARY KEY, parent_id INTEGER);
+            INSERT INTO tree VALUES (1,NULL),(2,1),(3,2),(4,NULL);
+            CREATE TRIGGER delete_descendants AFTER DELETE ON tree BEGIN DELETE FROM tree WHERE parent_id=OLD.id; END;`);
+        await service.executeQuery('PRAGMA foreign_keys=ON');
+        await service.executeQuery('PRAGMA recursive_triggers=ON');
+        for (const table of ['records', 'tree']) {
+            const rows = await identities(table);
+            assert.strictEqual(await service.deleteRows(table, [rows[0], rows[1]]), 2);
+            assert.deepStrictEqual((await service.getTableData(table)).values, [[4, null]], table);
+            assert.deepStrictEqual(diskRows(table), [[4, null]], table);
+            assert.deepStrictEqual((await service.executeQuery('PRAGMA foreign_keys')).values, [[1]]);
+            assert.deepStrictEqual((await service.executeQuery('PRAGMA recursive_triggers')).values, [[1]]);
+        }
+    });
+
+    test('preserves read-only and check-constraint settings while editing or deleting', async () => {
+        await open('CREATE TABLE records(id INTEGER PRIMARY KEY, value INTEGER CHECK(value > 0)); INSERT INTO records VALUES (1,1),(2,2);');
+        const rows = await identities();
+        const before = fs.readFileSync(databasePath);
+        await service.executeQuery('PRAGMA query_only=ON');
+        await assert.rejects(service.deleteRows('records', [rows[0]]), /readonly/);
+        await assert.rejects(service.updateCellData('records', rows[0], 'value', 3), /readonly/);
+        await assert.rejects(service.deleteRow('records', { id: 1 }), /readonly/);
+        assert.deepStrictEqual((await service.executeQuery('PRAGMA query_only')).values, [[1]]);
+        assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+
+        await service.executeQuery('PRAGMA query_only=OFF');
+        await service.executeQuery('PRAGMA ignore_check_constraints=ON');
+        await service.updateCellData('records', rows[0], 'value', -1);
+        assert.deepStrictEqual((await service.executeQuery('PRAGMA ignore_check_constraints')).values, [[1]]);
+        assert.deepStrictEqual(diskRows(), [[1, -1], [2, 2]]);
+        await service.executeQuery('PRAGMA ignore_check_constraints=OFF');
+        await assert.rejects(service.updateCellData('records', rows[0], 'value', -2), /CHECK constraint failed/);
+        assert.deepStrictEqual((await service.executeQuery('PRAGMA ignore_check_constraints')).values, [[0]]);
+    });
+
+    test('restores connection settings after persistence fails and applies cascades on the next delete', async () => {
+        await open(`CREATE TABLE records(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES records(id) ON DELETE CASCADE);
+            INSERT INTO records VALUES (1,NULL),(2,1),(3,2),(4,NULL);`);
+        for (const pragma of ['foreign_keys', 'recursive_triggers', 'ignore_check_constraints']) {
+            await service.executeQuery(`PRAGMA ${pragma}=ON`);
+        }
+        const rows = await identities();
+        const before = fs.readFileSync(databasePath);
+        const save = (service as any).saveChangesToFile.bind(service);
+        (service as any).saveChangesToFile = async (bytes: Uint8Array) => { await save(bytes); throw new Error('forced persistence failure'); };
+        await assert.rejects(service.deleteRows('records', [rows[0]]), /forced persistence failure/);
+        assert.deepStrictEqual((await service.getTableData('records')).values, [[1, null], [2, 1], [3, 2], [4, null]]);
+        assert.deepStrictEqual(fs.readFileSync(databasePath), before);
+        for (const pragma of ['foreign_keys', 'recursive_triggers', 'ignore_check_constraints']) {
+            assert.deepStrictEqual((await service.executeQuery(`PRAGMA ${pragma}`)).values, [[1]], pragma);
+        }
+        (service as any).saveChangesToFile = save;
+        assert.strictEqual(await service.deleteRows('records', [rows[0]]), 1);
+        assert.deepStrictEqual(diskRows(), [[4, null]]);
+    });
+
     test('stale, duplicate and forged identities cannot partially delete a selection', async () => {
         await open('CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES (1),(2);');
         const rows = await identities();

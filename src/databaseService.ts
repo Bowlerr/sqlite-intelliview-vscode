@@ -944,7 +944,7 @@ export class DatabaseService {
         let fileStateBeforeUpdate: Buffer | undefined;
 
         try {
-            databaseStateBeforeUpdate = this.db.export();
+            databaseStateBeforeUpdate = this.exportDatabaseState();
             this.db.run('BEGIN IMMEDIATE TRANSACTION');
             transactionOpen = true;
             stmt = this.db.prepare(updateQuery);
@@ -989,7 +989,7 @@ export class DatabaseService {
             transactionOpen = false;
             committed = true;
 
-            const databaseStateAfterUpdate = this.db.export();
+            const databaseStateAfterUpdate = this.exportDatabaseState();
             await this.saveChangesToFile(databaseStateAfterUpdate);
             persistenceComplete = true;
             if (this.currentDatabasePath) {
@@ -1035,9 +1035,40 @@ export class DatabaseService {
         return fs.readFileSync(this.currentDatabasePath);
     }
 
+    private captureConnectionPragmas(): Array<[string, number]> {
+        return ['foreign_keys', 'recursive_triggers', 'ignore_check_constraints', 'query_only'].map(name =>
+            [name, Number(this.db.exec(`PRAGMA ${name}`)[0].values[0][0])]
+        );
+    }
+
+    private applyConnectionPragmas(settings: Array<[string, number]>, database = this.db): void {
+        for (const [name, value] of settings) {
+            database.run(`PRAGMA ${name} = ${value}`);
+        }
+    }
+
+    private exportDatabaseState(): Uint8Array {
+        // sql.js export closes and reopens the connection. Preserve the active
+        // write/constraint settings rather than silently reverting to defaults.
+        const settings = this.captureConnectionPragmas();
+        try {
+            return this.db.export();
+        } finally {
+            this.applyConnectionPragmas(settings);
+        }
+    }
+
     private restoreDatabaseState(databaseState: Uint8Array, fileState?: Buffer): void {
+        const settings = this.captureConnectionPragmas();
+        const restoredDatabase = new this.SQL.Database(databaseState);
+        try {
+            this.applyConnectionPragmas(settings, restoredDatabase);
+        } catch (error) {
+            restoredDatabase.close();
+            throw error;
+        }
         const modifiedDatabase = this.db;
-        this.db = new this.SQL.Database(databaseState);
+        this.db = restoredDatabase;
         modifiedDatabase?.close();
 
         if (this.currentDatabasePath && fileState) {
@@ -1048,7 +1079,7 @@ export class DatabaseService {
         }
     }
 
-    /** Delete a complete selection in one queued transaction and one file write. */
+    /** Delete a complete selection in one transaction/write; return selected identities removed, excluding extra trigger deletions. */
     async deleteRows(tableName: string, identities: RowIdentity[]): Promise<number> {
         return this.enqueueEdit(async () => {
             if (!this.db) {
@@ -1079,31 +1110,65 @@ export class DatabaseService {
             });
             const where = this.identityWhereClause(definition.columns);
             const query = `DELETE FROM ${this.quoteIdentifier(tableName)} WHERE ${where}`;
-            const snapshot = this.db.export();
+            const identityColumns = definition.columns.map(column => this.quoteIdentifier(column)).join(', ');
+            const lookup = `SELECT ${identityColumns} FROM ${this.quoteIdentifier(tableName)} WHERE ${where}`;
+            const snapshot = this.exportDatabaseState();
             let fileSnapshot: Buffer | undefined;
             let transactionOpen = false;
             let committed = false;
             let statement: any;
+            let lookupStatement: any;
             try {
                 this.db.run('BEGIN IMMEDIATE TRANSACTION');
                 transactionOpen = true;
+                lookupStatement = this.db.prepare(lookup);
+                const storedIdentities = new Set<string>();
+                // Validate the whole selection before triggers can remove or
+                // create later targets. Canonical stored keys also detect
+                // aliases caused by column affinity or case-insensitive keys.
+                for (const values of parameters) {
+                    lookupStatement.bind(values);
+                    if (!lookupStatement.step()) {
+                        throw new Error('A selected row changed or was deleted. The entire selection was rolled back; refresh the table and try again.');
+                    }
+                    const storedIdentity = JSON.stringify(this.readStatementRow(lookupStatement, true).map(value => this.serializeIdentityValue(value)));
+                    if (lookupStatement.step()) {
+                        throw new Error('A selected identity matches more than one row. The entire selection was rolled back.');
+                    }
+                    if (storedIdentities.has(storedIdentity)) {
+                        throw new Error('The selection contains a duplicate row identity. The entire selection was rolled back.');
+                    }
+                    storedIdentities.add(storedIdentity);
+                }
                 statement = this.db.prepare(query);
                 for (const values of parameters) {
                     statement.run(values);
                     const changes = Number(this.db.getRowsModified());
-                    if (changes !== 1) {
-                        throw new Error('A selected row changed or was deleted. The entire selection was rolled back; refresh the table and try again.');
+                    if (changes !== 0 && changes !== 1) {
+                        throw new Error('A selected delete changed more than one row. The entire selection was rolled back.');
                     }
                 }
                 statement.free();
                 statement = undefined;
+                // A preceding trigger/cascade may already have removed a
+                // selected target. Verify final absence instead of requiring a
+                // direct delete, rejecting IGNORE and trigger reinsertion.
+                for (const values of parameters) {
+                    lookupStatement.bind(values);
+                    if (lookupStatement.step()) {
+                        throw new Error('A selected row was not deleted. The entire selection was rolled back; refresh the table and try again.');
+                    }
+                }
+                lookupStatement.free();
+                lookupStatement = undefined;
                 fileSnapshot = this.captureFileState();
                 this.db.run('COMMIT');
                 transactionOpen = false;
                 committed = true;
-                await this.saveChangesToFile(this.db.export());
+                await this.saveChangesToFile(this.exportDatabaseState());
             } catch (error) {
                 statement?.free();
+                lookupStatement?.free();
                 let restoreSnapshot = committed;
                 if (transactionOpen) {
                     try {
@@ -1191,7 +1256,7 @@ export class DatabaseService {
             this.debugLog('DeleteRow', 'Executing query:', deleteQuery);
             this.debugLog('DeleteRow', 'Parameters:', parameters);
 
-            databaseStateBeforeDelete = this.db.export();
+            databaseStateBeforeDelete = this.exportDatabaseState();
             this.db.run('BEGIN IMMEDIATE TRANSACTION');
             transactionOpen = true;
             stmt = this.db.prepare(deleteQuery);
@@ -1224,7 +1289,7 @@ export class DatabaseService {
             transactionOpen = false;
             committed = true;
 
-            const databaseStateAfterDelete = this.db.export();
+            const databaseStateAfterDelete = this.exportDatabaseState();
             await this.saveChangesToFile(databaseStateAfterDelete);
             persistenceComplete = true;
             // Mark as internal update so watcher ignores this event
@@ -1273,7 +1338,7 @@ export class DatabaseService {
 
         try {
             // Reuse the caller's committed export when available.
-            const data = databaseState ?? this.db.export();
+            const data = databaseState ?? this.exportDatabaseState();
             const buffer = Buffer.from(data);
             
             this.debugLog('SaveFile', `Exported ${buffer.length} bytes`);

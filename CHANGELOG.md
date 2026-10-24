@@ -6,7 +6,7 @@
 
 - Row checkboxes, selection counts, filtered-page select-all, and selected-row CSV export.
 - Centered, theme-aware checkboxes with a full-cell click target and keyboard support; deletion dialogs contain and restore keyboard focus.
-- Atomic deletion of selected rows using stable identities, with one transaction and file save for the entire selection.
+- Atomic deletion of selected rows using stable identities, with one transaction and file save for the entire selection. Selected rows removed by triggers or cascades count toward the batch; identities already stale before deletion reject the entire operation.
 - Configurable query-result and table-page limits, custom page sizes, and an explicit notice when query results are truncated. Internal schema reads remain complete regardless of the query limit.
 - Automated webview regression tests in CI and a Node-only database test command for local development.
 
@@ -20,6 +20,7 @@
 - Large SQLite INTEGER values remain exact and distinct from identical-looking TEXT during edits, deletion, queries, and foreign-key navigation.
 - Pagination preserves active edits and pending saves; filtering and sorting use stored values consistently across regular and virtual tables.
 - Virtual scrolling updates selection only for rendered rows, avoiding full-page scans on each viewport change.
+- Saving or restoring a database preserves its foreign-key, recursive-trigger, read-only, and check-constraint settings.
 - Schema metadata remains fully visible with small page caps; separate query executions retain their own tabs and valid pagination.
 - Lint no longer changes source files during validation. Extension packages exclude local databases, SQL fixtures, and test/development files.
 
