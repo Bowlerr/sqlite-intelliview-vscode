@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.5.1] - 2026-10-24
+
+### Fixed
+
+- Resize the extension icon to 1024 × 1024 pixels to meet Visual Studio Marketplace requirements while preserving the chosen artwork.
+
 ## [0.5.0] - 2026-10-24
 
 ### Added
