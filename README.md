@@ -1,8 +1,8 @@
-<h1 align="center">SQLite IntelliView</h1>
-
 <p align="center">
   <img src="images/banner.png" width="1536" alt="SQLite IntelliView — See, Edit, Explore SQLite — right in your editor." />
 </p>
+
+<h1 align="center">SQLite IntelliView</h1>
 
 <p align="center">
   <strong>See · Edit · Explore SQLite — right in your editor.</strong><br />
