@@ -32,6 +32,24 @@ jobs:
         run: xvfb-run -a npm test
       - name: Package Extension
         run: npx vsce package --no-yarn
+      - name: Verify installed README discovery
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import zipfile
+
+          packages = list(Path('.').glob('*.vsix'))
+          assert packages, 'No VSIX package found'
+          for package in packages:
+              with zipfile.ZipFile(package) as archive:
+                  roots = {name.split('/')[1] for name in archive.namelist()
+                           if name.startswith('extension/')}
+                  candidates = {name for name in roots
+                                if re.fullmatch(r'readme(?:\.txt|\.md)?', name, re.I)}
+                  assert candidates == {'readme.md'}, (package, candidates)
+                  assert archive.read('extension/readme.md').strip(), package
+          PY
       - name: Upload VSIX Artifact
         uses: actions/upload-artifact@v4
         with:
