@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.5.2] - 2026-10-26
+
+### Fixed
+
+- Restore the README in VS Code's installed-extension Details tab by excluding a conflicting `readme` directory from the package. The setup guides remain available through their GitHub links.
+
 ## [0.5.1] - 2026-10-24
 
 ### Fixed

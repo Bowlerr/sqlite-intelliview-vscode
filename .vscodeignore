@@ -18,6 +18,9 @@ vsc-extension-quickstart.md
 **/*-shm
 media/tests/**
 docs/**
+# These guides are linked on GitHub. A root readme directory shadows readme.md
+# in VS Code's installed-extension README discovery.
+readme/**
 output/**
 .github/**
 **/*.sql
